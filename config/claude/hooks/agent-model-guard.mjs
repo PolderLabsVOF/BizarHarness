@@ -13,6 +13,36 @@
  *
  * Discovery failure never blocks dispatch and never triggers alias retries:
  * omit `model` and inherit the session instead.
+ *
+ * ── F-185 / IMP-019 health-aware failover contract ─────────────────────────
+ *
+ * The orchestrator may pass an optional `additionalContext` block on the
+ * Agent tool input:
+ *
+ *   {
+ *     "model": "claude-qwen/qwen3.8-max",        // primary pick
+ *     "additionalContext": {
+ *       "routingDecisionId": "r-2026-08-27-001",  // routingDecisionId tag
+ *       "fallback": "claude-minimax/MiniMax-M2.7" // pre-computed failover
+ *     }
+ *   }
+ *
+ * Contract:
+ *   - `routingDecisionId` MUST be set whenever `fallback` is set. The ID
+ *     pins the failover to a specific `pickFailover` verdict so the audit
+ *     trail is reconstructable.
+ *   - `fallback` MUST be a user-selected model (F-166 / IMP-016). Out-of-pool
+ *     fallbacks are still denied the same way out-of-pool primaries are.
+ *   - When both are set, the guard accepts BOTH `model` and `fallback`
+ *     without re-probing the gateway. The fallback has already been
+ *     validated by `pickFailover` against the same registry.
+ *   - The hard deny of out-of-pool models STILL APPLIES when
+ *     `routingDecisionId` is absent — the contract is opt-in.
+ *   - Registry load failures still fail open (F-176 advisory): the orchestrator
+ *     already chose a model, let Claude Code validate it once.
+ *
+ * The contract is intentionally additive. Existing callers that only pass
+ * `model` see no behavior change.
  */
 
 import { readFileSync } from 'node:fs';
@@ -59,11 +89,30 @@ function userSelectedModels(registry) {
   return out;
 }
 
+/**
+ * Read the optional F-185 failover block off the Agent tool input. Returns
+ * `{ routingDecisionId, fallback }` with empty-string sentinels when
+ * missing; the caller MUST treat `fallback` as absent when the decision ID
+ * is empty (the contract is both-or-neither).
+ */
+function readFailoverBlock(toolInput) {
+  const ctx = toolInput && typeof toolInput === 'object' && typeof toolInput.additionalContext === 'object' && toolInput.additionalContext !== null
+    ? toolInput.additionalContext
+    : null;
+  if (!ctx) return { routingDecisionId: '', fallback: '' };
+  return {
+    routingDecisionId: typeof ctx.routingDecisionId === 'string' ? ctx.routingDecisionId.trim() : '',
+    fallback: typeof ctx.fallback === 'string' ? ctx.fallback.trim() : '',
+  };
+}
+
 export async function guardAgentModel(input, options = {}) {
   if (!input || typeof input !== 'object') return {};
   if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Agent') return {};
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
   const requested = typeof toolInput.model === 'string' ? toolInput.model.trim() : '';
+  const failoverBlock = readFailoverBlock(toolInput);
+  const hasFailoverContract = Boolean(failoverBlock.routingDecisionId) && Boolean(failoverBlock.fallback);
 
   // No override is the canonical safe path: Claude Code inherits the session.
   if (!requested) return {};
@@ -79,13 +128,30 @@ export async function guardAgentModel(input, options = {}) {
   }
 
   const allowed = configuredModels(registry);
+  const userPicks = userSelectedModels(registry);
+
+  // F-185 contract: when the orchestrator passes both `routingDecisionId`
+  // and `fallback`, validate the fallback against the userSelected pool
+  // but skip the live-discovery re-probe. The fallback's eligibility was
+  // already computed by `pickFailover` against this same registry.
+  if (hasFailoverContract) {
+    if (!userPicks.has(failoverBlock.fallback)) {
+      return advise(`Bizar Agent dispatch: fallback ${failoverBlock.fallback} is outside the user-selected pool; omit fallback to inherit the session.`);
+    }
+    if (!allowed.has(requested)) {
+      return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Omit model to inherit the session or pick it via \`bizar models\`.`);
+    }
+    // Both IDs are user-selected. Accept without re-probing the gateway.
+    return {};
+  }
+
   if (!allowed.has(requested)) {
     return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Omit model to inherit the session or pick it via \`bizar models\`.`);
   }
 
   // User-selected models bypass live-discovery validation. The picker is the
   // discovery surface; users explicitly told us these IDs are valid.
-  const fromUserPick = userSelectedModels(registry).has(requested);
+  const fromUserPick = userPicks.has(requested);
   if (!fromUserPick && Array.isArray(options.availableModelIds)) {
     const available = new Set(options.availableModelIds);
     if (!available.has(requested)) {

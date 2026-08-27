@@ -75,6 +75,86 @@ matching assertion update in
 `scripts/__tests__/autonomy-contract.test.mjs`. The test fails CI on
 the first mismatch.
 
+## Complete — F-185 Health-aware selected-pool failover (IMP-019)
+
+**Date:** 2026-08-27
+**Owner:** `@todd` (closing)
+**WIP holder:** F-185 (`wip: 1` in `feature_list.json`).
+
+**Objective:** Close IMP-019 from `IMPROVEMENTS.md` line 872: with
+`maxDispatchModelAttempts: 1` and no controlled failover, a transiently
+unavailable selected model fails a worker even when another selected
+model is suitable. Land a deterministic 1-failover walker over the
+ranked user-selected pool, scoped strictly to transport/availability
+failures, and surface the audit trail to the orchestrator and
+telemetry. Pair the walker with a `bizar models explain` subcommand so
+operators can see why each candidate would or would not be selected.
+
+**Failure taxonomy** (closed; surface as `FailureReason` strings):
+
+| Reason              | Failover eligible? | Rationale |
+| ------------------- | ------------------ | --------- |
+| `invalid-model`     | yes                | model ID not recognized; another selected ID may be live |
+| `auth-failure`      | yes                | one credential may work where another fails |
+| `rate-limit`        | yes                | quota is per-model; rotating helps |
+| `timeout`           | yes                | transient — rotate to a fresher connection |
+| `provider-outage`   | yes                | explicit transient; rotate to a different provider |
+| `context-overflow`  | **no**             | a different model does not change the prompt size |
+| `model-quality`     | **no**             | re-select with tighter requirements; failover hides the floor |
+
+**Files touched:**
+
+- `packages/sdk/src/router/failover.ts` (new) — `FailureReason` union,
+  `FailoverVerdict` + `FailoverChainEntry` interfaces,
+  `TRANSPORT_OR_AVAILABILITY` whitelist, `pickFailover` deterministic
+  walker, `classifyError` wire-level classifier.
+- `packages/sdk/src/router/failover-mirror.mjs` (new) — byte-identical
+  JS mirror so the CLI (`bizar models explain`) can rank the pool
+  without a TypeScript build step.
+- `packages/sdk/src/router/agent-model-registry.ts` — re-export
+  `pickFailover`, `FailureReason`, `FailoverVerdict`,
+  `FailoverChainEntry`, `PickFailoverInput`, `TRANSPORT_OR_AVAILABILITY`,
+  `classifyError`. `resolveTierModel` JSDoc extended to point callers
+  at `pickFailover` for health-aware failover. Existing single-shot
+  semantics preserved.
+- `packages/sdk/src/router/index.ts` — re-export the new symbols.
+- `config/claude/hooks/agent-model-guard.mjs` — additive
+  `additionalContext.routingDecisionId` + `additionalContext.fallback`
+  contract. When both are set, the fallback is accepted without
+  re-probing the gateway. Contract is both-or-neither; existing
+  callers see no behavior change.
+- `cli/commands/models.mjs` — `bizar models explain <role>`
+  subcommand. Non-interactive, never reaches the gateway, exits 1
+  with an actionable error when the SDK mirror is unavailable.
+- `packages/sdk/tests/agent-model-registry.test.mjs` — 12 new tests:
+  taxonomy whitelist, non-transport reasons, empty userSelected,
+  primary-attempted failover, exhausted chains, per-entry audit trail,
+  eligibility filtering, mirror divergence, `classifyError` mapping.
+- `cli/__tests__/models-picker.test.mjs` — 5 new tests: missing role,
+  3-candidate ranking + eligibility, empty userSelected, requirement
+  filtering with ineligible reasons, missing router file degradation.
+- `config/claude/hooks/__tests__/agent-model-guard.test.mjs` — 4 new
+  tests: both-set accept, out-of-pool fallback reject, out-of-pool
+  primary still rejected, fallback-ignored without routingDecisionId.
+- `config/claude/agents/office-manager.md` — one-paragraph note in
+  the "Model Selection (User-Configured)" section explaining the
+  whitelist, the 1-failover cap, and the `routingDecisionId` /
+  `fallback` contract.
+- `feature_list.json` — F-185 entry, `state: in_progress`,
+  `wip: 1`, `commit: pending`.
+- `DECISIONS.md` — F-185 row.
+
+**Verification matrix:**
+
+- `npx vitest run packages/sdk/tests/agent-model-registry.test.mjs` —
+  31/31 (10 pre-existing + 9 F-184 + 12 F-185).
+- `node --test config/claude/hooks/__tests__/agent-model-guard.test.mjs`
+  — 12/12 (8 existing + 4 new).
+- `node --test cli/__tests__/models-picker.test.mjs` — 34/34 (29
+  existing + 5 new).
+- `node cli/bin.mjs models explain todd` — prints ranked rows.
+- `node cli/bin.mjs models explain` — exits 2 with actionable error.
+
 ## Complete — F-184 Selected-pool resolver (IMP-016)
 
 **Date:** 2026-08-27

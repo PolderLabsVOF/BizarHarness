@@ -503,7 +503,7 @@
       "layer": "core",
       "category": "installer",
       "created": "2026-07-31",
-      "evidence": "2026-08-03 regenerator: F-122 already shipped via commits 3220519 (installer adds ANTHROPIC_AUTH_TOKEN+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY to project template) and 42574ac (bizar model list CLI with 3s timeout, auth-retry-on-401, provider grouping). Current master re-verified: merge-settings 5/5 (cli/install/__tests__/merge-settings.test.mjs \u2014 production writer, normal-update preserve, normal-update retain, fresh-install, force-refresh); model CLI 6/6 (cli/__tests__/model.test.mjs \u2014 200/JSON, --json exit, 401-retry, 401-persistent, timeout, network-error); cli/provision.mjs:649-777 (writeClaudeSettings) emits all four env vars; cli/commands/model.mjs:1-152 wired at cli/bin.mjs:419-433; .claude/settings.json:118-124 carries the same defaults; .claude/model-router.json:1-13 points to picker-proxy F-147.",
+      "evidence": "2026-08-03 regenerator: F-122 already shipped via commits 3220519 (installer adds ANTHROPIC_AUTH_TOKEN+CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY to project template) and 42574ac (bizar model list CLI with 3s timeout, auth-retry-on-401, provider grouping). Current master re-verified: merge-settings 5/5 (cli/install/__tests__/merge-settings.test.mjs — production writer, normal-update preserve, normal-update retain, fresh-install, force-refresh); model CLI 6/6 (cli/__tests__/model.test.mjs — 200/JSON, --json exit, 401-retry, 401-persistent, timeout, network-error); cli/provision.mjs:649-777 (writeClaudeSettings) emits all four env vars; cli/commands/model.mjs:1-152 wired at cli/bin.mjs:419-433; .claude/settings.json:118-124 carries the same defaults; .claude/model-router.json:1-13 points to picker-proxy F-147.",
       "commit": "3220519",
       "passed": "2026-08-03"
     },
@@ -1004,11 +1004,42 @@
       ],
       "created": "2026-08-27",
       "evidence": "2026-08-27: closed in this commit. AUTONOMY_CONTRACT.md (115 lines) declares the four-tier autonomy model, the settings template contract, and the cross-references list. scripts/__tests__/autonomy-contract.test.mjs (9 node:test cases) verifies the contract is non-empty and accepted, the settings template shape, every Tier-1 allow pattern, the hard-deny floor in permission-request.mjs (force-push, rebase, rm-rf /, mkfs), the advisory pattern enumeration in pretooluse-bash.mjs (rm-rf-root, rm-rf-system, mkfs, sudo, dd-of-dev), the env-template allow-list and node_modules/ advisory in pretooluse-editwrite.mjs, the Tier-3 HITL enumeration in git-workflow-guard.mjs (gh pr, gh release, npm|bun|pnpm publish, vercel|wrangler|flyctl deploy, --force, -f, rebase, push), and the commit-time secret-path guard in git-workflow-guard.mjs (.env, .envrc, secrets/, credentials/, *.pem, *.key). npm run test:node stays green across 48 suites (586/586, +9 vs 577 baseline)."
+    },
+    {
+      "id": "F-185",
+      "title": "Health-aware selected-pool failover (IMP-019)",
+      "description": "Deterministic 1-failover walker over the ranked user-selected pool, gated by a transport/availability whitelist. pickFailover(registry, role, requirements, attemptedIds, failure) consumes rankUserSelectedForRole (F-184), skips any ID in attemptedIds, and returns the next eligible ranked ID plus a FailoverVerdict audit trail (primary, failover, attempts, exhaustReason, chain). Whitelist: invalid-model, auth-failure, rate-limit, timeout, provider-outage. NOT eligible: context-overflow (different model does not change prompt size) and model-quality (re-select with tighter requirements; failover hides the floor). 1-failover cap is strict; no alias cycling, no random picks. Agent-model-guard.mjs accepts additionalContext.routingDecisionId + additionalContext.fallback without re-probing the gateway when both are set; the contract is both-or-neither and existing callers see no behavior change. classifyError maps wire-level messages into the FailureReason taxonomy. bizar models explain <role> ranks the persisted userSelected pool without touching the gateway. Closes IMP-019.",
+      "state": "passing",
+      "wip": null,
+      "commit": "<merge-sha>",
+      "category": "harness",
+      "layer": "harness",
+      "owner": "@todd",
+      "verification": "npx vitest run packages/sdk/tests/agent-model-registry.test.mjs — 31/31 (12 new failover tests); node --test config/claude/hooks/__tests__/agent-model-guard.test.mjs — 12/12 (4 new contract tests); node --test cli/__tests__/models-picker.test.mjs — 34/34 (5 new explain tests); node cli/bin.mjs models explain todd exits 0 and prints ranked rows; node cli/bin.mjs models explain exits 2 with actionable error.",
+      "scope": [
+        "packages/sdk/src/router/failover.ts",
+        "packages/sdk/src/router/failover-mirror.mjs",
+        "packages/sdk/src/router/agent-model-registry.ts",
+        "packages/sdk/src/router/index.ts",
+        "packages/sdk/tests/agent-model-registry.test.mjs",
+        "config/claude/hooks/agent-model-guard.mjs",
+        "config/claude/hooks/__tests__/agent-model-guard.test.mjs",
+        "cli/commands/models.mjs",
+        "cli/__tests__/models-picker.test.mjs",
+        "config/claude/agents/office-manager.md",
+        "PROGRESS.md",
+        "feature_list.json",
+        "DECISIONS.md"
+      ],
+      "created": "2026-08-27",
+      "wip_holder": null,
+      "passed": "2026-08-27",
+      "evidence": " Merged at <merge-sha>."
     }
   ],
   "vcr": {
-    "passing": 64,
-    "activated": 65,
+    "passing": 65,
+    "activated": 66,
     "ratio": 0.985
   }
 }

@@ -126,3 +126,82 @@ test('Agent model guard rejects a model that is in neither userSelected nor any 
 test('portable hook dispatcher retains the Agent model validator', () => {
   assert.ok(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Agent' })).includes('agent-model-guard'));
 });
+
+// ─── F-185 / IMP-019 health-aware failover contract ──────────────────────
+
+test('Agent model guard accepts primary + user-selected fallback when routingDecisionId is set', async () => {
+  // Two user-selected models; the orchestrator pins a primary and a
+  // pre-computed failover. The guard must accept BOTH without re-probing
+  // the gateway, since `pickFailover` already validated the failover.
+  const registry = {
+    tiers: {
+      premium: { models: ['tier-premium/never'], purpose: 'p', effort: 'high' },
+    },
+    userSelected: {
+      models: ['claude-minimax/MiniMax-M3', 'claude-qwen/qwen3.8-max'],
+      tierHints: { 'claude-minimax/MiniMax-M3': 'default', 'claude-qwen/qwen3.8-max': 'premium' },
+    },
+  };
+  assert.deepEqual(await guardAgentModel({
+    ...input,
+    tool_input: {
+      ...input.tool_input,
+      model: 'claude-minimax/MiniMax-M3',
+      additionalContext: { routingDecisionId: 'r-2026-08-27-001', fallback: 'claude-qwen/qwen3.8-max' },
+    },
+  }, { registry }), {});
+});
+
+test('Agent model guard rejects an out-of-pool fallback even with routingDecisionId', async () => {
+  const registry = {
+    tiers: { mid: { models: ['tier/mid'], purpose: 'm', effort: 'medium' } },
+    userSelected: { models: ['claude-minimax/MiniMax-M3'] },
+  };
+  const blocked = await guardAgentModel({
+    ...input,
+    tool_input: {
+      ...input.tool_input,
+      model: 'claude-minimax/MiniMax-M3',
+      additionalContext: { routingDecisionId: 'r-2026-08-27-001', fallback: 'stranger/c' },
+    },
+  }, { registry });
+  assert.equal(decision(blocked), 'allow', 'F-176 advisory path');
+  assert.ok(blocked.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext for out-of-pool fallback');
+});
+
+test('Agent model guard still requires primary to be in the pool when routingDecisionId is set', async () => {
+  // The orchestrator's contract is both-or-neither: a valid fallback
+  // does NOT launder an out-of-pool primary.
+  const registry = {
+    tiers: { premium: { models: ['tier/premium'], purpose: 'p', effort: 'high' } },
+    userSelected: { models: ['claude-minimax/MiniMax-M3'] },
+  };
+  const blocked = await guardAgentModel({
+    ...input,
+    tool_input: {
+      ...input.tool_input,
+      model: 'stranger/primary',
+      additionalContext: { routingDecisionId: 'r-2026-08-27-001', fallback: 'claude-minimax/MiniMax-M3' },
+    },
+  }, { registry });
+  assert.equal(decision(blocked), 'allow', 'F-176 advisory path');
+  assert.ok(blocked.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext for out-of-pool primary');
+});
+
+test('Agent model guard ignores additionalContext.fallback when routingDecisionId is missing', async () => {
+  // The contract is both-or-neither. Without routingDecisionId the
+  // contract is not active and the existing flow (no live probe for
+  // userSelected) applies.
+  const registry = {
+    tiers: { premium: { models: ['tier/never'], purpose: 'p', effort: 'high' } },
+    userSelected: { models: ['claude-minimax/MiniMax-M3', 'claude-qwen/qwen3.8-max'] },
+  };
+  assert.deepEqual(await guardAgentModel({
+    ...input,
+    tool_input: {
+      ...input.tool_input,
+      model: 'claude-minimax/MiniMax-M3',
+      additionalContext: { fallback: 'claude-qwen/qwen3.8-max' },
+    },
+  }, { registry }), {});
+});

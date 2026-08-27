@@ -261,6 +261,9 @@ export {
   createRunAssignmentSnapshot,
   verifyRunAssignmentSnapshot,
   ModelRegistryError,
+  pickFailover,
+  classifyError,
+  TRANSPORT_OR_AVAILABILITY,
   type ModelRegistry,
   type ModelRegistryPolicy,
   type ModelRegistryErrorCode,
@@ -276,4 +279,8 @@ export {
   type RoleRequirements,
   type RankedUserSelectedEntry,
   type BizarTier,
+  type FailureReason,
+  type FailoverVerdict,
+  type FailoverChainEntry,
+  type PickFailoverInput,
 } from "./agent-model-registry.js";

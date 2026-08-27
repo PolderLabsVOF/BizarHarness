@@ -346,6 +346,13 @@ export function defaultTierHintForId(modelId: string): BizarTier {
  *   3. When no live candidate exists, `modelId` is `null` and
  *      `inheritSession` is `true` — the orchestrator keeps the active
  *      session model.
+ *
+ * Failover (F-185 / IMP-019): callers needing health-aware failover
+ * should chain `pickFailover` (from `./failover.js`) against this
+ * registry after a transport/availability failure. `resolveTierModel`
+ * intentionally returns a single-shot decision; the cap on
+ * `maxDispatchModelAttempts: 1` is preserved here, and the 1-failover
+ * cap for selected-pool failover lives in `pickFailover`.
  */
 export function resolveTierModel(tier: BizarTier, registry: ModelRegistry, availableModelIds?: readonly string[]): ResolvedTierModel {
   const entry = registry.tiers.get(tier);
@@ -527,3 +534,19 @@ export function verifyRunAssignmentSnapshot(snapshot: RunAssignmentSnapshot): bo
   const { fingerprint, ...payload } = snapshot;
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex") === fingerprint;
 }
+
+// ─── F-185 / IMP-019 health-aware selected-pool failover ──────────────────
+//
+// The failover walker lives in `./failover.js` to keep this file focused
+// on registry/parse/resolver responsibilities. Re-exporting the public
+// surface here means existing callers that already import from
+// `agent-model-registry.js` see the new symbols without a path change.
+export {
+  pickFailover,
+  classifyError,
+  TRANSPORT_OR_AVAILABILITY,
+  type FailureReason,
+  type FailoverVerdict,
+  type FailoverChainEntry,
+  type PickFailoverInput,
+} from "./failover.js";

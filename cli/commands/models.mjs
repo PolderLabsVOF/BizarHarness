@@ -22,6 +22,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
+import {
+  rankUserSelectedForRole as rankUserSelectedForRoleMirror,
+} from '../../packages/sdk/src/router/failover-mirror.mjs';
+
 // ── Endpoint resolution ──────────────────────────────────────────────────────
 
 /**
@@ -399,6 +403,63 @@ export function currentSelection(router) {
 }
 
 /**
+ * Shape of each ranked entry returned by `bizar models explain`.
+ * Mirrors `packages/sdk/src/router/agent-model-registry.ts:RankedUserSelectedEntry`.
+ */
+function explainRankedEntry(entry) {
+  return {
+    id: entry.id,
+    tier: entry.tier,
+    eligible: entry.eligible,
+    ineligibleReasons: Array.isArray(entry.ineligibleReasons) ? [...entry.ineligibleReasons] : [],
+    capabilityScore: entry.capabilityScore,
+    hasProfile: entry.hasProfile,
+  };
+}
+
+/**
+ * Run `bizar models explain <role>`. Non-interactive: reads the persisted
+ * `userSelected` block off the router file, ranks it via the JS mirror of
+ * the SDK's `rankUserSelectedForRole`, and prints one row per candidate
+ * showing why it would or would not be selected.
+ *
+ * Pure function over `routerPath` — no stdout I/O. The `run` entry point
+ * owns the output and exit codes.
+ *
+ * The mirror lives at `packages/sdk/src/router/failover-mirror.mjs` and is
+ * byte-identical to the SDK's algorithm; if it diverges, the divergence
+ * test in `cli/__tests__/models-picker.test.mjs` fails.
+ *
+ * @param {{ routerPath: string, role: string, requirements?: object }} opts
+ * @returns {{ ranked: object[] }}
+ */
+export function explainSelection({ routerPath, role, requirements = {} } = {}) {
+  if (!routerPath || typeof routerPath !== 'string') throw new Error('routerPath is required');
+  if (!role || typeof role !== 'string') throw new Error('role is required (e.g. "todd", "mike")');
+  let registry;
+  try {
+    const router = loadRouter(routerPath);
+    if (!router || router.__missing || router.__invalid) {
+      registry = { userSelected: undefined };
+    } else {
+      // The mirror only needs `registry.userSelected`. Pass through the
+      // full router so future schema additions (e.g., gateway hint
+      // resolution) flow without a wiring change.
+      registry = router;
+    }
+  } catch {
+    registry = { userSelected: undefined };
+  }
+  if (typeof rankUserSelectedForRoleMirror !== 'function') {
+    const err = new Error('bizar models explain requires packages/sdk/src/router/failover-mirror.mjs to be loadable');
+    err.code = 'SDK_UNAVAILABLE';
+    throw err;
+  }
+  const { ranked } = rankUserSelectedForRoleMirror(registry, role, requirements);
+  return { ranked: ranked.map(explainRankedEntry) };
+}
+
+/**
  * Interactive multi-select picker. Pure function over streams — testable.
  *
  * The picker prints candidates with current picks marked, accepts a space-
@@ -578,12 +639,13 @@ function showHelp() {
   bizar models - User-controlled model picker
 
   Usage:
-    bizar models                Interactive picker (lists + asks for selection)
-    bizar models --list         Print candidate IDs, one per line
-    bizar models --set a,b,c    Persist the comma-separated IDs to userSelected
-    bizar models --clear        Remove userSelected; orchestrator falls back to session-only
-    bizar models --json         Machine-readable output for any subcommand
-    bizar models --help         This help
+    bizar models                    Interactive picker (lists + asks for selection)
+    bizar models --list             Print candidate IDs, one per line
+    bizar models --set a,b,c        Persist the comma-separated IDs to userSelected
+    bizar models --clear            Remove userSelected; orchestrator falls back to session-only
+    bizar models explain <role>     Print ranked eligibility for a role (no gateway)
+    bizar models --json             Machine-readable output for any subcommand
+    bizar models --help             This help
 
   The orchestrator (@mike) dispatches subagents using ONLY the models in
   userSelected. If userSelected is empty, every dispatch inherits the
@@ -627,6 +689,41 @@ export async function run(name, args, isHelpRequest) {
 
   const routerPath = resolveRouterPath(process.cwd());
   const { endpoint, authToken, source: endpointSource } = resolveEndpoint({});
+
+  // F-185: `bizar models explain <role>` — non-interactive ranking.
+  // Handled BEFORE the picker fetch path so it never touches the gateway.
+  const explainIdx = args.findIndex((a) => a === 'explain');
+  if (explainIdx !== -1) {
+    const roleArg = args[explainIdx + 1];
+    if (!roleArg || roleArg.startsWith('-')) {
+      console.error(chalk.red('  x bizar models explain requires a role argument, e.g. `bizar models explain todd`'));
+      process.exit(2);
+    }
+    let verdict;
+    try {
+      verdict = explainSelection({ routerPath, role: roleArg });
+    } catch (err) {
+      console.error(chalk.red(`  x ${err.message}`));
+      process.exit(1);
+    }
+    if (wantJson) {
+      process.stdout.write(JSON.stringify(verdict, null, 2) + '\n');
+    } else {
+      if (verdict.ranked.length === 0) {
+        console.log(chalk.yellow(`  ! userSelected is empty for role ${roleArg}; orchestrator will fall back to session-only.`));
+      } else {
+        console.log(chalk.green(`  Ranked user-selected candidates for ${roleArg}:`));
+        const pad = Math.max(8, ...verdict.ranked.map((entry) => entry.id.length));
+        for (const entry of verdict.ranked) {
+          const status = entry.eligible ? chalk.green('eligible  ') : chalk.yellow('ineligible');
+          const profile = entry.hasProfile ? chalk.dim(' (profiled)') : chalk.dim(' (no profile)');
+          console.log(`    ${entry.id.padEnd(pad)}  ${entry.tier.padEnd(10)}  score=${entry.capabilityScore.toFixed(3)}  ${status}${profile}`);
+          for (const reason of entry.ineligibleReasons) console.log(chalk.dim(`        - ${reason}`));
+        }
+      }
+    }
+    return true;
+  }
 
   if (wantClear) {
     const before = currentSelection(loadRouter(routerPath));
