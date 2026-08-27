@@ -146,8 +146,9 @@ export const TRANSPORT_OR_AVAILABILITY = new Set([
  *   - One-failover cap. A second transport failure on the failover
  *     target marks subsequent entries as `exhausted` and refuses to walk.
  */
-export function pickFailover({ registry, role, requirements, attemptedIds, failure }) {
+export function pickFailover({ registry, role, requirements, attemptedIds, failure, primaryDecisionId }) {
   const attempted = new Set((attemptedIds || []).filter((id) => typeof id === "string"));
+  const routingDecisionId = typeof primaryDecisionId === "string" && primaryDecisionId.length > 0 ? primaryDecisionId : null;
 
   if (!TRANSPORT_OR_AVAILABILITY.has(failure)) {
     return {
@@ -156,12 +157,13 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
       attempts: 0,
       exhaustReason: failure,
       chain: [{ id: "", eligible: false, capabilityScore: 0, attempted: false, outcome: "skipped-non-transport-reason" }],
+      routingDecisionId,
     };
   }
 
   const { eligible, ranked } = rankUserSelectedForRole(registry, role, requirements);
   if (ranked.length === 0) {
-    return { primary: null, failover: null, attempts: 0, exhaustReason: failure, chain: [] };
+    return { primary: null, failover: null, attempts: 0, exhaustReason: failure, chain: [], routingDecisionId };
   }
 
   const head = ranked[0];
@@ -217,6 +219,7 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
     attempts: attempted.size + (failover !== null ? 1 : 0),
     exhaustReason: exhaustedAtTopLevel ? failure : null,
     chain,
+    routingDecisionId,
   };
 }
 

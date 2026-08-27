@@ -99,6 +99,13 @@ export interface FailoverVerdict {
   attempts: number;
   exhaustReason: FailureReason | null;
   chain: FailoverChainEntry[];
+  /**
+   * The F-188 routing decision ID for the primary selection, threaded
+   * from `PickFailoverInput.primaryDecisionId` so the audit trail ties
+   * the failover back to the originating selector decision. `null` when
+   * the caller did not supply a pre-decided ID (legacy behaviour).
+   */
+  routingDecisionId: string | null;
 }
 
 export interface PickFailoverInput {
@@ -107,6 +114,15 @@ export interface PickFailoverInput {
   requirements?: RoleRequirements;
   attemptedIds: readonly string[];
   failure: FailureReason;
+  /**
+   * Optional pre-decided routing decision ID minted by the F-188 central
+   * selector (`selectDispatchModel`). When supplied, the value is
+   * surfaced on the returned `FailoverVerdict.routingDecisionId` so the
+   * F-185 audit trail and downstream telemetry can correlate the
+   * failover with the originating dispatch decision. When omitted, the
+   * verdict uses `null` (legacy behaviour preserved).
+   */
+  primaryDecisionId?: string;
 }
 
 /**
@@ -138,8 +154,9 @@ export interface PickFailoverInput {
  * The function never throws; it returns a verdict so the dispatch
  * surface can `process.stdout.write(JSON.stringify(verdict))` and exit.
  */
-export function pickFailover({ registry, role, requirements, attemptedIds, failure }: PickFailoverInput): FailoverVerdict {
+export function pickFailover({ registry, role, requirements, attemptedIds, failure, primaryDecisionId }: PickFailoverInput): FailoverVerdict {
   const attempted = new Set<string>(attemptedIds.filter((id): id is string => typeof id === "string"));
+  const routingDecisionId = typeof primaryDecisionId === "string" && primaryDecisionId.length > 0 ? primaryDecisionId : null;
 
   if (!TRANSPORT_OR_AVAILABILITY.has(failure)) {
     return {
@@ -148,12 +165,13 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
       attempts: 0,
       exhaustReason: failure,
       chain: [{ id: "", eligible: false, capabilityScore: 0, attempted: false, outcome: "skipped-non-transport-reason" }],
+      routingDecisionId,
     };
   }
 
   const { eligible, ranked } = rankUserSelectedForRole(registry, role, requirements);
   if (ranked.length === 0) {
-    return { primary: null, failover: null, attempts: 0, exhaustReason: failure, chain: [] };
+    return { primary: null, failover: null, attempts: 0, exhaustReason: failure, chain: [], routingDecisionId };
   }
 
   // The orchestrator's first dispatch is the ranked[0] entry. Record it
@@ -227,6 +245,7 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
     attempts: attempted.size + (failover !== null ? 1 : 0),
     exhaustReason: exhaustedAtTopLevel ? failure : null,
     chain,
+    routingDecisionId,
   };
 }
 
