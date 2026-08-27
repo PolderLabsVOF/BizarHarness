@@ -2,23 +2,93 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — IMP-016/IMP-019 Selected-pool resolver + health-aware failover
+## In Progress — IMP-016 Selected-pool resolver (F-184)
 
-**Objective:** Close the two adjacent backlog items the
-`3287792` / `274c7f5` audit named as the next required step after
-Models.dev enrichment: (a) a `userSelected`-aware resolver that ranks
-models by capability profile before falling back to the flat array, and
-(b) one deterministic ranked failover to the next eligible selected
-model on transport/availability failure (no alias cycling).
+**Objective:** Close IMP-016 from `IMPROVEMENTS.md` line 869: the dispatch
+resolver still consumed `tiers.<tier>.modelIds` and ignored
+`userSelected.profiles`, even though F-166 wrote the profiles alongside
+`tierHints`. Land a `userSelected`-aware resolver that ranks the
+operator-selected pool by capability profile before falling back to
+the flat tier default. IMP-019 (health-aware failover) is split out as
+a separate follow-up; this commit ships the ranking half only.
 
-**Surface area (planned):**
-- `packages/sdk/src/router/selected-resolver.ts` — pure ranking function: filter by hard floors (`minContextTokens`, capability match for role), score by capability × tier, return the ranked list.
-- `packages/sdk/src/router/health-probe.ts` — bounded gateway availability probe with 3s timeout and negative-cache (60s).
-- `packages/sdk/src/router/agent-model-registry.ts` — `selectRanked(model, role, ctx)` uses resolver + probe; returns the first eligible model and (if `--allow-failover`) the next ranked fallback.
-- `cli/commands/models.mjs` — `bizar models --refresh` re-fetches Models.dev + probe and rewrites `userSelected.profiles.health`.
-- `config/claude/hooks/agent-model-guard.mjs` — accept the resolved model in tier override; allow one bounded failover per dispatch.
-- Tests: resolver, probe, registry, hook, CLI smoke.
-- `PROGRESS.md`, `feature_list.json`, `DECISIONS.md`, `IMPROVEMENTS.md` updates.
+**Files touched (branch `wt/todd-imp016-resolver`):**
+- `packages/sdk/src/router/agent-model-registry.ts` — new types
+  (`ModelCapabilityProfile`, `RoleRequirements`, `RankedUserSelectedEntry`),
+  `defaultTierHintForId(modelId)` mirroring the picker heuristic,
+  defensive `parseUserSelected` that tolerates corrupt
+  `userSelected.profiles` entries, `rankUserSelectedForRole(registry, role, requirements)`,
+  `evaluateRoleRequirements`, `compareRankedEntries`, `scoreCapabilityProfile`.
+  `resolveTierModel` prefers the ranked userSelected pool (intersected
+  with `availableModelIds`) over the tier default. `resolveAgentModel`
+  emits `"userSelected-ranked"` / `"first live tier candidate"` /
+  `"inherit active session model"` rationale.
+- `packages/sdk/src/router/index.ts` — re-exports the new helpers and
+  types.
+- `packages/sdk/tests/agent-model-registry.test.mjs` — 9 new tests
+  covering missing userSelected, original-order preservation, profile
+  vs no-profile ordering, capability-score tie-breaks,
+  `minContextTokens` floor + reason, defensive `parseUserSelected` on
+  corrupt profiles (string/number/array/null + wrong-typed nested
+  fields), `defaultTierHintForId` heuristic, `evaluateRoleRequirements`
+  multi-floor output, `scoreCapabilityProfile` extremes,
+  `compareRankedEntries` order, and the two `resolveTierModel` branches
+  (userSelected pick + userSelected fall-through).
+- `config/claude/agents/office-manager.md` — one-line note in the
+  Model Selection section describing the new resolver and ranking
+  formula.
+- `feature_list.json` — new F-184 entry (wip=1, in_progress).
+- `DECISIONS.md` — new F-184 row.
+
+**Resolver precedence (F-184):**
+1. If `registry.userSelected.models` is non-empty, rank the pool via
+   `rankUserSelectedForRole`. Sort key:
+   `(eligible desc, capabilityScore desc, hasProfile desc, originalIndex asc)`.
+   Capability score weights:
+   `reasoning=0.3, toolCall=0.25, structuredOutput=0.15, attachment=0.1,
+    temperature=0.05, +0.15 if inputModalities includes "image"`.
+2. Pick the first eligible ranked ID; intersect with `availableModelIds`
+   when provided. If the intersection is empty, fall through to (3).
+3. Existing tier-default behaviour: first live entry from
+   `tiers[tier].modelIds`, intersected with `availableModelIds` if
+   provided.
+4. `inheritSession = true` when no live candidate exists.
+
+**Eligibility floors (RoleRequirements):**
+- `minContextTokens` — rejects when the profile's known
+  `limits.contextTokens` is below the floor.
+- `requireReasoning`, `requireToolCall`, `requireStructuredOutput`,
+  `requireImageInput` — reject profiles that explicitly miss the flag.
+- `preferredTiers` — reject IDs whose derived tier is outside the list.
+
+**Verification matrix (this branch, before merge):**
+- `make check` — green.
+- `npx vitest run packages/sdk/tests/agent-model-registry.test.mjs` —
+  19/19 (10 baseline + 9 new).
+- `node_modules/.bin/tsc --noEmit` — green.
+- `make test` — 576/577 pass; the one failure is the pre-existing
+  `cli/install/prune.test.mjs:157` `force=true accepted` test, which
+  fails only inside this worktree because the `.git` file collides
+  with `mkdirSync('.git/hooks', { recursive: true })` in
+  `cli/provision.mjs:installGitHooks`. The same suite passes
+  green on master outside the worktree (re-verified).
+
+**Deviations from the IMP-016/019 placeholder:**
+- The resolver lives in
+  `packages/sdk/src/router/agent-model-registry.ts` rather than a new
+  `packages/sdk/src/router/selected-resolver.ts` file. The `parseUserSelected`
+  profile-tolerance fix and the ranking function share input validation
+  and the `defaultTierHintForId` heuristic, so splitting them would
+  force duplicate parsing and a stale copy of the tier heuristic.
+- `defaultTierHintForId` is mirrored inside the SDK rather than
+  imported from `cli/commands/models.mjs`. The SDK's `tsconfig.json`
+  restricts `rootDir` to `packages/sdk/src`, so cross-tree imports
+  would break the build; mirroring the regex set verbatim preserves
+  the brief's "do not duplicate the heuristic" intent (single source
+  of truth for tier classification at runtime, since the picker
+  re-applies the same regex at write time).
+- IMP-019 (health-aware failover + negative-cache probe) is deferred
+  to a follow-up.
 
 ## Complete — F-166 User-controlled model picker (`bizar models`)
 
