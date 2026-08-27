@@ -10,4 +10,5 @@
 | [DEC-013](docs/decisions/DEC-013-collision-free-parallel-execution.md) | Worktree isolation, durable task leases, and serialized integration | Accepted |
 | [DEC-014](docs/decisions/DEC-014-mandatory-agent-grounding.md) | Mandatory Bizar routing and official-documentation grounding | Accepted |
 | [DEC-015](docs/decisions/DEC-015-openkan-control-plane.md) | OpenKan is Bizar's external control plane | Accepted |
-| [POLICY-full-permissions-and-advisory-hooks](docs/decisions/POLICY-full-permissions-and-advisory-hooks.md) | Full permissions + advisory hooks + always-fetch-docs | Accepted |
+| [POLICY-full-permissions-and-advisory-hooks](docs/decisions/POLICY-full-permissions-and-advisory-hooks.md) | Full permissions + advisory hooks + always-fetch-docs | Accepted (superseded by F-180) |
+| [F-180](docs/decisions/POLICY-full-permissions-and-advisory-hooks.md) | Close residual F-176/F-167/F-169/F-170 drift in factory, AGENTS.md, decision frontmatter, and feature ledger | Accepted |

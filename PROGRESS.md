@@ -79,8 +79,68 @@ references, and add a regression guard so the deletion cannot regress.
 removed; F-166 stays `state: in_progress` (the model-picker work is not
 yet done) but is no longer the headline WIP.
 
-## In Progress — F-176 Full permissions + advisory hooks + always-fetch-docs
-## In Progress — F-176 Full permissions + advisory hooks + always-fetch-docs
+## Passing — F-176 Full permissions + advisory hooks + always-fetch-docs
+
+**Status:** Accepted (F-180 closes the residual drift; see "Passing — F-180" below).
+**Source commit:** `f28965b` (policy/phase9-advisory-hooks branch).
+**Merge commit:** `1aa174b` (master).
+**Files changed:** 19 (909 insertions / 388 deletions across `config/claude/settings.json`, six hook files, four hook tests, the agent briefing, `AGENTS.md`, `config/claude/CLAUDE.md`, `cli/__tests__/settings-permissions.test.mjs`, `PROGRESS.md`, `feature_list.json`).
+**Gates run:** `make check`, `make test`, `make clean-check`, `make verify-repo-structure`, `make verify-removed-surfaces`, `make mirror-claude-md-check`, plus targeted `node --test` runs on every modified hook test and on `cli/__tests__/settings-permissions.test.mjs`.
+**Tests added:** `cli/__tests__/settings-permissions.test.mjs` gains the F-176 permissions.deny/ask/defaultMode assertions; `config/claude/hooks/__tests__/advisory-hooks.test.mjs` (NEW) covers the shared contract; the four F-176 hook tests (`pretooluse-bash`, `pretooluse-editwrite`, `path-ownership-guard`, `git-workflow-guard`) are rewritten to assert `allow` + advisory context.
+
+## Passing — F-180 Close residual F-176/F-167/F-169/F-170 drift
+
+**Status:** Accepted (three-commit close-out, this ledger entry finalizes the work).
+
+**Commit B — code (`7dd87f6`):**
+- `cli/provision.mjs`: deletes the unreachable `permissions.ask`/`deny`
+  fallback (the shipped template always defines `permissions`), exports
+  `HARD_MUTATION_ALLOW` (the nine-category hard approval list as
+  documentation-as-code), exports `resolveHookCommand(sub, timeoutMs)`
+  which returns the absolute-path wrapper invocation when the shim is
+  executable and falls back to a POSIX-portable `sh -c` PATH probe
+  otherwise, and rewires `writeClaudeSettings` to call it via a thin
+  `hook()` wrapper.
+- `cli/provision.test.mjs`: extends the F-169 suite with four regression
+  tests (A: wrapper executable → wrapper path; B: wrapper absent →
+  `sh -c` fallback; C: `HARD_MUTATION_ALLOW` survives normalization
+  round-trip; D: byte-for-byte factory invariant — no `permissions.ask`
+  /`deny` fallback literal in source). Baseline 16/16 stays green; new
+  total 20/20.
+
+**Commit A — docs (`2c1d531`):**
+- `AGENTS.md` (lines 80-96): rewrites the HITL-floor passage to preserve
+  all nine hard approval categories verbatim, adds an F-176 enforcement
+  paragraph naming `permission-request.mjs` (destructive subset) and
+  `git-workflow-guard.mjs` (advisory reminders), clarifies that
+  `permissions.deny`/`ask` are emptied by design, and enumerates the
+  exact 15 override patterns operators move into
+  `~/.claude/settings.json#permissions.ask` to re-enable HITL.
+- `docs/decisions/POLICY-full-permissions-and-advisory-hooks.md`:
+  resolves both `F-XXX` placeholders (`Implements: F-176`,
+  `Superseded by: F-180`, F-170 cross-reference for plugin-references-
+  cleanup).
+- `docs/architecture.md` and the F-176 hook files were already
+  consistent with the new phrasing — no edits required.
+- `CLAUDE.md` and `config/claude/CLAUDE.md` regenerated via
+  `make mirror-claude-md`; `--check` confirms parity.
+
+**Commit C — evidence (`<this SHA>`):**
+- This PROGRESS.md entry collapses the duplicate `## In Progress — F-176`
+  header, relabels the F-176 block as `## Passing — F-176`, deletes the
+  stale F-169 `@steve commits once human approves` prose (F-169 is
+  already merged at `12c660b`), and adds the F-180 ledger row.
+- `feature_list.json` performs the atomic WIP swap (F-169 → passing
+  `12c660b`; F-176 → passing `ab64e95`; F-180 inserted as passing).
+- `DECISIONS.md` adds an F-180 row if the existing format is consistent.
+
+**Gates run:** `make check`, `make check-arch`, `make verify-removed-surfaces`,
+`make verify-repo-structure`, `make clean-check`, `make mirror-claude-md-check`,
+plus targeted `node --test` runs on `cli/provision.test.mjs` (20/20),
+`cli/__tests__/settings-permissions.test.mjs` (4/4), and
+`config/claude/hooks/__tests__/bizar-hook-wrapper.test.mjs` (5/5).
+
+## Passing — F-176 — historical evidence (full block)
 
 **Objective:** Apply the user policy shift — agents have full permissions by
 default, PreToolUse hooks are advisory only (always return
@@ -1331,10 +1391,10 @@ compiles and the hook authorizes edits normally.
   AGENTS.md documents the override so operators can revert locally
   if they want HITL back.
 
-**Next:**
-- @steve commits once human approves.
-- Verify on a fresh session that the `bizar: command not found` errors
-  are gone and subagents stop prompting for commits/pushes/deploys.
+**Status note (F-180 close-out):** F-169 merged at `12c660b`. The
+`@steve commits once human approves` line is historical and no longer
+applies; F-180 supersedes the F-169 ledger narrative with the
+factory-invariance tests added in commit B.
 ## In progress — F-166 User-controlled model picker (`bizar models`)
 
 **Objective:** Give the user explicit control over which models the Bizar

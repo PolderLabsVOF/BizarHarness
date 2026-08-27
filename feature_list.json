@@ -684,10 +684,9 @@
       "id": "F-169",
       "title": "Hook wiring + subagent permissions + CCR disable",
       "description": "Stop three session-friction defects: (a) bare `bizar hook <sub>` invocations fail with `command not found` because Claude Code invokes hooks via /bin/sh with a stripped PATH; (b) `permissions.ask` patterns force prompts under bypassPermissions; (c) auto-compaction injects `[CCR retrieve hash=...]` markers into the parent transcript that the advisor-context hook forwards verbatim to subagents. Ship `bizar-hook-wrapper.sh` as the canonical hook entrypoint, move hard-mutation rules into `permissions.allow`, and disable auto-compact in the repo template.",
-      "state": "in_progress",
-      "wip_holder": "@todd",
-      "passed": null,
-      "commit": "pending",
+      "state": "passing",
+      "passed": "2026-08-26",
+      "commit": "12c660b",
       "category": "harness",
       "scope": [
         "config/claude/settings.json",
@@ -840,11 +839,11 @@
       "description": "User policy shift: agents have full permissions by default (`permissions.deny` and `permissions.ask` are empty); PreToolUse hooks become advisory (always return `permissionDecision: \"allow\"` and inject safety guidance via `hookSpecificOutput.additionalContext`); every session is primed to fetch current official documentation via WebSearch + WebFetch at task start and whenever uncertainty appears during work.",
       "behavior": "pretooluse-bash, pretooluse-editwrite, path-ownership-guard, and git-workflow-guard return permissionDecision: \"allow\" for every input and inject Heads-up guidance; settings.deny and settings.ask are empty arrays; sessionstart-prime and AGENTS.md add always-fetch-docs bullets",
       "verification": "make check; make test; cli/__tests__/settings-permissions.test.mjs (deny/ask empty); config/claude/hooks/__tests__/advisory-hooks.test.mjs (sampled inputs); config/claude/hooks/__tests__/{pretooluse-bash,pretooluse-editwrite,path-ownership-guard,git-workflow-guard}.test.mjs; make mirror-claude-md-check",
-      "state": "in_progress",
-      "wip_holder": "@todd",
-      "wip": 1,
-      "passed": null,
-      "commit": "f28965b",
+      "state": "passing",
+      "wip_holder": null,
+      "wip": null,
+      "passed": "2026-08-26",
+      "commit": "ab64e95",
       "category": "harness",
       "layer": "harness",
       "created": "2026-08-26",
@@ -868,6 +867,31 @@
         "feature_list.json"
       ],
       "evidence": "Merge commit pending. Phase 9 commit f28965b on policy/phase9-advisory-hooks; 19 files / 909 ins / 388 del. cli/__tests__/settings-permissions.test.mjs 4/4 (commit family in allow; deny/ask empty; defaultMode bypassPermissions); config/claude/hooks/__tests__/advisory-hooks.test.mjs 14/14; modified hook tests 94/94."
+    },
+    {
+      "id": "F-180",
+      "title": "Close residual F-176/F-167/F-169/F-170 doc and control-surface drift",
+      "description": "Three-commit close-out for the residual drift left over from the F-176 policy shift: (1) cli/provision.mjs factory carried an unreachable permissions.ask/deny fallback and an unconditional hook-wrapper factory that ignored the POSIX-portable sh -c fallback baked into config/claude/settings.json; (2) AGENTS.md 'authoritative hard approval list' passage mixed an old HITL framing with the new 'permission-request.mjs + advisory hook chain' enforcement model; (3) docs/decisions/POLICY-full-permissions-and-advisory-hooks.md carried two unresolved F-XXX placeholders; (4) feature_list.json kept F-169 at state in_progress / commit pending and F-176 at wip:1 even though both are already merged on master; (5) PROGRESS.md carried a duplicate ## In Progress — F-176 header and a stale F-169 'Next: @steve commits once human approves' prose line.",
+      "state": "passing",
+      "wip_holder": null,
+      "wip": null,
+      "passed": "2026-08-26",
+      "commit": "2c1d531",
+      "category": "harness",
+      "owner": "@todd",
+      "scope": [
+        "AGENTS.md",
+        "config/claude/CLAUDE.md",
+        "CLAUDE.md",
+        "PROGRESS.md",
+        "feature_list.json",
+        "docs/decisions/POLICY-full-permissions-and-advisory-hooks.md",
+        "cli/provision.mjs",
+        "cli/provision.test.mjs",
+        "docs/architecture.md",
+        "DECISIONS.md"
+      ],
+      "evidence": "Three-commit close-out. Commit B (7dd87f6, code): cli/provision.mjs deletes the unreachable permissions.ask/deny fallback (the shipped template always defines permissions), exports HARD_MUTATION_ALLOW (37-entry documentation-as-code surface for the nine-category hard approval list) and resolveHookCommand(sub, timeoutMs) (returns the absolute-path wrapper invocation when the shim is executable and falls back to a POSIX-portable sh -c PATH probe otherwise), rewires writeClaudeSettings via a thin hook() wrapper. cli/provision.test.mjs extends the F-169 suite with tests A/B/C/D (wrapper executable → wrapper path; wrapper absent → sh -c fallback; HARD_MUTATION_ALLOW survives normalization round-trip; byte-for-byte factory invariant — no permissions.ask/deny fallback literal in source). Commit A (2c1d531, docs): AGENTS.md preserves all 9 hard-approval categories verbatim, adds F-176 enforcement paragraph naming permission-request.mjs (destructive subset) and git-workflow-guard.mjs (advisory reminders), enumerates the 15 override patterns operators move into ~/.claude/settings.json#permissions.ask to re-enable HITL. docs/decisions/POLICY-full-permissions-and-advisory-hooks.md frontmatter resolves F-XXX → F-176, adds Superseded by: F-180, and resolves the second F-XXX to F-170 (commit 4888ac7). Both CLAUDE.md mirrors regenerated via make mirror-claude-md; --check confirms parity. Commit C (this commit, evidence): PROGRESS.md collapses duplicate ## In Progress — F-176 header, relabels F-176 block as ## Passing — F-176, deletes stale F-169 @steve commits once human approves prose. feature_list.json performs atomic WIP swap (F-169 → passing 12c660b; F-176 → passing ab64e95). DECISIONS.md adds parallel F-180 row. Test counts: node --test cli/provision.test.mjs 20/20 (16 baseline + 4 new F-180 tests); node --test cli/__tests__/settings-permissions.test.mjs 4/4; node --test config/claude/hooks/__tests__/bizar-hook-wrapper.test.mjs 5/5. Gates: make check; make check-arch; make verify-removed-surfaces; make verify-repo-structure; make clean-check; make mirror-claude-md-check. DoD: jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty."
     }
   ],
   "vcr": {
