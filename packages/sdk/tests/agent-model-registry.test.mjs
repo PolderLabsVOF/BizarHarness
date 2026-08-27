@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import {
   ModelRegistryError,
+  classifyError,
   compareRankedEntries,
   createRunAssignmentSnapshot,
   defaultTierHintForId,
@@ -13,13 +14,20 @@ import {
   getEndpoint,
   listAgentModels,
   loadModelRegistry,
+  pickFailover,
   rankUserSelectedForRole,
   resolveAgentModel,
   resolveTierModel,
   scoreCapabilityProfile,
   userSelectedModelIds,
   verifyRunAssignmentSnapshot,
+  TRANSPORT_OR_AVAILABILITY,
 } from '../src/router/agent-model-registry.ts';
+import {
+  classifyError as classifyErrorMirror,
+  pickFailover as pickFailoverMirror,
+  rankUserSelectedForRole as rankUserSelectedForRoleMirror,
+} from '../src/router/failover-mirror.mjs';
 import { createRunAssignmentSnapshot as createCliRunAssignmentSnapshot, loadModelRouter } from '../../../config/agents/model-assignment.mjs';
 
 const SAMPLE = {
@@ -383,5 +391,164 @@ describe('selected-pool resolver (F-184)', () => {
     assert.equal(resolved.inheritSession, false);
     const agentResolved = resolveAgentModel('mike', registry, ['tier/premium-default-b']);
     assert.equal(agentResolved.rationale, 'first live tier candidate');
+  });
+});
+
+// ─── F-185 / IMP-019 health-aware selected-pool failover ──────────────────
+
+describe('health-aware selected-pool failover (F-185)', () => {
+  function loadFailoverRegistry() {
+    return loadModelRegistry({
+      data: {
+        ...SAMPLE,
+        userSelected: {
+          models: ['provider/opus', 'provider/sonnet', 'provider/haiku'],
+          tierHints: { 'provider/opus': 'premium', 'provider/sonnet': 'default', 'provider/haiku': 'budget' },
+          profiles: {
+            'provider/opus': { capabilities: { reasoning: true, toolCall: true, structuredOutput: true, attachment: true, temperature: true }, limits: { contextTokens: 200000, inputTokens: null, outputTokens: null } },
+            'provider/sonnet': { capabilities: { reasoning: true, toolCall: true }, limits: { contextTokens: 128000, inputTokens: null, outputTokens: null } },
+            'provider/haiku': { capabilities: { reasoning: false, toolCall: true }, limits: { contextTokens: 32000, inputTokens: null, outputTokens: null } },
+          },
+        },
+      },
+    });
+  }
+
+  it('exposes TRANSPORT_OR_AVAILABILITY with the expected taxonomy', () => {
+    assert.deepEqual(
+      [...TRANSPORT_OR_AVAILABILITY].sort(),
+      ['auth-failure', 'invalid-model', 'provider-outage', 'rate-limit', 'timeout'],
+    );
+  });
+
+  it('pickFailover returns no failover for non-transport failure reasons', () => {
+    const registry = loadFailoverRegistry();
+    const contextVerdict = pickFailover({ registry, role: 'todd', attemptedIds: [], failure: 'context-overflow' });
+    assert.equal(contextVerdict.failover, null);
+    assert.equal(contextVerdict.exhaustReason, 'context-overflow');
+    assert.equal(contextVerdict.attempts, 0);
+    assert.equal(contextVerdict.chain.length, 1);
+    assert.equal(contextVerdict.chain[0].outcome, 'skipped-non-transport-reason');
+
+    const qualityVerdict = pickFailover({ registry, role: 'todd', attemptedIds: [], failure: 'model-quality' });
+    assert.equal(qualityVerdict.failover, null);
+    assert.equal(qualityVerdict.exhaustReason, 'model-quality');
+  });
+
+  it('pickFailover returns no failover when userSelected is empty', () => {
+    const registry = loadModelRegistry({ data: SAMPLE });
+    const verdict = pickFailover({ registry, role: 'todd', attemptedIds: [], failure: 'provider-outage' });
+    assert.equal(verdict.failover, null);
+    assert.equal(verdict.exhaustReason, 'provider-outage');
+    assert.deepEqual(verdict.chain, []);
+  });
+
+  it('pickFailover walks to the next eligible ID when the primary was attempted and failed', () => {
+    const registry = loadFailoverRegistry();
+    const verdict = pickFailover({ registry, role: 'todd', attemptedIds: ['provider/opus'], failure: 'provider-outage' });
+    assert.ok(verdict.failover, 'failover candidate is selected');
+    assert.equal(verdict.failover.id, 'provider/sonnet');
+    assert.equal(verdict.failover.reason, 'provider-outage');
+    assert.equal(verdict.exhaustReason, null, 'a new failover was picked → chain is not yet exhausted');
+    assert.equal(verdict.attempts, 2, '1 attempted + 1 new failover = 2 total attempts');
+    const haiku = verdict.chain.find((entry) => entry.id === 'provider/haiku');
+    assert.ok(haiku);
+    assert.equal(haiku.outcome, 'exhausted', 'eligible entries past the failover cap are marked exhausted');
+  });
+
+  it('pickFailover marks the primary and skips already-attempted eligible entries', () => {
+    const registry = loadFailoverRegistry();
+    const verdict = pickFailover({ registry, role: 'todd', attemptedIds: ['provider/opus', 'provider/sonnet'], failure: 'auth-failure' });
+    assert.equal(verdict.failover.id, 'provider/haiku', 'first non-attempted eligible ID');
+    assert.equal(verdict.attempts, 3, '2 attempted + 1 new failover = 3 total attempts');
+    assert.equal(verdict.exhaustReason, null, 'haiku is still a fresh failover target');
+    const skipped = verdict.chain.find((entry) => entry.id === 'provider/sonnet');
+    assert.equal(skipped.outcome, 'skipped-already-attempted');
+  });
+
+  it('pickFailover returns exhaustReason when every eligible ID is already attempted', () => {
+    const registry = loadFailoverRegistry();
+    const verdict = pickFailover({ registry, role: 'todd', attemptedIds: ['provider/opus', 'provider/sonnet', 'provider/haiku'], failure: 'rate-limit' });
+    assert.equal(verdict.failover, null);
+    assert.equal(verdict.exhaustReason, 'rate-limit');
+    assert.equal(verdict.attempts, 3);
+    assert.ok(verdict.chain.every((entry) => entry.outcome === 'skipped-already-attempted' || entry.outcome === 'primary'));
+  });
+
+  it('pickFailover treats ineligible IDs as invisible to the failover chain', () => {
+    const registry = loadModelRegistry({
+      data: {
+        ...SAMPLE,
+        userSelected: {
+          models: ['provider/big', 'provider/tiny', 'provider/medium'],
+          tierHints: { 'provider/big': 'premium', 'provider/tiny': 'budget', 'provider/medium': 'default' },
+          profiles: {
+            'provider/big': { capabilities: { reasoning: true, toolCall: true }, limits: { contextTokens: 200000, inputTokens: null, outputTokens: null } },
+            'provider/tiny': { capabilities: { reasoning: true, toolCall: true }, limits: { contextTokens: 8000, inputTokens: null, outputTokens: null } },
+            'provider/medium': { capabilities: { reasoning: true, toolCall: true }, limits: { contextTokens: 64000, inputTokens: null, outputTokens: null } },
+          },
+        },
+      },
+    });
+    const verdict = pickFailover({ registry, role: 'karen', requirements: { minContextTokens: 32000 }, attemptedIds: ['provider/big'], failure: 'timeout' });
+    assert.equal(verdict.failover.id, 'provider/medium', 'tiny is ineligible (8K < 32K floor) so it never appears in the chain');
+    const tiny = verdict.chain.find((entry) => entry.id === 'provider/tiny');
+    assert.equal(tiny, undefined, 'ineligible candidates do not surface in the chain');
+  });
+
+  it('pickFailover surfaces the full chain as an audit trail', () => {
+    const registry = loadFailoverRegistry();
+    const verdict = pickFailover({ registry, role: 'todd', attemptedIds: ['provider/opus'], failure: 'invalid-model' });
+    assert.equal(verdict.chain.length, 3);
+    const order = verdict.chain.map((entry) => entry.id);
+    assert.deepEqual(order, ['provider/opus', 'provider/sonnet', 'provider/haiku']);
+    const opus = verdict.chain.find((entry) => entry.id === 'provider/opus');
+    assert.equal(opus.outcome, 'primary');
+    assert.equal(opus.attempted, true);
+    const sonnet = verdict.chain.find((entry) => entry.id === 'provider/sonnet');
+    assert.equal(sonnet.outcome, 'failover');
+    assert.equal(sonnet.attempted, false);
+  });
+
+  it('classifyError maps wire-level messages to the failure taxonomy', () => {
+    assert.equal(classifyError('429 too many requests'), 'rate-limit');
+    assert.equal(classifyError('context length exceeded'), 'context-overflow');
+    assert.equal(classifyError('401 unauthorized'), 'auth-failure');
+    assert.equal(classifyError('ETIMEDOUT while reaching gateway'), 'timeout');
+    assert.equal(classifyError('502 bad gateway'), 'provider-outage');
+    assert.equal(classifyError('model not found: foo/bar'), 'invalid-model');
+    assert.equal(classifyError('output is incoherent'), 'model-quality');
+    assert.equal(classifyError('???'), 'invalid-model');
+  });
+
+  it('SDK pickFailover and JS-mirror pickFailover produce identical verdicts for the same fixture', () => {
+    const registry = loadFailoverRegistry();
+    const sdk = pickFailover({ registry, role: 'todd', attemptedIds: ['provider/opus'], failure: 'timeout' });
+    const mirror = pickFailoverMirror({ registry, role: 'todd', attemptedIds: ['provider/opus'], failure: 'timeout' });
+    assert.deepEqual(mirror, sdk, 'mirror and SDK must agree on the verdict shape');
+  });
+
+  it('SDK rankUserSelectedForRole and JS-mirror agree on ranking for the same fixture', () => {
+    const registry = loadFailoverRegistry();
+    const sdk = rankUserSelectedForRole(registry, 'todd');
+    const mirror = rankUserSelectedForRoleMirror(registry, 'todd');
+    assert.deepEqual(mirror.ranked, sdk.ranked, 'mirror ranked list matches SDK');
+    assert.deepEqual(mirror.eligible, sdk.eligible, 'mirror eligible list matches SDK');
+  });
+
+  it('SDK classifyError and JS-mirror classifyError agree on the taxonomy', () => {
+    const fixtures = [
+      '429 too many requests',
+      'context length exceeded',
+      '401 unauthorized',
+      'ETIMEDOUT while reaching gateway',
+      '502 bad gateway',
+      'model not found: foo/bar',
+      'output is incoherent',
+      '???',
+    ];
+    for (const message of fixtures) {
+      assert.equal(classifyError(message), classifyErrorMirror(message), `agree on ${message}`);
+    }
   });
 });
