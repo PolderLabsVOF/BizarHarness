@@ -2,6 +2,42 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-190 Model capability profiles (IMP-017)
+- Date: 2026-08-27
+- Branch: wt/todd-imp017-capability-profiles
+- Commits: 8481757 (feat schema + gate), fda9821 (feat cli wiring), 9d017c9 (test drift guard)
+- Landed the discriminated `ModelProfile` schema + protocol-floor eligibility gate.
+  - `packages/sdk/src/router/model-profile.ts` (NEW) — discriminated
+    shape with protocol (hard floors), measured (learned quality),
+    provenance (retrievedAt / expiresAt / refreshRequiredAfter / matchType
+    / confidence), operatorOverrides (survive refresh), serving
+    (provider-specific catalog.json metadata). Helpers: mergeProfile,
+    isStale, needsRefresh, deriveExpiry, operatorExpiry, protocolMeets,
+    measuredScore.
+  - `select-dispatch-model.ts` — renamed selector wrapper
+    ModelProfile -> ModelCandidate; evaluateProfile consumes
+    protocolMeets before the legacy evaluateRoleRequirements call.
+  - `agent-model-registry.ts` — getAliasMap reads
+    ~/.config/bizar/alias-map.json; mergeWithServing layers
+    catalog.json serving metadata.
+  - `failover-mirror.mjs` — protocolMeetsMirror (byte-identical JS
+    mirror); rankUserSelectedForRoleMirror surfaces reasons /
+    measured / provenance.
+  - `cli/commands/models.mjs` — applyRefresh, loadAliasMap,
+    fetchProviderCatalog, `bizar models --refresh` subcommand,
+    BIZAR_MODELS_DEV_URL env override, extended explainSelection.
+  - 28 new tests (15 + 8 + 5 + 5 - existing drift overlaps);
+    390 SDK tests pass; 646 node tests pass (1 pre-existing
+    cli/install/prune.test.mjs:157 git-hooks mkdir failure
+    unrelated to this work); drift guard fires when protocolMeets
+    is removed (verified by sed-injection probe in sandbox copy).
+- IMP-017 acceptance gate verified: protocolMeets rejects
+  context-too-small (4096 < 32000), no-tool-use, no-reasoning,
+  no-structured-output, no-image-input; operator overrides
+  re-enable capability flags; no-eligible-selected returns
+  reason: "no-eligible-selected".
+- VCR bumped from 68/69 to 69/70.
+
 ## Complete — F-189 Workflow/team routing integration (IMP-014)
 
 **Date:** 2026-08-27

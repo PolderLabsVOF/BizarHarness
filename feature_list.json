@@ -1099,8 +1099,7 @@
       "state": "passing",
       "passed": "2026-08-27",
       "commit": "a9a3d2b",
-      "wip_holder": "@mike",
-      "wip": 1,
+      "wip": 0,
       "category": "routing",
       "layer": "workflows",
       "owner": "@todd",
@@ -1122,11 +1121,43 @@
       ],
       "created": "2026-08-27",
       "evidence": "Branch wt/todd-imp014-workflow-routing (3 commits). 9b49cfc: feat(workflows) add dispatch helper for F-189 (new config/workflows/lib/dispatch.js exporting dispatchAgent / dispatchAgentDryRun / computeDecision / augmentPayload / loadDispatchContext / selectDispatchModelMirror / setCaptureFn / resetCaptureFn / REASON — embeds a JS mirror of packages/sdk/src/router/select-dispatch-model.ts so the workflow runtime does not require an SDK build step). edfef81: refactor(workflows) route every agent() through dispatchAgent (replaces bare agent(...) calls in the six shipped workflow scripts with dispatchAgent(agent, '<name>', prompt, { role, phase, capabilities, risk, label, ... }); updates config/workflows/__tests__/bizar-default.test.mjs to handle ESM imports — strips static imports, pre-resolves them via dynamic import relative to config/workflows/, and passes the bindings as new Function parameters). 803ada8: test(workflows) 43 cases (20 dispatch.test.mjs + 20 workflow-payload-capture.test.mjs + 3 autonomy-contract-workflow.test.mjs). Verification on the branch: npx tsc --noEmit exit 0; node --test on the three new files passes 43/43; capture test proves IMP-014 acceptance gate ('Captured nested Agent payloads contain expected models') for all six workflows — every captured payload carries routingDecisionId, at least one per workflow has a non-undefined model, and high-risk lanes always pick a concrete model (no fall-through to session-inherit). Drift guard verified by injecting a bare agent( call probe — test fails. VCR bumped from 67/68 to 68/69."
+    },
+    {
+      "id": "F-190",
+      "title": "Model capability profiles — protocol vs measured + operator-override survival (IMP-017)",
+      "description": "Close IMP-017 from IMPROVEMENTS.md line 870 — 'Model capability profiles | Eligibility filters reject incapable/context-limited models.' Land the discriminated ModelProfile schema (protocol / measured / provenance / operatorOverrides / serving), the protocol-floor gate (protocolMeets) consumed by the central selector, the bizar models --refresh command, the alias-map honour, the provider-specific catalog.json layer, and the operator-correction preservation contract. Concretely: (a) packages/sdk/src/router/model-profile.ts defines the discriminated ModelProfile shape with mergeProfile / isStale / needsRefresh / deriveExpiry / operatorExpiry / protocolMeets / measuredScore helpers; (b) packages/sdk/src/router/agent-model-registry.ts adds getAliasMap (reads ~/.config/bizar/alias-map.json) and mergeWithServing (layers catalog.json serving metadata on top of base profiles without overwriting operator-set serving overrides); (c) packages/sdk/src/router/select-dispatch-model.ts renames the selector wrapper ModelProfile -> ModelCandidate and routes the discriminated profile through protocolMeets before the legacy evaluateRoleRequirements call (which still drives preferredTiers filtering); (d) packages/sdk/src/router/failover-mirror.mjs adds protocolMeetsMirror + extends rankUserSelectedForRoleMirror to surface reasons / measured / provenance in the CLI explain output; (e) cli/commands/models.mjs adds MODELS_DEV_PROVIDER_CATALOG_URL, fetchProviderCatalog, applyRefresh, loadAliasMap, and the bizar models --refresh subcommand that prints a refreshed / preservedOperator / skippedFresh summary, exits non-zero on network failure without mutating the router file; (f) extend explainSelection to surface reasons / measured / provenance per ranked entry. Acceptance: packages/sdk/tests/model-profile.test.mjs (≥13 cases: mergeProfile preserves operator overrides, isStale flips at expiresAt, protocolMeets rejects every floor, operator override re-enables flags); packages/sdk/tests/select-dispatch-model-eligibility.test.mjs (≥6 cases: context too small, tool use missing, image input missing, operator override widens context, multiple rejects surface multiple strings, no-eligible-selected, hybrid discriminated+legacy, legacy fallback); packages/sdk/tests/select-dispatch-model-eligibility-drift.test.mjs (drift guard fails CI if protocolMeets is removed from select-dispatch-model.ts); cli/__tests__/models-refresh.test.mjs (≥4 cases: refresh updates stale + leaves fresh untouched, operator overrides survive, network failure exits non-zero without mutating file, explain surfaces reasons for ineligible discriminated profiles). Drift guard verified by renaming protocolMeets( -> protocolMeetsRenamed( in a sandbox copy — 3 of 5 drift cases fail as expected.",
+      "behavior": "npx vitest run --root packages/sdk passes (390 cases; +28 new); node --test cli/__tests__/models-refresh.test.mjs passes (5 cases); npx tsc --noEmit exit 0; npm run test:node green except the pre-existing cli/install/prune.test.mjs:157 git-hooks mkdir failure (worktree .git/hooks collision unrelated to this work).",
+      "verification": "npx vitest run --root packages/sdk; node --test cli/__tests__/models-refresh.test.mjs; npx tsc --noEmit; npm run test:node.",
+      "state": "passing",
+      "passed": "2026-08-27",
+      "commit": "9d017c9",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "routing",
+      "layer": "sdk",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/src/router/model-profile.ts",
+        "packages/sdk/src/router/select-dispatch-model.ts",
+        "packages/sdk/src/router/agent-model-registry.ts",
+        "packages/sdk/src/router/failover-mirror.mjs",
+        "packages/sdk/src/router/index.ts",
+        "cli/commands/models.mjs",
+        "packages/sdk/tests/model-profile.test.mjs",
+        "packages/sdk/tests/select-dispatch-model-eligibility.test.mjs",
+        "packages/sdk/tests/select-dispatch-model-eligibility-drift.test.mjs",
+        "cli/__tests__/models-refresh.test.mjs",
+        "feature_list.json",
+        "DECISIONS.md",
+        "PROGRESS.md"
+      ],
+      "created": "2026-08-27",
+      "evidence": "Branch wt/todd-imp017-capability-profiles (3 commits). 8481757: feat(sdk) F-190 discriminated ModelProfile schema + protocol-floor gate (new packages/sdk/src/router/model-profile.ts exporting ModelProfile / ModelProtocolCapabilities / ModelMeasuredCapabilities / ModelProfileProvenance / ModelServingMetadata / Modality / ProfileSource / ProfileMatchType plus helpers mergeProfile / isStale / needsRefresh / deriveExpiry / operatorExpiry / protocolMeets / measuredScore; renamed selector wrapper ModelProfile -> ModelCandidate in select-dispatch-model.ts and routed the discriminated profile through protocolMeets before the legacy evaluateRoleRequirements call; re-exported ModelProfile + helpers through router/index.ts; 15 model-profile.test.mjs + 8 select-dispatch-model-eligibility.test.mjs cases pin the IMP-017 acceptance gate). fda9821: feat(cli,sdk) F-190 refresh + serving + alias-map wiring (added getAliasMap / mergeWithServing to agent-model-registry.ts; added protocolMeetsMirror + extended rankUserSelectedForRoleMirror to surface reasons/measured/provenance in failover-mirror.mjs; added MODELS_DEV_PROVIDER_CATALOG_URL, fetchProviderCatalog, applyRefresh, loadAliasMap, and the bizar models --refresh subcommand in cli/commands/models.mjs; BIZAR_MODELS_DEV_URL env var for test stubbing; extended explainSelection with reasons / measured / provenance per entry; 5 models-refresh.test.mjs cases pin refresh correctness, operator-override survival, network-failure non-mutation, explain reasons for ineligible discriminated profiles, and catalog fetch against a stub HTTP server). 9d017c9: test(sdk) F-190 protocol-floor eligibility drift guard (5 cases pin the protocolMeets contract: import path, model-profile.ts reject-string surface, evaluateProfile consumption, every TaskFeatures requireX field honoured, drift probe that fails CI when the call is renamed). Verification on the branch: npx tsc --noEmit exit 0; vitest 390/390; node --test 645/646 (1 pre-existing cli/install/prune.test.mjs:157 git-hooks mkdir failure unrelated to this work). Drift guard verified by renaming protocolMeets( -> protocolMeetsRenamed( in a sandbox copy — 3 of 5 drift cases fail as expected. VCR bumped from 68/69 to 69/70."
     }
   ],
   "vcr": {
-    "passing": 68,
-    "activated": 69,
-    "ratio": 0.9855072463768116
+    "passing": 69,
+    "activated": 70,
+    "ratio": 0.9857142857142858
   }
 }

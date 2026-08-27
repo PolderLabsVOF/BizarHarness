@@ -1,5 +1,5 @@
 /**
- * router/select-dispatch-model.ts — Central dispatch-model selector (F-188 / IMP-013).
+ * router/select-dispatch-model.ts — Central dispatch-model selector (F-188 / IMP-013, F-190 / IMP-017).
  *
  * Closes the P0 gap in `IMPROVEMENTS.md` line 547 — every audited `Agent(...)`
  * call in `config/workflows/*.js` omitted `model` and `tier`, so Mike's
@@ -35,6 +35,18 @@
  * `selectedProfiles` are concatenated first; only when a profile is missing
  * do we lazily fall back to `staticProfiles` by ID — and that fallback is
  * for metadata, never as a global exclusion.
+ *
+ * IMP-017 (F-190) eligibility gate: when a `ModelCandidate` carries the
+ * discriminated `ModelProfile` shape (from `./model-profile.ts`), the
+ * selector consumes `protocolMeets` for protocol-floor rejects and surfaces
+ * richer strings (`context-too-small: 4096 < 32000`, `no-tool-use`,
+ * `no-reasoning`, `no-structured-output`, `no-image-input`). Operator
+ * overrides on the discriminated profile re-enable capability flags the
+ * catalogue marked false. When only the legacy `ModelCapabilityProfile`
+ * shape is available, the selector falls back to `evaluateRoleRequirements`
+ * so existing fixtures continue to work. The drift guard in
+ * `tests/select-dispatch-model-eligibility-drift.test.mjs` fails CI if a
+ * new code path skips the protocol-floor check.
  */
 
 import { randomUUID } from "node:crypto";
@@ -47,6 +59,10 @@ import {
   evaluateRoleRequirements,
   scoreCapabilityProfile,
 } from "./agent-model-registry.js";
+import {
+  type ModelProfile as DiscriminatedModelProfile,
+  protocolMeets,
+} from "./model-profile.js";
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /*                          Public type surface                               */
@@ -98,11 +114,21 @@ export interface TaskFeatures {
  * `userSelected.tierHints` or the heuristic default). Callers pass
  * `selectedProfiles` already validated by `loadModelRegistry`; this
  * module never re-parses the registry.
+ *
+ * `discriminatedProfile` (F-190 / IMP-017) carries the new
+ * `ModelProfile` discriminated shape. When present, the selector consumes
+ * `protocolMeets` for protocol-floor checks. When absent, the selector
+ * falls back to `evaluateRoleRequirements` against the legacy `profile`
+ * field so existing fixtures continue to work.
+ *
+ * Renamed from `ModelProfile` (F-188) to `ModelCandidate` to free
+ * `ModelProfile` for the discriminated schema in `./model-profile.ts`.
  */
-export interface ModelProfile {
+export interface ModelCandidate {
   id: string;
   tier?: BizarTier;
   profile?: ModelCapabilityProfile;
+  discriminatedProfile?: DiscriminatedModelProfile;
 }
 
 /**
@@ -158,8 +184,8 @@ export interface ModelDecision {
 
 export interface SelectDispatchModelInput {
   task: TaskFeatures;
-  selectedProfiles: ModelProfile[];
-  staticProfiles?: ModelProfile[];
+  selectedProfiles: ModelCandidate[];
+  staticProfiles?: ModelCandidate[];
   activeSessionModel?: string;
   budget: BudgetState;
   health: ProviderHealthMap;
@@ -220,7 +246,7 @@ export const TIER_CHEAPNESS: readonly BizarTier[] = [
   "premium",
 ];
 
-function deriveTier(entry: ModelProfile): BizarTier {
+function deriveTier(entry: ModelCandidate): BizarTier {
   return entry.tier ?? defaultTierHintForId(entry.id);
 }
 
@@ -303,13 +329,13 @@ function taskRequirements(features: TaskFeatures): Parameters<typeof evaluateRol
  * gets a tier hint. The merge is O(n) and never drops operator input.
  */
 function mergeProfiles(
-  selected: readonly ModelProfile[],
-  staticProfiles: readonly ModelProfile[] | undefined,
-): ModelProfile[] {
+  selected: readonly ModelCandidate[],
+  staticProfiles: readonly ModelCandidate[] | undefined,
+): ModelCandidate[] {
   if (!staticProfiles || staticProfiles.length === 0) return [...selected];
-  const staticById = new Map<string, ModelProfile>();
+  const staticById = new Map<string, ModelCandidate>();
   for (const p of staticProfiles) staticById.set(p.id, p);
-  const merged: ModelProfile[] = selected.map((p) => {
+  const merged: ModelCandidate[] = selected.map((p) => {
     if (p.profile) return p;
     const fallback = staticById.get(p.id);
     if (!fallback) return p;
@@ -321,20 +347,46 @@ function mergeProfiles(
 /**
  * Eligible-with-reason helper. Returns a `RankedUserSelectedEntry` shape
  * that `selectDispatchModel` uses to build the audit trail.
+ *
+ * IMP-017 (F-190) protocol-floor gate: when `entry.discriminatedProfile`
+ * is supplied, the selector consumes `protocolMeets` for the new
+ * `context-too-small` / `no-tool-use` / `no-reasoning` /
+ * `no-structured-output` / `no-image-input` reject strings and combines
+ * them with the legacy `evaluateRoleRequirements` result (which still
+ * drives the `preferredTiers` filter). Operator overrides on the
+ * discriminated profile re-enable capability flags the catalogue
+ * marked false (mergeProfile is applied upstream by the picker).
+ *
+ * The drift guard in
+ * `tests/select-dispatch-model-eligibility-drift.test.mjs` fails CI if
+ * a new code path constructs a `RankedUserSelectedEntry` without first
+ * calling `protocolMeets`.
  */
 function evaluateProfile(
-  entry: ModelProfile,
+  entry: ModelCandidate,
   requirements: Parameters<typeof evaluateRoleRequirements>[1],
 ): RankedUserSelectedEntry {
   const tier = deriveTier(entry);
-  const { eligible, ineligibleReasons } = evaluateRoleRequirements(entry.profile, requirements, tier);
+  const reasons: string[] = [];
+
+  // IMP-017 protocol-floor gate — preferred over the legacy evaluator
+  // when the discriminated profile is present. The legacy evaluator
+  // still drives `preferredTiers` filtering.
+  if (entry.discriminatedProfile) {
+    const protocolReasons = protocolMeets(entry.discriminatedProfile, requirements);
+    reasons.push(...protocolReasons);
+  }
+  const legacy = evaluateRoleRequirements(entry.profile, requirements, tier);
+  reasons.push(...legacy.ineligibleReasons);
+
+  const eligible = reasons.length === 0;
   return {
     id: entry.id,
     tier,
     eligible,
-    ineligibleReasons,
+    ineligibleReasons: reasons,
     capabilityScore: scoreCapabilityProfile(entry.profile),
-    hasProfile: Boolean(entry.profile),
+    hasProfile: Boolean(entry.profile || entry.discriminatedProfile),
     originalIndex: 0,
   };
 }
@@ -344,7 +396,6 @@ function evaluateProfile(
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export function selectDispatchModel(input: SelectDispatchModelInput): ModelDecision {
-  const runId = input.runId;
   const features = input.task;
   const requirements = taskRequirements(features);
   const historyKey = roleCapabilityKey(features.role, features.capabilities);
