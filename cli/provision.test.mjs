@@ -8,6 +8,8 @@ import assert from 'node:assert/strict';
 import {
   mkdtempSync,
   mkdirSync,
+  copyFileSync,
+  chmodSync,
   writeFileSync,
   rmSync,
   existsSync,
@@ -15,8 +17,15 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+
+// F-169 + F-180: path to the wrapper script that ships in the repo.
+// Tests copy it into the temp claudeDir/hooks/ directory to simulate
+// an installed user environment before calling `writeClaudeSettings`.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const WRAPPER_SRC = join(REPO_ROOT, 'config', 'claude', 'hooks', 'bizar-hook-wrapper.sh');
 
 // Mock HOME for all tests
 const ORIG_HOME = process.env.HOME;
@@ -176,6 +185,12 @@ describe('syncConfigExtras() — rules sync (v6.0.1)', () => {
 test('generated Claude settings contain guarded autonomy and current runtime paths', () => {
   const home = mkdtempSync(join(tmpdir(), 'bizar-settings-'));
   const claudeDir = join(home, '.claude');
+  // F-169 + F-180: install the wrapper shim into the test claudeDir so
+  // `resolveHookCommand` emits the wrapper-path command (its executable
+  // form). `syncConfigExtras` does this on real installs.
+  mkdirSync(join(claudeDir, 'hooks'), { recursive: true });
+  copyFileSync(WRAPPER_SRC, join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh'));
+  chmodSync(join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh'), 0o755);
   try {
     const script = `
       import { writeClaudeSettings } from './cli/provision.mjs';
@@ -340,7 +355,7 @@ describe('writeBizarSkillLock() — shared registry compatibility', () => {
   });
 });
 
-describe('writeClaudeSettings — hook wrapper path (F-169)', () => {
+describe('writeClaudeSettings — hook wrapper path (F-169 + F-180)', () => {
   let home;
   let claudeDir;
 
@@ -356,13 +371,23 @@ describe('writeClaudeSettings — hook wrapper path (F-169)', () => {
     if (home && existsSync(home)) rmSync(home, { recursive: true, force: true });
   });
 
-  test('emitted settings.json contains no bare `bizar hook` commands', () => {
+  // F-180 helper: install the wrapper shim into the test claudeDir so
+  // `resolveHookCommand` emits the wrapper-path command. Mirrors what
+  // `syncConfigExtras` does during a real install. Test B explicitly
+  // skips this helper to exercise the sh -c fallback path.
+  function installWrapper() {
+    mkdirSync(join(claudeDir, 'hooks'), { recursive: true });
+    copyFileSync(WRAPPER_SRC, join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh'));
+    chmodSync(join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh'), 0o755);
+  }
+
+  function runWriteClaudeSettings() {
     const script = `
       import { writeClaudeSettings } from './cli/provision.mjs';
       const result = writeClaudeSettings({ force: true });
       if (!result.ok) process.exit(1);
     `;
-    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    return spawnSync(process.execPath, ['--input-type=module', '-e', script], {
       cwd: join(import.meta.dirname, '..'),
       env: {
         ...process.env,
@@ -372,6 +397,11 @@ describe('writeClaudeSettings — hook wrapper path (F-169)', () => {
       },
       encoding: 'utf8',
     });
+  }
+
+  test('emitted settings.json contains no bare `bizar hook` commands', () => {
+    installWrapper();
+    const result = runWriteClaudeSettings();
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const settingsPath = join(claudeDir, 'settings.json');
     assert.equal(existsSync(settingsPath), true);
@@ -401,23 +431,101 @@ describe('writeClaudeSettings — hook wrapper path (F-169)', () => {
   });
 
   test('emitted settings.json contains disableAutoCompact: true', () => {
-    const script = `
-      import { writeClaudeSettings } from './cli/provision.mjs';
-      const result = writeClaudeSettings({ force: true });
-      if (!result.ok) process.exit(1);
-    `;
-    spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-      cwd: join(import.meta.dirname, '..'),
-      env: {
-        ...process.env,
-        HOME: home,
-        CLAUDE_CONFIG_DIR: claudeDir,
-        BIZAR_HOME: join(home, '.config', 'bizar'),
-      },
-      encoding: 'utf8',
-    });
+    installWrapper();
+    runWriteClaudeSettings();
     const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
     assert.equal(settings.disableAutoCompact, true);
+  });
+
+  // ── F-180 ────────────────────────────────────────────────────────────
+
+  test('F-180 test A: wrapper executable → absolute-path wrapper command', () => {
+    installWrapper();
+    const result = runWriteClaudeSettings();
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
+    const expected = `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} user-prompt-submit`;
+    assert.equal(
+      settings.hooks.UserPromptSubmit[0].hooks[0].command,
+      expected,
+    );
+  });
+
+  test('F-180 test B: wrapper absent → POSIX sh -c fallback', () => {
+    // Deliberately skip installWrapper() — wrapper does not exist.
+    const result = runWriteClaudeSettings();
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
+    const cmd = settings.hooks.UserPromptSubmit[0].hooks[0].command;
+    assert.equal(
+      cmd.includes('bizar-hook-wrapper.sh'),
+      false,
+      `wrapper substring must be absent when wrapper is not installed: ${cmd}`,
+    );
+    assert.ok(cmd.startsWith('sh -c '), `expected sh -c fallback: ${cmd}`);
+    assert.ok(cmd.includes('user-prompt-submit'), `expected sub in fallback: ${cmd}`);
+  });
+
+  test('F-180 test C: HARD_MUTATION_ALLOW is non-empty and normalization-safe', () => {
+    installWrapper();
+    const script = `
+      import { HARD_MUTATION_ALLOW, normalizePermissionLists } from './cli/provision.mjs';
+      // Each entry, if added to permissions.allow via normalization,
+      // must survive the round-trip without mutation.
+      const out = normalizePermissionLists({}, { allow: HARD_MUTATION_ALLOW });
+      process.stdout.write(JSON.stringify({ list: HARD_MUTATION_ALLOW, allow: out.allow }));
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: join(import.meta.dirname, '..'),
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const parsed = JSON.parse(result.stdout);
+    assert.ok(Array.isArray(parsed.list), 'HARD_MUTATION_ALLOW must be an array');
+    assert.ok(parsed.list.length > 0, 'HARD_MUTATION_ALLOW must be non-empty');
+    for (const entry of parsed.list) {
+      assert.ok(
+        parsed.allow.includes(entry),
+        `entry failed normalization round-trip: ${entry}`,
+      );
+    }
+    // Sanity: surface covers all 9 hard-approval categories from AGENTS.md.
+    const flat = parsed.list.join(' ');
+    const categories = [
+      /git push/,
+      /gh pr/,
+      /gh release/,
+      /npm publish/,
+      /vercel deploy/,
+      /wrangler deploy/,
+      /flyctl deploy/,
+      /rm -rf/,
+      /sudo/,
+    ];
+    for (const re of categories) {
+      assert.ok(re.test(flat), `category ${re} missing from HARD_MUTATION_ALLOW`);
+    }
+  });
+
+  test('F-180 test D: byte-for-byte factory invariant (no permissions.ask/deny fallback)', () => {
+    const source = readFileSync(
+      join(import.meta.dirname, 'provision.mjs'),
+      'utf8',
+    );
+    // The factory must NOT carry a fallback `permissions.ask` or
+    // `permissions.deny` literal. The shipped template is the single
+    // source of truth; the factory just spreads `shipped.permissions`.
+    assert.equal(
+      /\|\|\s*\{\s*defaultMode:[^}]*ask:\s*\[/.test(source),
+      false,
+      'factory must not contain a permissions.ask fallback literal',
+    );
+    assert.equal(
+      /deny:\s*\[\s*'Bash\(rm -rf/.test(source),
+      false,
+      'factory must not contain a permissions.deny rm -rf fallback literal',
+    );
+    assert.match(source, /permissions:\s*shipped\.permissions/);
   });
 });
 

@@ -637,6 +637,93 @@ export function mergeBizarHooks(existingHooks = {}, desiredHooks = {}) {
 // publishes, and deploys remain hard HITL mutations.
 const HARD_MUTATION_PERMISSION = /^(?:Bash\()?\s*(?:git\s+push|gh\s+(?:pr\s+(?:create|edit|merge|close|reopen|ready|review|comment)|release\s+(?:create|edit|delete|upload))|(?:npm|bun|pnpm)\s+publish|(?:vercel|wrangler|flyctl)\s+(?:deploy|publish))\b/i;
 
+// F-180 — documentation-as-code surface for the "hard approval list" from
+// AGENTS.md. These are the categories of mutations that the Bizar policy
+// treats as human-only gates; the `permission-request.mjs` hook enforces
+// the destructive subset (force-push, rebase, root deletion,
+// system-destructive commands) and the `git-workflow-guard.mjs`
+// advisory hook surfaces the rest. Operators may NOT move any of these
+// patterns into `permissions.allow` without explicitly opting out of the
+// Bizar guard. The list mirrors the AGENTS.md "authoritative hard
+// approval list" verbatim so a drift in one place fails the regression
+// test in `cli/provision.test.mjs`.
+export const HARD_MUTATION_ALLOW = Object.freeze([
+  'Bash(git push *)',
+  'Bash(git -C * push *)',
+  'Bash(git --git-dir=* push *)',
+  'Bash(git push --force *)',
+  'Bash(git push -f *)',
+  'Bash(git -C * push --force *)',
+  'Bash(git -C * push -f *)',
+  'Bash(git --git-dir=* push --force *)',
+  'Bash(git --git-dir=* push -f *)',
+  'Bash(git rebase *)',
+  'Bash(git -C * rebase *)',
+  'Bash(git --git-dir=* rebase *)',
+  'Bash(gh pr create *)',
+  'Bash(gh pr edit *)',
+  'Bash(gh pr merge *)',
+  'Bash(gh pr close *)',
+  'Bash(gh pr reopen *)',
+  'Bash(gh pr ready *)',
+  'Bash(gh pr review *)',
+  'Bash(gh pr comment *)',
+  'Bash(gh release *)',
+  'Bash(npm publish *)',
+  'Bash(bun publish *)',
+  'Bash(pnpm publish *)',
+  'Bash(vercel deploy *)',
+  'Bash(wrangler deploy *)',
+  'Bash(flyctl deploy *)',
+  'Bash(rm -rf /)',
+  'Bash(sudo *)',
+  'Bash(mkfs*)',
+  'Bash(shutdown *)',
+  'Bash(halt *)',
+  'Bash(poweroff *)',
+  'Bash(reboot *)',
+  'Read(./.env)',
+  'Read(./.env.*)',
+]);
+
+/**
+ * Resolve a hook command for `sub` (e.g. `'user-prompt-submit'`).
+ *
+ * If `${claudeDir}/hooks/bizar-hook-wrapper.sh` exists AND is executable,
+ * returns the absolute-path wrapper invocation. Otherwise falls back to
+ * the POSIX-portable `sh -c` PATH probe shipped by
+ * `config/claude/settings.json` so the hook still resolves `bizar` on
+ * stripped-PATH systems. The fallback never hard-codes `/usr/bin/bizar`
+ * or any single install location; it probes `$HOME/.npm-global/bin`,
+ * `$HOME/.local/bin`, `/usr/local/bin`, `/usr/bin`, then `command -v`,
+ * then `npx -y @polderlabs/bizar-sdk` as a last resort.
+ *
+ * Exported for testing; `writeClaudeSettings` calls it via the local
+ * `hook()` thin wrapper.
+ */
+export function resolveHookCommand(sub, timeoutMs = 15) {
+  const wrapperPath = join(CLAUDE_HOOKS_DIR, 'bizar-hook-wrapper.sh');
+  // Prefer the absolute wrapper path when the shim is installed and
+  // executable. Claude Code's stripped PATH drops `bizar hook <sub>`
+  // calls silently; the wrapper script lives in the hooks directory
+  // and is copied + chmod'd by `syncConfigExtras` at install time.
+  try {
+    if (existsSync(wrapperPath)) {
+      const st = statSync(wrapperPath);
+      if (st.isFile() && (st.mode & 0o111) !== 0) {
+        return { type: 'command', command: `${wrapperPath} ${sub}`, timeout: timeoutMs };
+      }
+    }
+  } catch {
+    /* fall through to sh -c fallback */
+  }
+  // Fallback: POSIX-portable PATH probe so the hook still works without
+  // the wrapper script. Mirrors the inline command baked into
+  // `config/claude/settings.json` so the two stay byte-equivalent.
+  const shCmd = `sh -c 'BIZAR=""; for d in "$HOME/.npm-global/bin" "$HOME/.local/bin" "/usr/local/bin" "/usr/bin"; do [ -x "$d/bizar" ] && BIZAR="$d/bizar" && break; done; if [ -z "$BIZAR" ] && command -v bizar >/dev/null 2>&1; then BIZAR="$(command -v bizar)"; fi; if [ -z "$BIZAR" ]; then BIZAR="npx -y @polderlabs/bizar-sdk"; fi; exec $BIZAR hook ${sub}'`;
+  return { type: 'command', command: shCmd, timeout: timeoutMs };
+}
+
 export function normalizePermissionLists(existing = {}, desired = {}) {
   return {
     defaultMode: existing.defaultMode || desired.defaultMode,
@@ -657,16 +744,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     || process.env.BIZAR_MODEL_ROUTER_URL
     || (!force && (existingEnv.ANTHROPIC_BASE_URL || existingEnv.BIZAR_MODEL_ROUTER_URL))
     || defaultGatewayUrl;
-  // Resolve the absolute path to the bizarre-hook-wrapper shim at install
-  // time. The shipped repo template and live user-level settings both invoke
-  // the wrapper so Claude Code's stripped PATH does not silently drop
-  // `bizar hook <sub>` invocations.
-  const wrapperPath = join(CLAUDE_HOOKS_DIR, 'bizar-hook-wrapper.sh');
-  const hook = (name, timeout = 15) => ({
-    type: 'command',
-    command: `${wrapperPath} ${name}`,
-    timeout,
-  });
+  // Resolve hook commands via `resolveHookCommand`, which emits the
+  // absolute-path wrapper invocation when the shim is executable and
+  // falls back to the POSIX-portable `sh -c` PATH probe shipped by
+  // `config/claude/settings.json` otherwise. See `resolveHookCommand`
+  // for the full rationale.
+  const hook = (name, timeout = 15) => resolveHookCommand(name, timeout);
 
   // The shipped settings template (`config/claude/settings.json`) is the
   // source of truth for defaultMode, worktree, enableWorkflows, etc. We
@@ -685,29 +768,15 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       semble: { type: 'stdio', command: 'semble', args: ['mcp'] },
       'agent-browser': { type: 'stdio', command: 'agent-browser', args: ['mcp'] },
     },
-    permissions: shipped.permissions || {
-      defaultMode: 'acceptEdits',
-      allow: ['mcp__bizar__*', 'mcp__semble__*', 'mcp__agent-browser__*'],
-      ask: [
-        'Bash(git commit *)', 'Bash(git push *)',
-        'Bash(git -C * commit *)', 'Bash(git -C * push *)',
-        'Bash(git --git-dir=* commit *)', 'Bash(git --git-dir=* push *)',
-        'Bash(gh pr create *)', 'Bash(gh pr edit *)', 'Bash(gh pr merge *)',
-        'Bash(gh pr close *)', 'Bash(gh pr reopen *)', 'Bash(gh pr ready *)',
-        'Bash(gh pr review *)', 'Bash(gh pr comment *)',
-        'Bash(gh release *)', 'Bash(npm publish *)', 'Bash(bun publish *)',
-        'Bash(pnpm publish *)', 'Bash(vercel deploy *)', 'Bash(wrangler deploy *)',
-        'Bash(flyctl deploy *)',
-      ],
-      deny: [
-        'Read(./.env)', 'Read(./.env.*)',
-        'Bash(rm -rf /)', 'Bash(sudo *)',
-        'Bash(git push --force *)', 'Bash(git push -f *)',
-        'Bash(git -C * push --force *)', 'Bash(git -C * push -f *)',
-        'Bash(git rebase *)', 'Bash(git -C * rebase *)', 'Bash(git --git-dir=* rebase *)',
-        'Write(./node_modules/**)',
-      ],
-    },
+    // The shipped template `config/claude/settings.json` always defines
+    // `permissions` (it is part of the invariant surface required by the
+    // F-176 "full permissions + advisory hooks" policy). We assign
+    // directly so an accidental deletion in the template fails fast at
+    // install time rather than silently re-introducing the pre-F-176
+    // gated permission shape. If a future operator wants to relax the
+    // ship-time default, they should edit the template itself rather
+    // than reintroduce a fallback here.
+    permissions: shipped.permissions,
     autoMode: shipped.autoMode || {
       environment: [
         '$defaults',

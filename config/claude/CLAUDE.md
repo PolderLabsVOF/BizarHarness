@@ -93,18 +93,41 @@ mutations, releases, package publication, deployments, production/shared-
 infrastructure writes, credential changes, public exposure, irreversible
 destruction. Everything else proceeds.
 
+Under F-176 the seven-category floor above is enforced by `permission-request.mjs`
+(the destructive subset: force-push, rebase, root deletion, system-destructive
+commands) and surfaced for the rest via `git-workflow-guard.mjs` as advisory
+reminders in `hookSpecificOutput.additionalContext`. `permissions.deny` and
+`permissions.ask` are emptied by design — the floor is enforced by hook output,
+not by Claude Code prompts.
+
 > Note: `config/claude/settings.json` ships `permissions.ask` moved into
 > `permissions.allow` so subagents do not prompt for commits, pushes, PRs,
-> or deploys. Operators who want HITL back can set those entries into
-> `permissions.ask` in their local `~/.claude/settings.json` override.
+> or deploys. Operators who want HITL back can move the following exact
+> patterns from `permissions.allow` into `permissions.ask` in their local
+> `~/.claude/settings.json` override:
+>
+> - `Bash(git push *)`
+> - `Bash(git -C * push *)`
+> - `Bash(git --git-dir=* push *)`
+> - `Bash(git push --force *)`
+> - `Bash(git push -f *)`
+> - `Bash(git rebase *)`
+> - `Bash(gh pr create *)`
+> - `Bash(gh pr merge *)`
+> - `Bash(gh release create *)`
+> - `Bash(npm publish *)`
+> - `Bash(bun publish *)`
+> - `Bash(pnpm publish *)`
+> - `Bash(vercel deploy *)`
+> - `Bash(wrangler deploy *)`
+> - `Bash(flyctl deploy *)`
 
 > Note: `disableAutoCompact: true` is shipped by default. Sessions rely on
 > manual `/compact` instead. Hook `precompact-priorities.sh` preserves
 > evidence and decisions on compaction.
-Local `git commit` (including `--amend`, `git -C`, and `git --git-dir=` variants)
-is always allowed silently and ships with explicit `Bash(git commit *)`-family
-patterns in `permissions.allow`. Pushes, rebase, force-push, and deploys remain
-HITL-gated per the hard approval list above.
+Local `git commit` is always allowed silently via `permissions.allow`; the seven
+HITL categories above are gated by `permission-request.mjs` plus the advisory
+hook chain.
 
 Agents always fetch current official documentation via WebSearch + WebFetch at
 task start and whenever uncertainty appears during work. Guess-and-try is
