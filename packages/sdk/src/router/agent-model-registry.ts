@@ -352,6 +352,107 @@ export function listAgentModels(registry: ModelRegistry): AgentModelEntry[] {
 }
 
 /**
+ * Rank user-selected models for a role. Pure function — no I/O, no side
+ * effects. Used by `resolveTierModel` to honour the operator's selection
+ * before falling back to the live tier candidates.
+ *
+ * Sorting rules (descending primary, ascending tie-breaker):
+ *   1. `eligible` desc      — role floors pass
+ *   2. `capabilityScore` desc — weighted capability sum
+ *   3. `hasProfile` desc    — profiles beat unprofiled
+ *   4. `originalIndex` asc  — first selected wins
+ *
+ * Hard-floor defaults are permissive: with no `requirements`, every
+ * candidate is eligible. Profile-less candidates stay last via
+ * `hasProfile=false` but still participate.
+ *
+ * @param registry Model registry (`registry.userSelected.models` is the pool).
+ * @param role Free-form role label (kept for future filtering / logs).
+ * @param requirements Optional eligibility floors.
+ */
+export function rankUserSelectedForRole(registry: ModelRegistry, role: string, requirements: RoleRequirements = {}): { ranked: RankedUserSelectedEntry[]; eligible: RankedUserSelectedEntry[] } {
+  const candidates = userSelectedModelIds(registry);
+  if (candidates.length === 0) return { ranked: [], eligible: [] };
+  const tierHints = registry.userSelected?.tierHints;
+  const profiles = registry.userSelected?.profiles;
+  const ranked: RankedUserSelectedEntry[] = candidates.map((id, originalIndex) => {
+    const profile = profiles?.[id];
+    const hasProfile = Boolean(profile);
+    const tier = (tierHints && typeof tierHints[id] === "string" ? tierHints[id] : defaultTierHintForId(id)) as BizarTier;
+    const { eligible, ineligibleReasons } = evaluateRoleRequirements(profile, requirements, tier);
+    const capabilityScore = scoreCapabilityProfile(profile);
+    const entry: RankedUserSelectedEntry = { id, tier, eligible, ineligibleReasons, capabilityScore, hasProfile, originalIndex };
+    return entry;
+  });
+  ranked.sort(compareRankedEntries);
+  const eligible = ranked.filter((entry) => entry.eligible);
+  // role is consumed only for future per-role filtering / logging hooks.
+  void role;
+  return { ranked, eligible };
+}
+
+/**
+ * Pure sorter extracted for testability. Mutates and returns the input
+ * array. Sort key: `(eligible desc, capabilityScore desc, hasProfile desc,
+ * originalIndex asc)`.
+ */
+export function compareRankedEntries(a: RankedUserSelectedEntry, b: RankedUserSelectedEntry): number {
+  if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+  if (a.capabilityScore !== b.capabilityScore) return b.capabilityScore - a.capabilityScore;
+  if (a.hasProfile !== b.hasProfile) return a.hasProfile ? -1 : 1;
+  return a.originalIndex - b.originalIndex;
+}
+
+/**
+ * Weighted capability score: reasoning=0.3, toolCall=0.25,
+ * structuredOutput=0.15, attachment=0.1, temperature=0.05,
+ * +0.15 when `inputModalities` includes "image". Missing/partial
+ * profiles score 0 — they sort last via `hasProfile=false`.
+ */
+export function scoreCapabilityProfile(profile: ModelCapabilityProfile | undefined): number {
+  if (!profile || !profile.capabilities) return 0;
+  const caps = profile.capabilities;
+  let score = 0;
+  if (caps.reasoning) score += 0.3;
+  if (caps.toolCall) score += 0.25;
+  if (caps.structuredOutput) score += 0.15;
+  if (caps.attachment) score += 0.1;
+  if (caps.temperature) score += 0.05;
+  if (Array.isArray(caps.inputModalities) && caps.inputModalities.includes("image")) score += 0.15;
+  return Math.round(score * 1e6) / 1e6;
+}
+
+/**
+ * Evaluate the role requirements against a (possibly missing) profile.
+ * Returns `eligible=true` with no reasons when no requirements are set.
+ * Profiles missing the relevant data (e.g., `null` context tokens) pass
+ * unknown-values — the resolver only downgrades when a known value
+ * violates a floor.
+ */
+export function evaluateRoleRequirements(profile: ModelCapabilityProfile | undefined, requirements: RoleRequirements, tier: BizarTier): { eligible: boolean; ineligibleReasons: string[] } {
+  const reasons: string[] = [];
+  if (typeof requirements.minContextTokens === "number" && profile?.limits && Number.isFinite(profile.limits.contextTokens) && (profile.limits.contextTokens as number) < requirements.minContextTokens) {
+    reasons.push(`contextTokens ${profile.limits.contextTokens} < required ${requirements.minContextTokens}`);
+  }
+  if (requirements.requireReasoning && profile?.capabilities && profile.capabilities.reasoning !== true) {
+    reasons.push("missing required reasoning capability");
+  }
+  if (requirements.requireToolCall && profile?.capabilities && profile.capabilities.toolCall !== true) {
+    reasons.push("missing required tool-call capability");
+  }
+  if (requirements.requireStructuredOutput && profile?.capabilities && profile.capabilities.structuredOutput !== true) {
+    reasons.push("missing required structured-output capability");
+  }
+  if (requirements.requireImageInput && profile?.capabilities && !(Array.isArray(profile.capabilities.inputModalities) && profile.capabilities.inputModalities.includes("image"))) {
+    reasons.push("missing required image input modality");
+  }
+  if (Array.isArray(requirements.preferredTiers) && requirements.preferredTiers.length > 0 && !requirements.preferredTiers.includes(tier)) {
+    reasons.push(`tier ${tier} not in preferred list`);
+  }
+  return { eligible: reasons.length === 0, ineligibleReasons: reasons };
+}
+
+/**
  * The set of model IDs the orchestrator is allowed to dispatch to, derived
  * from `registry.userSelected`. When `userSelected` is missing or empty,
  * the function returns an empty array and the orchestrator MUST inherit the
