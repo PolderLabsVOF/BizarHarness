@@ -2,6 +2,35 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-189 Workflow/team routing integration (IMP-014)
+
+**Date:** 2026-08-27
+**Branch:** `wt/todd-imp014-workflow-routing` (3 source commits; merge pending).
+**Source SHAs:** `9b49cfc` feat(workflows) add dispatch helper, `edfef81` refactor(workflows) route every agent() through dispatchAgent, `803ada8` test(workflows) 43 dispatch + capture + drift-guard cases; plus the F-189 ledger close-out commit.
+**WIP holder:** `@mike` — F-189 lands with `wip: 1` per the ledger invariant; IMP-014 acceptance gate ("Captured nested Agent payloads contain expected models") is fully verified by `config/workflows/__tests__/workflow-payload-capture.test.mjs`.
+
+**Master verification on the F-189 branch:**
+- `node --test config/workflows/__tests__/dispatch.test.mjs` — **20/20 passing** (select+dispatch API contracts, dispatchAgent wrapper, every-fixture imports/role enforcement, captured payload shape, selector-mirror divergence test against `packages/sdk/dist/router/select-dispatch-model.js` when built).
+- `node --test config/workflows/__tests__/workflow-payload-capture.test.mjs` — **20/20 passing** (per-workflow: routingDecisionId UUID + at-least-one-model + high-risk-never-downgrade invariants; cross-workflow: routingDecisionId uniqueness, every fixture has ≥1 high-risk capture).
+- `node --test config/workflows/__tests__/bizar-default.test.mjs` — **10/10 passing** (updated to handle ESM imports in workflow scripts via dynamic-import pre-resolution + new Function parameters).
+- `node --test scripts/__tests__/autonomy-contract-workflow.test.mjs` — **3/3 passing** (drift guard: every workflow routes through dispatchAgent; every workflow imports dispatchAgent from `./lib/dispatch.js`; probe-injection of a bare `agent(` is detected).
+- `npx tsc --noEmit` — exit 0, clean types.
+- `npm run test:node` — green for all touched suites (53 added cases; pre-existing failures unchanged).
+
+**Files touched:**
+- `config/workflows/lib/dispatch.js` (NEW, ~570 lines) — `dispatchAgent(agentFn, agentName, prompt, opts, context?)`; `dispatchAgentDryRun(agentName, prompt, opts)`; `computeDecision(agentName, prompt, opts, context)`; `augmentPayload(opts, decision, agentName)`; `loadDispatchContext({ cwd, env })`; `selectDispatchModelMirror(input)` (byte-equivalent JS mirror of `packages/sdk/src/router/select-dispatch-model.ts` so the workflow runtime does not require an SDK build step); `setCaptureFn(fn)` / `resetCaptureFn()`; `REASON` enum (verbatim from the SDK).
+- `config/workflows/bizar-debug.js`, `config/workflows/bizar-implement.js`, `config/workflows/bizar-research.js`, `config/workflows/ultracode.js`, `config/workflows/ultracode-research.js`, `config/workflows/ultracode-review.js` — every bare `agent(...)` call replaced with `dispatchAgent(agent, '<name>', prompt, { role, phase, capabilities, risk, label, ... })`. 5–8 call sites per script.
+- `config/workflows/__tests__/dispatch.test.mjs` (NEW, 20 cases) — pins the dispatch contract; selector-mirror divergence test imports the canonical SDK selector when `packages/sdk/dist/router/select-dispatch-model.js` exists, otherwise skips with an explicit reason.
+- `config/workflows/__tests__/workflow-payload-capture.test.mjs` (NEW, 20 cases) — drives every fixture workflow through a captured dispatch wrapper; IMP-014 acceptance gate ("Captured nested Agent payloads contain expected models") is the third invariant of every per-workflow test.
+- `scripts/__tests__/autonomy-contract-workflow.test.mjs` (NEW, 3 cases) — drift guard: stripCommentsAndStrings + findBareAgentCalls + findBypassComments; pins `import { dispatchAgent } from './lib/dispatch.js'` on every workflow; injectable drift probe.
+- `config/workflows/__tests__/bizar-default.test.mjs` — ESM-aware update: pre-resolves static imports via dynamic import relative to `config/workflows/`, strips them from the body, and passes the bindings as `Function` parameters so `new Function` can drive the ESM-style workflow scripts.
+- `feature_list.json` — F-189 row (passing, source `9b49cfc`, merge pending, wip=1 @mike). VCR: passing=68, activated=69, ratio=0.985. F-188 `wip` reset to 0 (merge of F-188 at `d3134c7` had already cleared it; the close-out cleans the residue).
+- `DECISIONS.md` — F-189 row appended.
+
+**Drift policy:** any reintroduction of a bare `agent(` call into a workflow script MUST land in the same commit as either the matching edit converting it to `dispatchAgent(...)` plus a `role:` declaration, OR a trailing `// dispatch-bypass: <reason>` comment justifying the bypass. `scripts/__tests__/autonomy-contract-workflow.test.mjs` fails CI on the first bare `agent(` injection.
+
+**Implementation rationale (one-paragraph):** The F-188 selector picks a model from the operator's `userSelected.profiles` and returns `{ modelId, tier, routingDecisionId, reason, fallbackChain }` — but a `selectDispatchModel(...)` call is only useful if every dispatch surface actually invokes it. Until F-189, the six shipped workflow scripts in `config/workflows/` were still calling the runtime's primitive `agent(...)` directly, so the recorded model came from session inheritance and the `routingDecisionId` never reached the audit trail. Closing the IMP-014 gap means routing every nested `agent(...)` call through a single workflow-side helper that (a) loads the dispatch context, (b) runs the F-188 selector, (c) augments the payload with `model` + `routingDecisionId` + `tier` + `selectorReason` + `fallbackChain` so the Agent tool and the audit trail see the same decision, and (d) honours `dryRun: true` for the capture test. The drift guard plus a JS mirror of `selectDispatchModel` keep the helper self-contained so the workflow runtime never needs an SDK build step.
+
 ## Complete — F-188 Central dispatch-model selector (IMP-013)
 
 **Date:** 2026-08-27
