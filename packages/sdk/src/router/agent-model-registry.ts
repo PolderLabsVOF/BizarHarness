@@ -1,7 +1,8 @@
 /** Dynamic model-tier registry shared with the Bizar CLI. */
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir as osHomedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 
 export type BizarTier = "premium" | "high" | "mid-design" | "default" | "mid" | "budget";
@@ -507,6 +508,86 @@ export function userSelectedModelIds(registry: ModelRegistry): string[] {
 
 export function getEndpoint(registry?: ModelRegistry): string | null {
   return registry?.endpoint ?? loadModelRegistry().endpoint;
+}
+
+/**
+ * F-190 / IMP-017 explicit alias map. Reads from
+ * `~/.config/bizar/alias-map.json` so the operator can bind gateway IDs
+ * that cannot be matched conservatively (normalised / unique) to a
+ * specific catalogue ID. Format:
+ *
+ *   { "gateway/alias-id": { "modelId": "provider/catalogue-id", "matchType": "alias" } }
+ *
+ * Missing or unreadable file ⇒ empty map. The CLI fetcher honours the
+ * alias map before falling through to the conservative matcher.
+ */
+export interface AliasMapEntry {
+  /** Canonical catalogue ID the gateway alias resolves to. */
+  modelId: string;
+  /** Match type stamped on the profile's provenance block. */
+  matchType: "alias" | "manual";
+  /** Optional confidence override (defaults to 1.0 for explicit aliases). */
+  confidence?: number;
+}
+
+export type AliasMap = Readonly<Record<string, AliasMapEntry>>;
+
+/**
+ * Read the alias map from `~/.config/bizar/alias-map.json`. Returns an
+ * empty map when the file is missing or unreadable. The CLI is the
+ * canonical writer — see `cli/commands/models.mjs`. This helper is
+ * pure I/O and tolerates a missing file so callers in tests do not need
+ * to seed the path.
+ */
+export function getAliasMap(homedir: string = osHomedir()): AliasMap {
+  const path = resolve(homedir, ".config", "bizar", "alias-map.json");
+  if (!existsSync(path)) return {};
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8"));
+    if (!isRecord(raw)) return {};
+    const out: Record<string, AliasMapEntry> = {};
+    for (const [alias, value] of Object.entries(raw)) {
+      if (typeof alias !== "string" || !alias.trim()) continue;
+      if (!isRecord(value)) continue;
+      const modelId = typeof value.modelId === "string" ? value.modelId.trim() : "";
+      if (!modelId) continue;
+      const matchType: AliasMapEntry["matchType"] = value.matchType === "manual" ? "manual" : "alias";
+      const confidence = Number.isFinite(value.confidence) ? Number(value.confidence) : 1.0;
+      out[alias.trim()] = { modelId, matchType, confidence };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Layer provider-specific serving metadata from
+ * `https://models.dev/catalog.json` on top of base `ModelProfile[]`.
+ * The base profiles carry provider-agnostic metadata from
+ * `https://models.dev/models.json`; `catalog.json` adds rate limits,
+ * provider endpoints, and provider-side gateway IDs that differ for
+ * some hosted deployments. Operator-set `serving` fields are NOT
+ * overwritten — the operator's serving overrides win on collision.
+ */
+export interface ServingMetadataEntry {
+  gatewayId?: string;
+  rateLimitRpm?: number;
+  providerEndpoint?: string;
+}
+
+export type ServingMetadata = Readonly<Record<string, ServingMetadataEntry>>;
+
+export function mergeWithServing(
+  profiles: readonly { id: string; serving?: ServingMetadataEntry }[],
+  serving: ServingMetadata,
+): { id: string; serving: ServingMetadataEntry | undefined }[] {
+  return profiles.map((profile) => {
+    const addition = serving[profile.id];
+    if (!addition) return { id: profile.id, serving: profile.serving };
+    const merged: ServingMetadataEntry = { ...addition, ...(profile.serving || {}) };
+    return { id: profile.id, serving: merged };
+  });
 }
 
 export interface CreateRunAssignmentSnapshotInput {

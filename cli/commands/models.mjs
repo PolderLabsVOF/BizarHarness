@@ -83,26 +83,62 @@ export function resolveRouterPath(cwd) {
   return resolve(cwd, 'config', 'claude', 'model-router.json');
 }
 
+/**
+ * F-190 / IMP-017 explicit alias map reader. Reads
+ * `~/.config/bizar/alias-map.json` and returns the parsed map (empty
+ * object when the file is missing or unreadable). Mirrors the SDK's
+ * `getAliasMap` helper — the CLI is the canonical writer so this
+ * helper exists so the JS code path can stay self-contained.
+ */
+export function loadAliasMap(home = homedir()) {
+  const path = join(home, '.config', 'bizar', 'alias-map.json');
+  if (!existsSync(path)) return {};
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8'));
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    return raw;
+  } catch {
+    return {};
+  }
+}
+
 // ── Discovery ────────────────────────────────────────────────────────────────
 
 export const MODELS_DEV_CATALOG_URL = 'https://models.dev/models.json';
 
 /**
+ * F-190 / IMP-017 provider-specific serving catalogue.
+ * https://models.dev/catalog.json carries per-provider rate limits,
+ * gateway IDs, and provider endpoints that differ from the
+ * provider-agnostic /models.json metadata. The fetch path is the same
+ * shape (JSON over HTTPS, AbortController timeout) but the body is
+ * stored verbatim under `serving` so the SDK can layer provider
+ * overrides on top of base profiles.
+ */
+export const MODELS_DEV_PROVIDER_CATALOG_URL = 'https://models.dev/catalog.json';
+
+/**
  * Fetch provider-agnostic capability metadata from Models.dev. This is
  * best-effort enrichment: gateway discovery remains authoritative for which
  * model IDs are dispatchable.
+ *
+ * URL resolution: explicit `url` arg → `BIZAR_MODELS_DEV_URL` env var →
+ * `MODELS_DEV_CATALOG_URL` default. The env var lets tests point the
+ * catalog fetch at a stub HTTP server without monkey-patching
+ * `globalThis.fetch`.
  */
 export async function fetchModelsDevCatalog({
   fetchFn,
   timeoutMs = 5000,
-  url = MODELS_DEV_CATALOG_URL,
+  url,
 } = {}) {
+  const resolvedUrl = url || process.env.BIZAR_MODELS_DEV_URL || MODELS_DEV_CATALOG_URL;
   const doFetch = fetchFn || globalThis.fetch;
   if (typeof doFetch !== 'function') throw new Error('no fetch implementation available in this runtime');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await doFetch(url, {
+    const res = await doFetch(resolvedUrl, {
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     });
@@ -115,6 +151,20 @@ export async function fetchModelsDevCatalog({
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Fetch provider-specific serving metadata from
+ * `https://models.dev/catalog.json`. Same shape as
+ * `fetchModelsDevCatalog` but exposed separately so callers can layer
+ * provider overrides on top of base profiles.
+ */
+export async function fetchProviderCatalog({
+  fetchFn,
+  timeoutMs = 5000,
+  url = MODELS_DEV_PROVIDER_CATALOG_URL,
+} = {}) {
+  return fetchModelsDevCatalog({ fetchFn, timeoutMs, url });
 }
 
 function flattenModelsDevCatalog(catalog) {
@@ -387,6 +437,218 @@ function writeAtomic(path, body) {
   renameSync(tmp, path);
 }
 
+// ── F-190 / IMP-017 refresh + operator-override preservation ────────────────
+
+/**
+ * Decide whether a stored profile needs to be re-fetched. Profiles
+ * carry a `provenance.refreshRequiredAfter` timestamp; when the supplied
+ * `now` is past it the entry is stale. Operator-only profiles (source
+ * 'operator' / 'alias-map' / 'manual') never need a refresh — their
+ * `refreshRequiredAfter` is set to the far future by the picker.
+ */
+function profileNeedsRefresh(profile, now = new Date()) {
+  if (!profile || typeof profile !== 'object') return false;
+  const prov = profile.provenance;
+  if (!prov || typeof prov !== 'object') return false;
+  const source = prov.source;
+  if (source === 'operator' || source === 'alias-map') return false;
+  const required = Date.parse(prov.refreshRequiredAfter);
+  if (!Number.isFinite(required)) return false;
+  return now.getTime() >= required;
+}
+
+/**
+ * Apply the refresh. Re-fetches only stale profiles; preserves
+ * operator-set fields on every entry. The summary is the JSON shape
+ * `bizar models --refresh` prints in non-interactive mode.
+ *
+ * @param {{ routerPath: string, candidates: Array<{ id: string, profile?: object }>, catalog: object, aliasMap?: object, now?: Date }} opts
+ * @returns {{ refreshed: string[], preservedOperator: string[], skippedFresh: string[], error?: string }}
+ */
+export function applyRefresh({
+  routerPath,
+  candidates,
+  catalog,
+  aliasMap = {},
+  now = new Date(),
+} = {}) {
+  if (!routerPath || typeof routerPath !== 'string') throw new Error('routerPath is required');
+  if (!Array.isArray(candidates)) throw new Error('candidates is required (array)');
+  if (!catalog || typeof catalog !== 'object') throw new Error('catalog is required');
+
+  const enriched = enrichModelsWithCapabilities(candidates, catalog);
+  const enrichedById = new Map(enriched.map((entry) => [entry.id, entry]));
+
+  const router = existsSync(routerPath)
+    ? safeParseRouter(routerPath)
+    : {};
+  const userSelected = router.userSelected || { models: [], tierHints: {}, profiles: {} };
+  const existingProfiles = userSelected.profiles && typeof userSelected.profiles === 'object'
+    ? userSelected.profiles
+    : {};
+  const existingModels = Array.isArray(userSelected.models) ? userSelected.models : [];
+  const existingTierHints = userSelected.tierHints && typeof userSelected.tierHints === 'object'
+    ? userSelected.tierHints
+    : {};
+
+  const refreshed = [];
+  const preservedOperator = [];
+  const skippedFresh = [];
+  const newProfiles = { ...existingProfiles };
+
+  for (const id of existingModels) {
+    if (typeof id !== 'string' || !id.trim()) continue;
+    const trimmed = id.trim();
+    const existing = existingProfiles[trimmed];
+    const enrichedEntry = enrichedById.get(trimmed);
+
+    // Honour explicit alias mapping. The alias map's `modelId` resolves
+    // to a catalogue ID; when set, we stamp provenance with the alias
+    // match type and override the baseModel.
+    const aliasEntry = aliasMap && aliasMap[trimmed];
+    if (aliasEntry && enrichedEntry?.profile) {
+      enrichedEntry.profile = {
+        ...enrichedEntry.profile,
+        baseModel: aliasEntry.modelId,
+        metadata: {
+          ...(enrichedEntry.profile.metadata || {}),
+          matchType: aliasEntry.matchType || 'alias',
+          confidence: Number.isFinite(aliasEntry.confidence) ? aliasEntry.confidence : 1,
+        },
+      };
+    }
+
+    if (!enrichedEntry?.profile) {
+      skippedFresh.push(trimmed);
+      continue;
+    }
+
+    if (existing && profileNeedsRefresh(existing, now)) {
+      const refreshedProfile = mergePreservingOperator(existing, enrichedEntry.profile, now);
+      newProfiles[trimmed] = refreshedProfile;
+      refreshed.push(trimmed);
+      continue;
+    }
+
+    if (existing) {
+      // Operator-set fields survive. If the existing profile carries
+      // operator overrides, the cached entry wins for those fields.
+      newProfiles[trimmed] = mergePreservingOperator(existing, enrichedEntry.profile, now);
+      if (hasOperatorOverrides(existing)) preservedOperator.push(trimmed);
+      else skippedFresh.push(trimmed);
+      continue;
+    }
+
+    // No existing entry — write a fresh profile with provenance.
+    newProfiles[trimmed] = stampProvenance(enrichedEntry.profile, now);
+    refreshed.push(trimmed);
+  }
+
+  router.userSelected = {
+    ...userSelected,
+    models: existingModels,
+    tierHints: existingTierHints,
+    profiles: newProfiles,
+    lastUpdated: now.toISOString(),
+    source: 'refresh',
+  };
+  if (!router.version) router.version = '13.0.0';
+  if (!router.endpoint) router.endpoint = 'http://localhost:20128/v1';
+  writeAtomic(routerPath, JSON.stringify(router, null, 2) + '\n');
+
+  return { refreshed, preservedOperator, skippedFresh };
+}
+
+function safeParseRouter(path) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function hasOperatorOverrides(profile) {
+  if (!profile || typeof profile !== 'object') return false;
+  return profile.operatorOverrides && typeof profile.operatorOverrides === 'object'
+    && Object.keys(profile.operatorOverrides).length > 0;
+}
+
+/**
+ * Layer operator-set fields on top of a freshly-fetched profile. The
+ * refresh must NEVER overwrite operator-set values — operator
+ * corrections (re-enabled tool use, widened context, manual tier
+ * bumps) survive catalogue refreshes verbatim.
+ *
+ * Strategy:
+ *   - Start from the freshly-fetched profile.
+ *   - For every field set in the existing profile's `operatorOverrides`,
+ *     take the operator value.
+ *   - For every other field, take the fresh value.
+ *   - Provenance is stamped with `now` when the entry was actually
+ *     refreshed; when only operator overrides change, provenance is
+ *     preserved (the entry did not actually refresh).
+ */
+function mergePreservingOperator(existing, fresh, now) {
+  const overrides = existing.operatorOverrides && typeof existing.operatorOverrides === 'object'
+    ? existing.operatorOverrides
+    : {};
+  const protocolFresh = fresh.protocol || existing.protocol || {};
+  const protocolMerged = {
+    ...protocolFresh,
+    ...(overrides.protocol || {}),
+    contextTokens: pickNumber(overrides.protocol?.contextTokens, protocolFresh.contextTokens) ?? protocolFresh.contextTokens,
+    maxOutputTokens: pickNumber(overrides.protocol?.maxOutputTokens, protocolFresh.maxOutputTokens) ?? protocolFresh.maxOutputTokens,
+  };
+  const measuredFresh = fresh.measured || existing.measured || {};
+  const measuredMerged = { ...measuredFresh, ...(overrides.measured || {}) };
+
+  const merged = {
+    ...fresh,
+    protocol: protocolMerged,
+    measured: measuredMerged,
+    operatorOverrides: Object.keys(overrides).length > 0 ? overrides : existing.operatorOverrides,
+  };
+
+  // Stamp provenance only when the entry actually needs a refresh —
+  // fresh entries keep their existing provenance so a `--refresh`
+  // call leaves up-to-date entries untouched.
+  if (profileNeedsRefresh(existing, now)) {
+    merged.provenance = stampProvenance(fresh, now).provenance;
+  } else {
+    merged.provenance = existing.provenance;
+  }
+  return merged;
+}
+
+function pickNumber(over, base) {
+  if (typeof over === 'number' && Number.isFinite(over)) return over;
+  return base;
+}
+
+function stampProvenance(profile, now) {
+  const retrievedAt = now.toISOString();
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const refreshRequiredAfter = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString();
+  const prov = profile.metadata || profile.provenance || {};
+  return {
+    ...profile,
+    metadata: {
+      ...(profile.metadata || {}),
+      retrievedAt,
+      matchType: prov.matchType || 'exact-id',
+      confidence: Number.isFinite(prov.confidence) ? prov.confidence : 0.9,
+    },
+    provenance: {
+      source: prov.source || 'models.dev',
+      retrievedAt,
+      expiresAt,
+      refreshRequiredAfter,
+      matchType: prov.matchType || 'exact-id',
+      confidence: Number.isFinite(prov.confidence) ? prov.confidence : 0.9,
+    },
+  };
+}
+
 // ── Interactive picker ───────────────────────────────────────────────────────
 
 /**
@@ -405,9 +667,13 @@ export function currentSelection(router) {
 /**
  * Shape of each ranked entry returned by `bizar models explain`.
  * Mirrors `packages/sdk/src/router/agent-model-registry.ts:RankedUserSelectedEntry`.
+ * Adds the IMP-017 / F-190 `reasons` (protocol-floor rejects in the
+ * new format), `measured` (quality breakdown), and `provenance`
+ * (source / retrieval / expiry) when the discriminated profile is
+ * available.
  */
 function explainRankedEntry(entry) {
-  return {
+  const out = {
     id: entry.id,
     tier: entry.tier,
     eligible: entry.eligible,
@@ -415,6 +681,10 @@ function explainRankedEntry(entry) {
     capabilityScore: entry.capabilityScore,
     hasProfile: entry.hasProfile,
   };
+  if (Array.isArray(entry.reasons)) out.reasons = [...entry.reasons];
+  if (entry.measured && typeof entry.measured === 'object') out.measured = entry.measured;
+  if (entry.provenance && typeof entry.provenance === 'object') out.provenance = entry.provenance;
+  return out;
 }
 
 /**
@@ -643,6 +913,7 @@ function showHelp() {
     bizar models --list             Print candidate IDs, one per line
     bizar models --set a,b,c        Persist the comma-separated IDs to userSelected
     bizar models --clear            Remove userSelected; orchestrator falls back to session-only
+    bizar models --refresh         Re-fetch Models.dev metadata for stale profiles; preserve operator overrides
     bizar models explain <role>     Print ranked eligibility for a role (no gateway)
     bizar models --json             Machine-readable output for any subcommand
     bizar models --help             This help
@@ -680,6 +951,7 @@ export async function run(name, args, isHelpRequest) {
   const wantJson = args.includes('--json');
   const wantList = args.includes('--list');
   const wantClear = args.includes('--clear');
+  const wantRefresh = args.includes('--refresh');
   const setFlag = args.find((a) => a.startsWith('--set='));
   const setValue = setFlag ? setFlag.slice('--set='.length) : null;
 
@@ -721,6 +993,61 @@ export async function run(name, args, isHelpRequest) {
           for (const reason of entry.ineligibleReasons) console.log(chalk.dim(`        - ${reason}`));
         }
       }
+    }
+    return true;
+  }
+
+  // F-190 / IMP-017 `bizar models --refresh` — re-fetch stale
+  // profiles from Models.dev; preserve operator overrides. The catalog
+  // fetch is best-effort — a network failure exits non-zero without
+  // mutating the router file.
+  if (wantRefresh) {
+    let router;
+    try {
+      router = existsSync(routerPath)
+        ? JSON.parse(readFileSync(routerPath, 'utf8'))
+        : {};
+    } catch (parseErr) {
+      const message = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      console.error(chalk.red(`  x cannot read ${routerPath}: ${message}`));
+      process.exit(1);
+    }
+    const userSelected = router && typeof router === 'object' ? router.userSelected : null;
+    const selectedModels = userSelected && Array.isArray(userSelected.models)
+      ? userSelected.models.filter((id) => typeof id === 'string' && id.trim())
+      : [];
+    if (selectedModels.length === 0) {
+      if (wantJson) {
+        process.stdout.write(JSON.stringify({ refreshed: [], preservedOperator: [], skippedFresh: [], note: 'no userSelected models' }, null, 2) + '\n');
+      } else {
+        console.log(chalk.yellow('  ! userSelected is empty; nothing to refresh'));
+      }
+      return true;
+    }
+    let catalog;
+    try {
+      catalog = await fetchModelsDevCatalog({});
+    } catch (fetchErr) {
+      const message = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      console.error(chalk.red(`  x refresh failed: ${message}`));
+      if (wantJson) {
+        process.stdout.write(JSON.stringify({ error: message }, null, 2) + '\n');
+      }
+      process.exit(1);
+    }
+    const aliasMap = loadAliasMap();
+    const candidates = selectedModels.map((id) => ({ id }));
+    const summary = applyRefresh({ routerPath, candidates, catalog, aliasMap });
+    if (wantJson) {
+      process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+    } else {
+      console.log(chalk.green(`  v refresh complete:`));
+      console.log(chalk.dim(`    refreshed:         ${summary.refreshed.length}`));
+      for (const id of summary.refreshed) console.log(chalk.dim(`        - ${id}`));
+      console.log(chalk.dim(`    preserved operator: ${summary.preservedOperator.length}`));
+      for (const id of summary.preservedOperator) console.log(chalk.dim(`        - ${id}`));
+      console.log(chalk.dim(`    skipped (fresh):    ${summary.skippedFresh.length}`));
+      for (const id of summary.skippedFresh) console.log(chalk.dim(`        - ${id}`));
     }
     return true;
   }

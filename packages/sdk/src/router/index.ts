@@ -401,6 +401,8 @@ export {
   listAgentModels,
   userSelectedModelIds,
   getEndpoint,
+  getAliasMap,
+  mergeWithServing,
   createRunAssignmentSnapshot,
   verifyRunAssignmentSnapshot,
   ModelRegistryError,
@@ -426,6 +428,10 @@ export {
   type FailoverVerdict,
   type FailoverChainEntry,
   type PickFailoverInput,
+  type AliasMap,
+  type AliasMapEntry,
+  type ServingMetadata,
+  type ServingMetadataEntry,
 } from "./agent-model-registry.js";
 
 // F-190 / IMP-017 discriminated ModelProfile schema.

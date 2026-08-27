@@ -86,6 +86,45 @@ export function evaluateRoleRequirements(profile, requirements, tier) {
 }
 
 /**
+ * F-190 / IMP-017 protocol-floor mirror. Byte-identical to
+ * `protocolMeets` in `packages/sdk/src/router/model-profile.ts`. Returns
+ * an array of strings describing each violated floor; empty when all
+ * floors pass. The discriminator is the discriminated
+ * `ModelProfile` shape; the legacy F-184 `ModelCapabilityProfile`
+ * falls through to an empty array (legacy `evaluateRoleRequirements`
+ * owns those floors).
+ *
+ * IMP-017 reject strings (mirrored):
+ *   - `context-too-small: <actual> < <required>`
+ *   - `no-tool-use`
+ *   - `no-reasoning`
+ *   - `no-structured-output`
+ *   - `no-image-input`
+ */
+export function protocolMeetsMirror(discriminatedProfile, requirements) {
+  if (!discriminatedProfile || typeof discriminatedProfile !== "object") return [];
+  const protocol = discriminatedProfile.protocol;
+  if (!protocol || typeof protocol !== "object") return [];
+  const reasons = [];
+  if (typeof requirements?.minContextTokens === "number" && Number.isFinite(protocol.contextTokens) && protocol.contextTokens < requirements.minContextTokens) {
+    reasons.push(`context-too-small: ${protocol.contextTokens} < ${requirements.minContextTokens}`);
+  }
+  if (requirements?.requireToolCall === true && protocol.toolUse !== true) {
+    reasons.push("no-tool-use");
+  }
+  if (requirements?.requireReasoning === true && protocol.reasoning !== true) {
+    reasons.push("no-reasoning");
+  }
+  if (requirements?.requireStructuredOutput === true && protocol.structuredOutput !== true) {
+    reasons.push("no-structured-output");
+  }
+  if (requirements?.requireImageInput === true && !(Array.isArray(protocol.modalities) && protocol.modalities.includes("image"))) {
+    reasons.push("no-image-input");
+  }
+  return reasons;
+}
+
+/**
  * Rank user-selected models for a role. Byte-identical algorithm to
  * `packages/sdk/src/router/agent-model-registry.ts:rankUserSelectedForRole`.
  *
@@ -107,14 +146,32 @@ export function rankUserSelectedForRole(registry, role, requirements = {}) {
   }
   const tierHints = userSelected.tierHints;
   const profiles = userSelected.profiles;
+  const discriminatedProfiles = userSelected.discriminatedProfiles && typeof userSelected.discriminatedProfiles === "object"
+    ? userSelected.discriminatedProfiles
+    : {};
   const ranked = userSelected.models
     .map((id, originalIndex) => {
       const profile = profiles?.[id];
-      const hasProfile = Boolean(profile);
+      const discriminatedProfile = discriminatedProfiles?.[id];
+      const hasProfile = Boolean(profile) || Boolean(discriminatedProfile);
       const tier = (tierHints && typeof tierHints[id] === "string" ? tierHints[id] : defaultTierHintForId(id));
-      const { eligible, ineligibleReasons } = evaluateRoleRequirements(profile, requirements, tier);
+      const legacy = evaluateRoleRequirements(profile, requirements, tier);
+      const protocolReasons = protocolMeetsMirror(discriminatedProfile, requirements);
+      const ineligibleReasons = [...protocolReasons, ...legacy.ineligibleReasons];
+      const eligible = ineligibleReasons.length === 0;
       const capabilityScore = scoreCapabilityProfile(profile);
-      return { id, tier, eligible, ineligibleReasons, capabilityScore, hasProfile, originalIndex };
+      return {
+        id,
+        tier,
+        eligible,
+        ineligibleReasons,
+        capabilityScore,
+        hasProfile,
+        originalIndex,
+        ...(discriminatedProfile ? { discriminatedProfile, reasons: protocolReasons } : {}),
+        ...(discriminatedProfile?.measured ? { measured: discriminatedProfile.measured } : {}),
+        ...(discriminatedProfile?.provenance ? { provenance: discriminatedProfile.provenance } : {}),
+      };
     });
   ranked.sort((a, b) => {
     if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
