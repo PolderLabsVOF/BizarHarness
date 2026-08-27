@@ -2,6 +2,55 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-188 Central dispatch-model selector (IMP-013)
+
+**Date:** 2026-08-27
+**Branch:** `wt/todd-imp013-dispatch-selector`
+**SHAs:** `a4906c0` (feat: select-dispatch-model.ts + index/failover threading + mirror), `ce94578` (test: 19 + 7 + 2 cases + drift guard), with this ledger commit.
+**WIP holder:** none (F-176 continues to hold `wip: 1` per ledger invariant).
+
+**Objective:** Close IMP-013 from `IMPROVEMENTS.md` line 866 — "Central dispatch-model selector | All dispatch surfaces import one selector."
+
+**Implementation:**
+
+- **New** `packages/sdk/src/router/select-dispatch-model.ts` — the canonical selector exporting `TaskFeatures`, `ModelDecision`, `ModelProfile`, `ProviderHealth`, `ProviderHealthMap`, `BudgetState`, `OutcomeHistory`, `NEVER_DOWNGRADE_ROLES`, `REASON`, `TIER_STRENGTH`, `TIER_CHEAPNESS`, and `selectDispatchModel()`. Pure, no I/O, no random picks beyond the F-185 `routingDecisionId` UUID.
+- **Modified** `packages/sdk/src/router/index.ts` — re-exports the new surface; `RouteInput` gains `role`, `risk`, `capabilities`, `selectedProfiles`, `staticProfiles`, `activeSessionModel`, `health`, `history`, `runId`; `RouteDecisionOutput` gains `routingDecisionId`, `modelId`, `selectorReason`. `decideAgentWith` runs the F-188 selector at step 4 when `role + selectedProfiles` are both supplied; the legacy precedence chain (explicitAgent > codemod > q-learning > bandit > default) is preserved and still mints a `routingDecisionId` for audit-trail parity.
+- **Modified** `packages/sdk/src/router/failover.ts` — `PickFailoverInput.primaryDecisionId` and `FailoverVerdict.routingDecisionId` round-trip the F-188 decision ID through the failover walker. `packages/sdk/src/router/failover-mirror.mjs` keeps the JS mirror byte-identical.
+
+**Ladder pins (verbatim from IMPROVEMENTS.md line 646):**
+
+1. `exact-capability` — strongest healthy eligible model with a profile, when `task.capabilities` is non-empty.
+2. `next-stronger` — strongest healthy eligible tier, when `task.capabilities` is empty (default/medium risk).
+3. `strongest-healthy-risk-high` — strongest healthy when `risk: high`.
+4. `cheapest-healthy-risk-low` — cheapest healthy when `risk: low`.
+5. `session-inherit` / `no-eligible-selected` — `activeSessionModel` only when the selected pool is empty or nothing is dispatchable.
+
+**Never-downgrade rule (line 654):** roles `{security, architecture, adversarial, audit, karen}` always pick the strongest healthy selected model, regardless of the risk label.
+
+**Drift guard:** `packages/sdk/tests/select-dispatch-model-drift.test.mjs` scans `packages/sdk/src/` for direct callers of `evaluateRoleRequirements(` or `pickFailover(` outside the whitelist (`select-dispatch-model.ts`, `failover.ts`, `failover-mirror.mjs`, `agent-model-registry.ts`, `index.ts`). Verified by injecting a probe line into `codemod-intent.ts` (test fails), reverting (test passes).
+
+**Verification:**
+
+- `npx tsc --noEmit` — exit 0, clean types.
+- `npx vitest run packages/sdk/tests/` — **352/352 passing** across 26 test files (28 of those are the three F-188 files: 19 selector + 7 integration + 2 drift).
+- `npm run test:node` — 594/595 passing; the one pre-existing failure (`cli/install/prune.test.mjs` "force=true accepted") is the `.git/hooks` worktree environment issue unrelated to F-188.
+
+## In Progress — F-188 Central dispatch-model selector (IMP-013)
+
+**Date:** 2026-08-27
+**Branch:** `wt/todd-imp013-dispatch-selector`
+**WIP holder:** `wt/todd-imp013-dispatch-selector` (F-176 continues to hold `wip: 1` per ledger invariant).
+
+**Objective:** Close IMP-013 from `IMPROVEMENTS.md` line 866 — "Central dispatch-model selector | All dispatch surfaces import one selector."
+
+**Scope:**
+1. New `packages/sdk/src/router/select-dispatch-model.ts` exporting `TaskFeatures`, `ModelDecision`, `ModelProfile`, `ProviderHealth`, `BudgetState`, `OutcomeHistory`, and `selectDispatchModel()`.
+2. Re-export the new surface from `packages/sdk/src/router/index.ts`; thread `routingDecisionId` through `decideAgentWith()`.
+3. Add optional `primaryDecisionId` field to `packages/sdk/src/router/failover.ts#PickFailoverInput` and `FailoverVerdict.routingDecisionId`.
+4. New `packages/sdk/tests/select-dispatch-model.test.mjs` covering the verbatim five-step fallback ladder + never-downgrade rule + healthy filter + ineligibleReasons + chain ordering + UUID.
+5. New `packages/sdk/tests/select-dispatch-model-integration.test.mjs` driving `decideAgentWith` end-to-end.
+6. Ledger close: feature_list.json (F-188, wip: 1 → passing), DECISIONS.md row, and this PROGRESS.md block.
+
 ## Complete — F-187 Canonical tier taxonomy (IMP-015)
 
 **Date:** 2026-08-27
