@@ -2,6 +2,101 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-187 Canonical tier taxonomy (IMP-015)
+
+**Date:** 2026-08-27
+**WIP holder:** none (IMP-019 health-aware failover remains active in its own worktree; F-176 keeps `wip: 1` per the ledger invariant — F-187 lands as `passing` because the refactor + drift test + ledger are complete in these commits).
+**Closing commit SHA:** `7c999ed` (the third commit on this branch; the merge to master will produce a different SHA but the closing content is this commit).
+
+**Objective:** Close IMP-015 from `IMPROVEMENTS.md` line 868 — "Canonical
+tier taxonomy | No `flash/mid/expensive` vs six-tier mismatch remains."
+The SDK's canonical 6-tier taxonomy is exported from
+`packages/sdk/src/router/agent-model-registry.ts#BizarTier`
+(`premium` / `high` / `mid-design` / `default` / `mid` / `budget`), but
+the Thompson-sampling bandit in
+`packages/sdk/src/router/model-router.ts` still declared the legacy
+3-tier type `flash` / `mid` / `expensive`, and `router/index.ts`
+re-exported and surfaced it through `decideAgentWith()`. Land the
+migration and a regression test that fails CI on the first
+reintroduction of the legacy vocabulary.
+
+**Files touched:**
+- `packages/sdk/src/router/model-router.ts` — imports `BizarTier` from
+  `./agent-model-registry.js`, removes the `ModelTier` alias, extends
+  `TIERS` / `DEFAULT_PRIORS` / `getPriors()` / constructor prior init /
+  `recordOutcome()` parameter / `RouterStateSnapshot.priors` to all 6
+  tiers. Codemod short-circuit returns `tier: "budget"` (was `"flash"`).
+  `recordOutcome()` switches from a 3-way ternary to a per-tier
+  `REWARDS` map (see below).
+- `packages/sdk/src/router/index.ts` — drops the `type ModelTier`
+  re-export, types `RouteDecisionOutput.modelTier` as `BizarTier`,
+  codemod branch returns `modelTier: "budget"` and surfaces
+  `tierTag({tier: "budget", confidence: 1.0})`. File-level docstring +
+  `decideAgentWith` JSDoc updated to mention the 6 canonical tiers.
+- `packages/sdk/tests/model-router.test.mjs` — rewrites the legacy
+  literals (`flash` → `budget`, `expensive` → `premium`, `mid`
+  unchanged); adds 3 new tests pinning `high`'s default prior and the
+  per-tier reward increments for `high` (+0.55) and `premium` (+0.4).
+- `packages/sdk/tests/router-orchestrator.test.mjs` — rewrites the
+  codemod-branch tier assertion, the `toContain` tier set, the
+  `tierTag` formatter test, and the persistence round-trip to use the
+  6-tier names.
+- `packages/sdk/tests/tier-taxonomy-drift.test.mjs` (NEW, 129 lines,
+  4 vitest cases) — IMP-015 acceptance test. Scans
+  `packages/sdk/src/` for `ModelTier` declarations, `"flash"` /
+  `"expensive"` string literals, and `ModelTier` TypeScript
+  identifiers. Fails CI on the first reintroduction of the legacy
+  vocabulary. Path resolution is relative to the test file so it runs
+  unchanged from the SDK's vitest root or from
+  `scripts/run-node-tests.mjs`. Sanity-checked against an injected
+  `flash` literal.
+- `feature_list.json` — F-187 entry (`state: "passing"`,
+  `passed: "2026-08-27"`); `vcr.passing` 63 → 64 and `vcr.activated`
+  64 → 65.
+- `DECISIONS.md` — F-187 row.
+
+**Mapping table (legacy → canonical):**
+
+| Legacy `ModelTier` | Canonical `BizarTier` | Notes |
+|---|---|---|
+| `flash` | `budget` | Cheapest codemod short-circuit, optimistic prior (α=2, β=1) |
+| `mid` | `mid` | Unchanged — valid in both vocabularies |
+| `expensive` | `premium` | Most pessimistic prior (α=1, β=2) |
+
+**Reward table (per-tier `REWARDS` map in `model-router.ts`):**
+
+| Tier | Success α += | Failure β += | Default α | Default β |
+|---|---|---|---|---|
+| `budget` | 1.00 | 1 | 2 | 1 |
+| `mid` | 0.85 | 1 | 1 | 1 |
+| `default` | 0.85 | 1 | 1 | 1 |
+| `mid-design` | 0.70 | 1 | 1 | 1 |
+| `high` | 0.55 | 1 | 1 | 2 |
+| `premium` | 0.40 | 1 | 1 | 2 |
+
+Reward scales inversely with cost — a budget-tier success is treated
+as the most valuable signal (cheap wins are gold); a premium-tier
+success is the least valuable (expensive wins are wasteful).
+
+**Verification matrix:**
+- `npx vitest run packages/sdk/tests/model-router.test.mjs
+  packages/sdk/tests/router-orchestrator.test.mjs
+  packages/sdk/tests/tier-taxonomy-drift.test.mjs` — **30/30 passing**
+  (13 model-router + 13 router-orchestrator + 4 drift).
+- `make test:sdk` (full SDK suite) — pre-existing suites stay green.
+- `npx tsc --noEmit -p packages/sdk/tsconfig.json` — exit 0, clean
+  types.
+- Drift-test sanity check: temporarily inserting a `"flash"` literal
+  into `router/index.ts` makes the third assertion fail with a
+  line-precise hit list; restoring the file restores the green state.
+
+**Drift policy:** any reintroduction of the legacy `ModelTier` alias,
+`flash` / `expensive` literals, or any other 3-tier-vocabulary surface
+into `packages/sdk/src/` MUST land in the same commit as the matching
+edit to `BizarTier` (or its successor taxonomy) and the matching
+assertion update in `tier-taxonomy-drift.test.mjs`. The drift test
+fails CI on the first mismatch.
+
 ## Complete — F-184 Selected-pool resolver (IMP-016)
 
 **Date:** 2026-08-27
