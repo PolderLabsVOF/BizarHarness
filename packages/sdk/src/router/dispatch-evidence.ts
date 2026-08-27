@@ -102,6 +102,20 @@ export interface DispatchEvidence {
   agentName?: string;
   workflowPhase?: string;
   outcome?: DispatchOutcome;
+  /**
+   * Sequence number within the dispatch chain. Primary decisions
+   * are sequence 0; subsequent follow-ups (e.g. failover rows)
+   * increment. Two rows with the same `routingDecisionId` but
+   * different sequence numbers are valid — they are distinct
+   * audit events tied to the same dispatch.
+   */
+  sequence: number;
+  /**
+   * Optional follow-up flag. `true` when this row describes a
+   * post-primary event (e.g. failover). The store enforces that
+   * every sequence > 0 row has `isFollowUp: true`.
+   */
+  isFollowUp?: boolean;
 }
 
 export interface EvidenceStoreAppendInput {
@@ -346,9 +360,11 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
     }
   }
 
-  function replaceLine(routingDecisionId: string, next: DispatchEvidence): void {
+  function replaceLine(routingDecisionId: string, sequence: number, next: DispatchEvidence): void {
     const records = readAll();
-    const idx = records.findIndex((r) => r.routingDecisionId === routingDecisionId);
+    const idx = records.findIndex(
+      (r) => r.routingDecisionId === routingDecisionId && r.sequence === sequence,
+    );
     if (idx < 0) throw new EvidenceNotFoundError(routingDecisionId);
     records[idx] = next;
     rewriteAll(records);
@@ -377,7 +393,7 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
     }
   }
 
-  function buildRecord(input: EvidenceStoreAppendInput): DispatchEvidence {
+  function buildRecord(input: EvidenceStoreAppendInput, sequence: number, isFollowUp: boolean): DispatchEvidence {
     const inputs = computeInputs(input);
     const createdAt = now().toISOString();
     return {
@@ -390,23 +406,38 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
       runId: input.runId,
       agentName: input.agentName,
       workflowPhase: input.workflowPhase,
+      sequence,
+      isFollowUp: isFollowUp ? true : undefined,
     };
   }
 
   return {
     async append(record: EvidenceStoreAppendInput): Promise<DispatchEvidence> {
       const existing = readAll();
-      if (existing.some((r) => r.routingDecisionId === record.routingDecisionId)) {
-        throw new DuplicateEvidenceError(record.routingDecisionId);
-      }
-      const built = buildRecord(record);
+      // Duplicate = same routingDecisionId AND same canonicalized
+      // decision+taskFeatures+inputs. Follow-up rows (e.g. failover)
+      // share the routingDecisionId but carry a different decision and
+      // therefore a different canonical hash — they are not duplicates
+      // and are appended with the next sequence number.
+      const dup = existing.find(
+        (r) => r.routingDecisionId === record.routingDecisionId
+          && sameRowContent(r, record),
+      );
+      if (dup) throw new DuplicateEvidenceError(record.routingDecisionId);
+      const sameChain = existing.filter((r) => r.routingDecisionId === record.routingDecisionId);
+      const sequence = sameChain.length;
+      const built = buildRecord(record, sequence, sequence > 0);
       appendLine(JSON.stringify(built) + "\n");
       return built;
     },
 
     async get(routingDecisionId: string): Promise<DispatchEvidence | null> {
       const records = readAll();
-      return records.find((r) => r.routingDecisionId === routingDecisionId) ?? null;
+      const chain = records.filter((r) => r.routingDecisionId === routingDecisionId);
+      if (chain.length === 0) return null;
+      // Return the most recent (highest sequence) so callers always see
+      // the latest state for a dispatch chain.
+      return chain.reduce((latest, row) => row.sequence > latest.sequence ? row : latest);
     },
 
     async findByRunId(runId: string): Promise<DispatchEvidence[]> {
@@ -418,14 +449,17 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
       outcome: DispatchOutcome,
     ): Promise<DispatchEvidence> {
       const records = readAll();
-      const current = records.find((r) => r.routingDecisionId === routingDecisionId);
+      // Outcomes attach to the primary (sequence=0) row only. Follow-up
+      // rows are audit events; their outcome is observed on the primary.
+      const current = records.find((r) => r.routingDecisionId === routingDecisionId && r.sequence === 0)
+        ?? records.find((r) => r.routingDecisionId === routingDecisionId);
       if (!current) throw new EvidenceNotFoundError(routingDecisionId);
       if (!current.outcome) {
         const next: DispatchEvidence = {
           ...current,
           outcome: { ...outcome, capturedAt: outcome.capturedAt ?? now().toISOString() },
         };
-        replaceLine(routingDecisionId, next);
+        replaceLine(routingDecisionId, current.sequence, next);
         return next;
       }
       // Idempotent: same outcome → return current.
@@ -439,21 +473,23 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
       routingDecisionId: string,
     ): Promise<{ ok: boolean; reason?: string }> {
       const records = readAll();
-      const record = records.find((r) => r.routingDecisionId === routingDecisionId);
-      if (!record) return { ok: false, reason: "not-found" };
-      if (record.decision.routingDecisionId !== routingDecisionId) {
-        return { ok: false, reason: "decision-id-mismatch" };
-      }
-      for (const field of ["selectedProfilesHash", "staticProfilesHash", "budgetHash", "healthHash"] as const) {
-        if (!/^[0-9a-f]{64}$/.test(record.inputs[field])) {
-          return { ok: false, reason: `inputs-hash-mismatch:${field}` };
+      const chain = records.filter((r) => r.routingDecisionId === routingDecisionId);
+      if (chain.length === 0) return { ok: false, reason: "not-found" };
+      for (const record of chain) {
+        if (record.decision.routingDecisionId !== routingDecisionId) {
+          return { ok: false, reason: "decision-id-mismatch" };
         }
-      }
-      if (!record.schemaVersion || record.schemaVersion !== SCHEMA_VERSION) {
-        return { ok: false, reason: "schema-version-mismatch" };
-      }
-      if (!record.createdAt || Number.isNaN(Date.parse(record.createdAt))) {
-        return { ok: false, reason: "createdAt-missing" };
+        for (const field of ["selectedProfilesHash", "staticProfilesHash", "budgetHash", "healthHash"] as const) {
+          if (!/^[0-9a-f]{64}$/.test(record.inputs[field])) {
+            return { ok: false, reason: `inputs-hash-mismatch:${field}` };
+          }
+        }
+        if (!record.schemaVersion || record.schemaVersion !== SCHEMA_VERSION) {
+          return { ok: false, reason: "schema-version-mismatch" };
+        }
+        if (!record.createdAt || Number.isNaN(Date.parse(record.createdAt))) {
+          return { ok: false, reason: "createdAt-missing" };
+        }
       }
       return { ok: true };
     },
@@ -468,6 +504,18 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
 
 function sameOutcome(a: DispatchOutcome, b: DispatchOutcome): boolean {
   return canonicalize(a) === canonicalize(b);
+}
+
+function sameRowContent(existing: DispatchEvidence, next: EvidenceStoreAppendInput): boolean {
+  return canonicalize({
+    decision: next.decision,
+    taskFeatures: next.taskFeatures,
+    inputs: computeInputs(next),
+  }) === canonicalize({
+    decision: existing.decision,
+    taskFeatures: existing.taskFeatures,
+    inputs: existing.inputs,
+  });
 }
 
 function defaultEvidenceDir(): string {
@@ -497,7 +545,7 @@ export function createInMemoryEvidenceStore(opts: { now?: () => Date } = {}): Ev
   const now = opts.now ?? (() => new Date());
   const records = new Map<string, DispatchEvidence>();
 
-  function buildRecord(input: EvidenceStoreAppendInput): DispatchEvidence {
+  function buildRecord(input: EvidenceStoreAppendInput, sequence: number, isFollowUp: boolean): DispatchEvidence {
     const inputs = computeInputs(input);
     return {
       routingDecisionId: input.routingDecisionId,
@@ -509,21 +557,26 @@ export function createInMemoryEvidenceStore(opts: { now?: () => Date } = {}): Ev
       runId: input.runId,
       agentName: input.agentName,
       workflowPhase: input.workflowPhase,
+      sequence,
+      isFollowUp: isFollowUp ? true : undefined,
     };
   }
 
   return {
     async append(record: EvidenceStoreAppendInput): Promise<DispatchEvidence> {
-      if (records.has(record.routingDecisionId)) {
-        throw new DuplicateEvidenceError(record.routingDecisionId);
-      }
-      const built = buildRecord(record);
-      records.set(record.routingDecisionId, built);
+      const chain = [...records.values()].filter((r) => r.routingDecisionId === record.routingDecisionId);
+      const dup = chain.find((r) => sameRowContent(r, record));
+      if (dup) throw new DuplicateEvidenceError(record.routingDecisionId);
+      const sequence = chain.length;
+      const built = buildRecord(record, sequence, sequence > 0);
+      records.set(chainKey(record.routingDecisionId, sequence), built);
       return built;
     },
 
     async get(routingDecisionId: string): Promise<DispatchEvidence | null> {
-      return records.get(routingDecisionId) ?? null;
+      const chain = [...records.values()].filter((r) => r.routingDecisionId === routingDecisionId);
+      if (chain.length === 0) return null;
+      return chain.reduce((latest, row) => row.sequence > latest.sequence ? row : latest);
     },
 
     async findByRunId(runId: string): Promise<DispatchEvidence[]> {
@@ -534,38 +587,41 @@ export function createInMemoryEvidenceStore(opts: { now?: () => Date } = {}): Ev
       routingDecisionId: string,
       outcome: DispatchOutcome,
     ): Promise<DispatchEvidence> {
-      const current = records.get(routingDecisionId);
-      if (!current) throw new EvidenceNotFoundError(routingDecisionId);
-      if (!current.outcome) {
+      const chain = [...records.values()].filter((r) => r.routingDecisionId === routingDecisionId);
+      if (chain.length === 0) throw new EvidenceNotFoundError(routingDecisionId);
+      const primary = chain.find((r) => r.sequence === 0) ?? chain[0];
+      if (!primary.outcome) {
         const next: DispatchEvidence = {
-          ...current,
+          ...primary,
           outcome: { ...outcome, capturedAt: outcome.capturedAt ?? now().toISOString() },
         };
-        records.set(routingDecisionId, next);
+        records.set(chainKey(routingDecisionId, primary.sequence), next);
         return next;
       }
-      if (sameOutcome(current.outcome, outcome)) return current;
+      if (sameOutcome(primary.outcome, outcome)) return primary;
       throw new OutcomeConflictError(routingDecisionId);
     },
 
     async verifyIntegrity(
       routingDecisionId: string,
     ): Promise<{ ok: boolean; reason?: string }> {
-      const record = records.get(routingDecisionId);
-      if (!record) return { ok: false, reason: "not-found" };
-      if (record.decision.routingDecisionId !== routingDecisionId) {
-        return { ok: false, reason: "decision-id-mismatch" };
-      }
-      for (const field of ["selectedProfilesHash", "staticProfilesHash", "budgetHash", "healthHash"] as const) {
-        if (!/^[0-9a-f]{64}$/.test(record.inputs[field])) {
-          return { ok: false, reason: `inputs-hash-mismatch:${field}` };
+      const chain = [...records.values()].filter((r) => r.routingDecisionId === routingDecisionId);
+      if (chain.length === 0) return { ok: false, reason: "not-found" };
+      for (const record of chain) {
+        if (record.decision.routingDecisionId !== routingDecisionId) {
+          return { ok: false, reason: "decision-id-mismatch" };
         }
-      }
-      if (!record.schemaVersion || record.schemaVersion !== SCHEMA_VERSION) {
-        return { ok: false, reason: "schema-version-mismatch" };
-      }
-      if (!record.createdAt || Number.isNaN(Date.parse(record.createdAt))) {
-        return { ok: false, reason: "createdAt-missing" };
+        for (const field of ["selectedProfilesHash", "staticProfilesHash", "budgetHash", "healthHash"] as const) {
+          if (!/^[0-9a-f]{64}$/.test(record.inputs[field])) {
+            return { ok: false, reason: `inputs-hash-mismatch:${field}` };
+          }
+        }
+        if (!record.schemaVersion || record.schemaVersion !== SCHEMA_VERSION) {
+          return { ok: false, reason: "schema-version-mismatch" };
+        }
+        if (!record.createdAt || Number.isNaN(Date.parse(record.createdAt))) {
+          return { ok: false, reason: "createdAt-missing" };
+        }
       }
       return { ok: true };
     },
@@ -576,4 +632,8 @@ export function createInMemoryEvidenceStore(opts: { now?: () => Date } = {}): Ev
       return all.slice(Math.max(0, all.length - limit));
     },
   };
+}
+
+function chainKey(routingDecisionId: string, sequence: number): string {
+  return `${routingDecisionId}#${sequence}`;
 }
