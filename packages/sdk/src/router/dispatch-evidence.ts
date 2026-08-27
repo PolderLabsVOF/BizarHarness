@@ -286,6 +286,10 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
   const filename = opts.filename ?? "dispatch.jsonl";
   const now = opts.now ?? (() => new Date());
   const path = join(dir, filename);
+  // Per-routingDecisionId mutex so concurrent attachOutcome calls
+  // serialize through a single writer; preserves the exactly-once
+  // guarantee on the file-backed store.
+  const attachLocks = new Map<string, Promise<unknown>>();
 
   function ensureDir(): void {
     if (!existsSync(dir)) {
@@ -448,25 +452,40 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
       routingDecisionId: string,
       outcome: DispatchOutcome,
     ): Promise<DispatchEvidence> {
-      const records = readAll();
-      // Outcomes attach to the primary (sequence=0) row only. Follow-up
-      // rows are audit events; their outcome is observed on the primary.
-      const current = records.find((r) => r.routingDecisionId === routingDecisionId && r.sequence === 0)
-        ?? records.find((r) => r.routingDecisionId === routingDecisionId);
-      if (!current) throw new EvidenceNotFoundError(routingDecisionId);
-      if (!current.outcome) {
-        const next: DispatchEvidence = {
-          ...current,
-          outcome: { ...outcome, capturedAt: outcome.capturedAt ?? now().toISOString() },
-        };
-        replaceLine(routingDecisionId, current.sequence, next);
-        return next;
+      // Serialize concurrent attachOutcome calls per routingDecisionId.
+      const previous = attachLocks.get(routingDecisionId) ?? Promise.resolve();
+      const next = previous.then(() => doAttach(routingDecisionId, outcome));
+      attachLocks.set(routingDecisionId, next.catch(() => undefined));
+      try {
+        return await next;
+      } finally {
+        // Release the lock slot when nothing else is queued behind us.
+        if (attachLocks.get(routingDecisionId) === next.catch(() => undefined)) {
+          attachLocks.delete(routingDecisionId);
+        }
       }
-      // Idempotent: same outcome → return current.
-      if (sameOutcome(current.outcome, outcome)) {
-        return current;
+
+      async function doAttach(
+        routingDecisionId: string,
+        outcome: DispatchOutcome,
+      ): Promise<DispatchEvidence> {
+        const records = readAll();
+        const current = records.find((r) => r.routingDecisionId === routingDecisionId && r.sequence === 0)
+          ?? records.find((r) => r.routingDecisionId === routingDecisionId);
+        if (!current) throw new EvidenceNotFoundError(routingDecisionId);
+        if (!current.outcome) {
+          const next: DispatchEvidence = {
+            ...current,
+            outcome: outcome.capturedAt ? outcome : { ...outcome, capturedAt: now().toISOString() },
+          };
+          replaceLine(routingDecisionId, current.sequence, next);
+          return next;
+        }
+        if (sameOutcome(current.outcome, outcome)) {
+          return current;
+        }
+        throw new OutcomeConflictError(routingDecisionId);
       }
-      throw new OutcomeConflictError(routingDecisionId);
     },
 
     async verifyIntegrity(
@@ -503,7 +522,15 @@ export function createFileEvidenceStore(opts: FileEvidenceStoreOptions = {}): Ev
 }
 
 function sameOutcome(a: DispatchOutcome, b: DispatchOutcome): boolean {
-  return canonicalize(a) === canonicalize(b);
+  // Strip capturedAt from the stored record before comparing when the
+  // incoming outcome did not specify it. The first attach stamps
+  // capturedAt; subsequent attaches that omit capturedAt are treated
+  // as 'same as before' so concurrent idempotent retries don't fight
+  // a stale timestamp.
+  const bCapturedAt = "capturedAt" in b ? b.capturedAt : undefined;
+  const aComparable = bCapturedAt === undefined ? { ...a, capturedAt: undefined } : a;
+  const bComparable = bCapturedAt === undefined ? { ...b, capturedAt: undefined } : b;
+  return canonicalize(aComparable) === canonicalize(bComparable);
 }
 
 function sameRowContent(existing: DispatchEvidence, next: EvidenceStoreAppendInput): boolean {
@@ -544,6 +571,9 @@ function defaultEvidenceDir(): string {
 export function createInMemoryEvidenceStore(opts: { now?: () => Date } = {}): EvidenceStore {
   const now = opts.now ?? (() => new Date());
   const records = new Map<string, DispatchEvidence>();
+  // Per-routingDecisionId mutex so concurrent attachOutcome calls
+  // serialize through a single writer.
+  const attachLocks = new Map<string, Promise<unknown>>();
 
   function buildRecord(input: EvidenceStoreAppendInput, sequence: number, isFollowUp: boolean): DispatchEvidence {
     const inputs = computeInputs(input);
@@ -587,19 +617,35 @@ export function createInMemoryEvidenceStore(opts: { now?: () => Date } = {}): Ev
       routingDecisionId: string,
       outcome: DispatchOutcome,
     ): Promise<DispatchEvidence> {
-      const chain = [...records.values()].filter((r) => r.routingDecisionId === routingDecisionId);
-      if (chain.length === 0) throw new EvidenceNotFoundError(routingDecisionId);
-      const primary = chain.find((r) => r.sequence === 0) ?? chain[0];
-      if (!primary.outcome) {
-        const next: DispatchEvidence = {
-          ...primary,
-          outcome: { ...outcome, capturedAt: outcome.capturedAt ?? now().toISOString() },
-        };
-        records.set(chainKey(routingDecisionId, primary.sequence), next);
-        return next;
+      const previous = attachLocks.get(routingDecisionId) ?? Promise.resolve();
+      const next = previous.then(() => doAttach(routingDecisionId, outcome));
+      attachLocks.set(routingDecisionId, next.catch(() => undefined));
+      try {
+        return await next;
+      } finally {
+        if (attachLocks.get(routingDecisionId) === next.catch(() => undefined)) {
+          attachLocks.delete(routingDecisionId);
+        }
       }
-      if (sameOutcome(primary.outcome, outcome)) return primary;
-      throw new OutcomeConflictError(routingDecisionId);
+
+      async function doAttach(
+        routingDecisionId: string,
+        outcome: DispatchOutcome,
+      ): Promise<DispatchEvidence> {
+        const chain = [...records.values()].filter((r) => r.routingDecisionId === routingDecisionId);
+        if (chain.length === 0) throw new EvidenceNotFoundError(routingDecisionId);
+        const primary = chain.find((r) => r.sequence === 0) ?? chain[0];
+        if (!primary.outcome) {
+          const next: DispatchEvidence = {
+            ...primary,
+            outcome: outcome.capturedAt ? outcome : { ...outcome, capturedAt: now().toISOString() },
+          };
+          records.set(chainKey(routingDecisionId, primary.sequence), next);
+          return next;
+        }
+        if (sameOutcome(primary.outcome, outcome)) return primary;
+        throw new OutcomeConflictError(routingDecisionId);
+      }
     },
 
     async verifyIntegrity(
