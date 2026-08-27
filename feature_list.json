@@ -1070,9 +1070,9 @@
       "verification": "vitest run packages/sdk/tests/{select-dispatch-model,select-dispatch-model-integration,select-dispatch-model-drift}.test.mjs; npx tsc --noEmit; npm run test:node.",
       "state": "passing",
       "passed": "2026-08-27",
-      "commit": "a4906c0",
-      "wip_holder": null,
-      "wip": null,
+      "commit": "d3134c7",
+      "wip_holder": "@mike",
+      "wip": 1,
       "category": "routing",
       "layer": "sdk",
       "owner": "@todd",
@@ -1092,8 +1092,8 @@
     }
   ],
   "vcr": {
-    "passing": 66,
+    "passing": 67,
     "activated": 68,
-    "ratio": 0.970
+    "ratio": 0.9852941176470589
   }
 }
