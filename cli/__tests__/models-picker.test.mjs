@@ -18,6 +18,8 @@ import { Readable, Writable } from 'node:stream';
 
 import {
   listModels,
+  fetchModelsDevCatalog,
+  enrichModelsWithCapabilities,
   pickModels,
   applyModels,
   defaultTierHint,
@@ -339,4 +341,109 @@ test('resolveEndpoint: falls back to localhost default', () => {
   const r = resolveEndpoint({ cwd: dir, env: {}, settingsJsonPath: join(dir, 'nope.json') });
   assert.equal(r.endpoint, 'http://localhost:20128/v1');
   assert.equal(r.source, 'default');
+});
+
+test('fetchModelsDevCatalog: loads provider-agnostic Models.dev metadata', async () => {
+  const catalog = await fetchModelsDevCatalog({
+    fetchFn: async (url, options) => {
+      assert.equal(url, 'https://models.dev/models.json');
+      assert.equal(options.headers.Accept, 'application/json');
+      return {
+        ok: true,
+        json: async () => ({
+          'minimax/minimax-m3': {
+            name: 'MiniMax M3',
+            reasoning: true,
+            tool_call: true,
+            structured_output: true,
+            limit: { context: 200000, output: 32000 },
+            modalities: { input: ['text'], output: ['text'] },
+          },
+        }),
+      };
+    },
+  });
+  assert.equal(catalog['minimax/minimax-m3'].tool_call, true);
+});
+
+test('fetchModelsDevCatalog: rejects an unsuccessful metadata response', async () => {
+  await assert.rejects(
+    () => fetchModelsDevCatalog({
+      fetchFn: async () => ({ ok: false, status: 503, statusText: 'Unavailable' }),
+    }),
+    /Models\.dev returned 503/,
+  );
+});
+
+test('enrichModelsWithCapabilities: exact IDs receive capability profiles', () => {
+  const candidates = [{ id: 'anthropic/claude-test', owned_by: 'anthropic' }];
+  const catalog = {
+    'anthropic/claude-test': {
+      name: 'Claude Test',
+      reasoning: true,
+      tool_call: true,
+      structured_output: true,
+      limit: { context: 123000, input: 120000, output: 3000 },
+      modalities: { input: ['text', 'image'], output: ['text'] },
+      release_date: '2026-01-01',
+    },
+  };
+  const [model] = enrichModelsWithCapabilities(candidates, catalog);
+  assert.equal(model.profile.baseModel, 'anthropic/claude-test');
+  assert.equal(model.profile.metadata.matchType, 'exact-id');
+  assert.equal(model.profile.metadata.confidence, 0.9);
+  assert.equal(model.profile.capabilities.toolCall, true);
+  assert.deepEqual(model.profile.capabilities.inputModalities, ['text', 'image']);
+  assert.equal(model.profile.limits.contextTokens, 123000);
+});
+
+test('enrichModelsWithCapabilities: unique gateway wrapper IDs are normalized', () => {
+  const [model] = enrichModelsWithCapabilities(
+    [{ id: 'claude-minimax/MiniMax-M3' }],
+    {
+      'minimax/minimax-m3': {
+        name: 'MiniMax M3',
+        reasoning: true,
+        tool_call: true,
+        limit: { context: 200000 },
+        modalities: { input: ['text'], output: ['text'] },
+      },
+    },
+  );
+  assert.equal(model.profile.baseModel, 'minimax/minimax-m3');
+  assert.equal(model.profile.metadata.matchType, 'unique-normalized-id');
+  assert.equal(model.profile.metadata.confidence, 0.7);
+});
+
+test('enrichModelsWithCapabilities: ambiguous aliases remain unmatched', () => {
+  const [model] = enrichModelsWithCapabilities(
+    [{ id: 'gateway/shared-model' }],
+    {
+      'provider-a/shared-model': { name: 'A', tool_call: true },
+      'provider-b/shared-model': { name: 'B', tool_call: false },
+    },
+  );
+  assert.equal(model.profile, null);
+});
+
+test('applyModels: persists profiles only for selected models', () => {
+  const dir = tmpDir();
+  try {
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({ version: '13.0.0' }));
+    const block = applyModels({
+      routerPath,
+      models: ['a/one'],
+      profiles: {
+        'a/one': { baseModel: 'base/one', metadata: { source: 'models.dev' } },
+        'b/two': { baseModel: 'base/two', metadata: { source: 'models.dev' } },
+      },
+    });
+    assert.deepEqual(Object.keys(block.profiles), ['a/one']);
+    const saved = JSON.parse(readFileSync(routerPath, 'utf8'));
+    assert.equal(saved.userSelected.profiles['a/one'].baseModel, 'base/one');
+    assert.equal(saved.userSelected.profiles['b/two'], undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
