@@ -13,3 +13,4 @@
 | [POLICY-full-permissions-and-advisory-hooks](docs/decisions/POLICY-full-permissions-and-advisory-hooks.md) | Full permissions + advisory hooks + always-fetch-docs | Accepted (superseded by F-180) |
 | [F-180](docs/decisions/POLICY-full-permissions-and-advisory-hooks.md) | Close residual F-176/F-167/F-169/F-170 drift in factory, AGENTS.md, decision frontmatter, and feature ledger | Accepted |
 | [F-181](docs/decisions/POLICY-full-permissions-and-advisory-hooks.md) | Expand permissions.allow to maximum per operator directive (14 wildcards + `mcp__*`); keep `Bash(npm publish *)` HITL-gated | Accepted |
+| [F-182](docs/decisions/POLICY-full-permissions-and-advisory-hooks.md) | Convert remaining hard-deny hooks (`simplify-guard`, `content-style-guard`, `agent-model-guard`) to the F-176 advisory pattern (`permissionDecision: "allow"` + 🟡 `additionalContext`); hard approval gates stay in `git-workflow-guard.mjs` and `permission-request.mjs` | Accepted |

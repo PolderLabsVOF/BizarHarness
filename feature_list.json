@@ -916,13 +916,13 @@
       "id": "F-182",
       "title": "Convert remaining hard-deny hooks to advisory (simplify / content-style / agent-model)",
       "description": "F-176 left three hooks on the hard-deny branch — `simplify-guard.mjs` (missing or stale `/simplify` marker blocks `git commit`), `content-style-guard.mjs` (humanize patterns block Writes), and `agent-model-guard.mjs` (out-of-tier or live-discovery-failed model overrides block Agent dispatch). Convert each to the F-176 advisory pattern: `permissionDecision: 'allow'` plus a 🟡 advisory `additionalContext` describing the recommended action. The hard approval gates (push, force-push, rebase, gh, publish, deploy) remain in `git-workflow-guard.mjs` and `permission-request.mjs` per F-176.",
-      "state": "in_progress",
-      "wip_holder": "@todd",
-      "wip": 1,
-      "passed": null,
-      "commit": null,
+      "state": "passing",
+      "wip_holder": null,
+      "wip": null,
+      "passed": "2026-08-26",
+      "commit": "f107ab2",
       "category": "harness",
-      "owner": "@todd",
+      "owner": "@steve",
       "scope": [
         "config/claude/hooks/simplify-guard.mjs",
         "config/claude/hooks/content-style-guard.mjs",
@@ -930,15 +930,16 @@
         "config/claude/hooks/__tests__/agent-model-guard.test.mjs",
         "config/claude/hooks/__tests__/workflow-guards.test.mjs",
         "PROGRESS.md",
-        "feature_list.json"
+        "feature_list.json",
+        "DECISIONS.md"
       ],
-      "evidence": "Branch `wt/todd-f182-hooks-advisory` carries the three hook conversions plus the matching test edits; node --test on config/claude/hooks/__tests__/advisory-hooks.test.mjs config/claude/hooks/__tests__/agent-model-guard.test.mjs config/claude/hooks/__tests__/workflow-guards.test.mjs is 35/35 green. make check-arch and make check stay green. The merge archive will tag the final commit SHA; Steve pushes.",
+      "evidence": "Merge commit f107ab2 (Merge branch 'wt/todd-f182-hooks-advisory' into master (F-182)). Branch tip d931393 carries the three hook conversions (simplify-guard.mjs, content-style-guard.mjs, agent-model-guard.mjs) flipped from permissionDecision 'deny' to 'allow' + 🟡 advisory additionalContext; same three hooks' tests updated (config/claude/hooks/__tests__/agent-model-guard.test.mjs and config/claude/hooks/__tests__/workflow-guards.test.mjs). Pre-merge verification on the worktree: node --test config/claude/hooks/__tests__/advisory-hooks.test.mjs config/claude/hooks/__tests__/agent-model-guard.test.mjs config/claude/hooks/__tests__/workflow-guards.test.mjs — 35/35 green. make check green on master after merge. Hard approval gates (push, force-push, rebase, gh, publish, deploy) unchanged in git-workflow-guard.mjs and permission-request.mjs per F-176. jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty after this commit.",
       "created": "2026-08-26"
     }
   ],
   "vcr": {
-    "passing": 61,
-    "activated": 61,
+    "passing": 62,
+    "activated": 62,
     "ratio": 0.984
   }
 }

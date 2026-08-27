@@ -189,6 +189,45 @@ VCR ratio 0.984 (61/62). Live `~/.claude/settings.json` mirror is the
 final step of the v10.16.0 release pipeline (see `Complete — v10.16.0
 Release` block).
 
+## Passing — F-182 Convert remaining hard-deny hooks to advisory (simplify / content-style / agent-model)
+
+**Status:** Accepted (close-out of the three remaining F-176 hard-deny hooks).
+
+**Branch:** `wt/todd-f182-hooks-advisory` merged via `git merge --no-ff` →
+merge SHA `f107ab2`.
+
+**Commit (`d931393`, fix(hooks)) — source of the F-182 behavior change:**
+- `config/claude/hooks/simplify-guard.mjs`: `git commit` no longer hard-denied
+  when the `/simplify` marker is missing or stale. Hook now returns
+  `permissionDecision: "allow"` plus a 🟡 advisory `additionalContext`
+  reminding the operator to run `/simplify` before approving a commit.
+- `config/claude/hooks/content-style-guard.mjs`: humanize-pattern Writes no
+  longer hard-denied. Hook now returns `permissionDecision: "allow"` plus a
+  🟡 advisory `additionalContext` describing the humanize-style concern.
+- `config/claude/hooks/agent-model-guard.mjs`: out-of-tier or
+  live-discovery-failed model overrides no longer hard-deny `Agent`
+  dispatch. Hook now returns `permissionDecision: "allow"` plus a 🟡
+  advisory `additionalContext` describing the recommended routing.
+- `config/claude/hooks/__tests__/agent-model-guard.test.mjs` and
+  `config/claude/hooks/__tests__/workflow-guards.test.mjs`: updated to
+  assert `permissionDecision: "allow"` plus advisory `additionalContext`
+  payload instead of denial output.
+
+**Hard approval gates unchanged:** `git-workflow-guard.mjs` (push, force-push,
+rebase, `gh` mutations) and `permission-request.mjs` (release, publish,
+deploy, prod writes, credential changes, public exposure, irreversible
+destruction) remain HITL-floor enforcers per F-176.
+
+**Evidence:** Pre-merge verification on the worktree —
+`node --test config/claude/hooks/__tests__/advisory-hooks.test.mjs
+config/claude/hooks/__tests__/agent-model-guard.test.mjs
+config/claude/hooks/__tests__/workflow-guards.test.mjs` — 35/35 green.
+Post-merge `make check` green on master. `feature_list.json` F-182 entry
+transitioned from `wip: 1` → `state: "passing"`, `commit: "f107ab2"`,
+`passed: "2026-08-26"`. VCR ratio 0.984 (62/63). Live
+`~/.claude/settings.json` mirror is the final step of the v10.16.1
+release pipeline.
+
 ## Passing — F-176 — historical evidence (full block)
 
 **Objective:** Apply the user policy shift — agents have full permissions by
