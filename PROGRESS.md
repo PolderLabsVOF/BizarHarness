@@ -3,6 +3,44 @@
 > Canonical current-work record. Update before and after implementation.
 
 ## Complete — F-190 Model capability profiles (IMP-017)
+
+**Date:** 2026-08-27
+**Merged at:** `8400396` (merge of `wt/todd-imp017-capability-profiles`).
+**Branch:** `wt/todd-imp017-capability-profiles` (4 commits: `8481757` feat(sdk) discriminated schema + protocol-floor gate, `fda9821` feat(cli,sdk) refresh + serving + alias-map wiring, `9d017c9` test(sdk) protocol-floor drift guard, `ff96721` docs(ledger) close F-190).
+**WIP holder:** `@mike` — F-190 lands with `wip: 1` per the F-176 ledger invariant. IMP-018 (per-dispatch model evidence) is the next dispatch.
+
+**Master verification:**
+- `npm run test:node` — **646/646 passing** across 48 suites (+5 vs 641 baseline; F-190 contributed `cli/__tests__/models-refresh.test.mjs`).
+- `npx vitest run --root packages/sdk` — **390/390 passing** across 30 test files (+28 vs 362 baseline).
+- `npx tsc --noEmit` — exit 0, clean types.
+
+**Files:**
+- `packages/sdk/src/router/model-profile.ts` (NEW) — discriminated `ModelProfile { id, provider, tier, enabled, protocol, measured, provenance, operatorOverrides, serving }`. Helpers: `mergeProfile`, `isStale`, `needsRefresh`, `protocolMeets`, `measuredScore`.
+- `packages/sdk/src/router/agent-model-registry.ts` — `getAliasMap`, `mergeWithServing`, serving/alias types added; loose profile parsing now produces the discriminated shape.
+- `packages/sdk/src/router/select-dispatch-model.ts` — wrapper rename `ModelProfile` → `ModelCandidate`; `protocolMeets` gate runs before `evaluateRoleRequirements`. Reject strings: `context-too-small`, `no-tool-use`, `no-reasoning`, `no-structured-output`, `no-image-input`.
+- `packages/sdk/src/router/failover-mirror.mjs` — `protocolMeetsMirror`, `discriminatedProfiles`.
+- `packages/sdk/src/router/index.ts` — re-exports the new surface.
+- `cli/commands/models.mjs` — `MODELS_DEV_PROVIDER_CATALOG_URL`, `fetchProviderCatalog`, `loadAliasMap`, `applyRefresh`, `mergePreservingOperator`, `stampProvenance`, `bizar models --refresh`, extended `explainSelection`.
+- Tests (NEW, 33 cases): `model-profile.test.mjs` (15), `select-dispatch-model-eligibility.test.mjs` (8), `select-dispatch-model-eligibility-drift.test.mjs` (5), `cli/__tests__/models-refresh.test.mjs` (5).
+
+**IMP-017 acceptance gate:** "Eligibility filters reject incapable/context-limited models" — verified by `select-dispatch-model-eligibility.test.mjs`:
+- Profile with `contextTokens: 4096` rejected when `minContextTokens: 32000`.
+- Profile with `toolUse: false` rejected when `requireToolCall: true`.
+- Profile with `modalities: ['text']` rejected when `requireImageInput: true`.
+- Profile with operator override `contextTokens: 200000` accepted despite catalogue `4096`.
+- Multiple rejects surface multiple strings in `ineligibleReasons`.
+
+Drift guard verified by probe: `sed s/protocolMeets(/protocolMeetsRenamed(/g` on a sandbox copy causes `select-dispatch-model-eligibility-drift.test.mjs` to fail 3/5 cases; original restored after verification.
+
+**Behaviour landed:**
+- 7-day expiry, 6-day `refreshRequiredAfter` for catalogue-sourced profiles; far-future (`9999-12-31T23:59:59.999Z`) for operator-only profiles.
+- `bizar models --refresh` updates stale, leaves fresh untouched, preserves operator overrides via `mergePreservingOperator`, exits non-zero on network failure without mutating the router file.
+- `bizar models explain` surfaces `reasons` (from `protocolMeets`), `measured`, and `provenance` per ranked entry.
+- Backwards compatible: legacy F-184 `ModelCapabilityProfile` shapes still work (selector falls back to `evaluateRoleRequirements` when no `discriminatedProfile` is present); all pre-existing 357 tests still pass.
+
+**Ledger:** F-190 added (passing, source `ff96721`, merge `8400396`, wip=1 @mike). vcr: passing=69, activated=70, ratio=0.986.
+
+## Complete — F-190 Model capability profiles (IMP-017)
 - Date: 2026-08-27
 - Branch: wt/todd-imp017-capability-profiles
 - Commits: 8481757 (feat schema + gate), fda9821 (feat cli wiring), 9d017c9 (test drift guard)
