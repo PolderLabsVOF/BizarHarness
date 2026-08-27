@@ -8,7 +8,7 @@
  * NOT consume the marker — the hook chain may run more than once for a single
  * bash invocation, and a one-shot rm caused sporadic false denies.
  *
- * Missing or stale markers deny the commit. Hard approval gates (commit,
+ * Missing or stale markers emit an advisory reminder. Hard approval gates (commit,
  * push, gh, publish, deploy) remain in git-workflow-guard.mjs.
  */
 
@@ -94,8 +94,8 @@ process.stdin.on('end', () => {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason: 'Run /simplify on the staged diff, apply any justified cleanup, rerun tests, then retry the commit.',
+      permissionDecision: 'allow',
+      additionalContext: '🟡 /simplify not run on the current staged diff. Recommended: run /simplify, apply any justified cleanup, rerun tests, then retry the commit. The commit will proceed without /simplify if you choose.',
     },
   }) + '\n');
 });

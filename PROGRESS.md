@@ -84,6 +84,20 @@ references, and add a regression guard so the deletion cannot regress.
 removed; F-166 stays `state: in_progress` (the model-picker work is not
 yet done) but is no longer the headline WIP.
 
+## In Progress — F-182 Convert remaining hard-deny hooks to advisory (simplify / content-style / agent-model)
+
+**Objective:** F-176 left three hooks on the hard-deny branch — `simplify-guard.mjs` (missing or stale `/simplify` marker blocks `git commit`), `content-style-guard.mjs` (humanize patterns block Writes), and `agent-model-guard.mjs` (out-of-tier model overrides block Agent dispatch). Convert each to the F-176 advisory pattern: `permissionDecision: 'allow'` plus a 🟡 advisory `additionalContext` describing the recommended action. The hard approval gates (push, force-push, rebase, gh, publish, deploy) remain in `git-workflow-guard.mjs` and `permission-request.mjs`.
+
+**Files changed (branch `wt/todd-f182-hooks-advisory`):**
+
+- `config/claude/hooks/simplify-guard.mjs` — line 11 comment "Missing or stale markers deny the commit" replaced with "Missing or stale markers emit an advisory reminder"; the `permissionDecision: 'deny'` block at the original lines 94-100 now returns `permissionDecision: 'allow'` plus `additionalContext: '🟡 /simplify not run on the current staged diff. Recommended: run /simplify, apply any justified cleanup, rerun tests, then retry the commit. The commit will proceed without /simplify if you choose.'`.
+- `config/claude/hooks/content-style-guard.mjs` — the humanize-`notes.length` branch at the original lines 64-72 returns `permissionDecision: 'allow'` plus `additionalContext: '🟡 Style suggestion: humanize the text before publishing. <notes>. The write will proceed regardless.'`.
+- `config/claude/hooks/agent-model-guard.mjs` — local helper renamed `deny` → `advise`; returns `permissionDecision: 'allow'` plus `additionalContext: '🟡 Model override guidance: <reason> The dispatch will proceed regardless.'`. Both call sites (configured-tier and live-discovery blocks) updated.
+- `config/claude/hooks/__tests__/agent-model-guard.test.mjs` — three tests that asserted `'deny'` (`rejects policy-forbidden and unavailable overrides`, `still requires live-discovery for non-userSelected tier candidates`, `rejects a model that is in neither userSelected nor any tier`) now assert `'allow'` plus presence of `hookSpecificOutput.additionalContext`.
+- `config/claude/hooks/__tests__/workflow-guards.test.mjs` — four tests (`human-facing filler is denied`, `simplify marker blocks a commit after the staged tree changes`, `simplify marker outside freshness window blocks commit`, `simplify marker absent blocks commits including Git global-option forms`) retitled to "emits advisory" / "emits advisory across Git global-option forms" and re-asserted to `'allow'` plus `additionalContext`.
+
+**WIP=1 invariant:** F-182 holds `wip: 1`. F-170's prior `wip: 1` was removed when F-170 transitioned to passing on commit `4888ac7` (its `wip: null` survives in the ledger).
+
 ## Passing — F-176 Full permissions + advisory hooks + always-fetch-docs
 
 **Status:** Accepted (F-180 closes the residual drift; see "Passing — F-180" below).
