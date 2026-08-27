@@ -5,6 +5,33 @@
 ## Complete — F-189 Workflow/team routing integration (IMP-014)
 
 **Date:** 2026-08-27
+**Merged at:** `a9a3d2b` (merge of `wt/todd-imp014-workflow-routing`).
+**Branch:** `wt/todd-imp014-workflow-routing` (4 commits: `9b49cfc` feat(workflows) dispatch helper, `edfef81` refactor(workflows) every `agent()` through dispatchAgent, `803ada8` test 43 cases (dispatch + capture + drift guard), `8a01101` docs(ledger) close F-189).
+**WIP holder:** `@mike` — F-189 lands with `wip: 1` per the F-176 ledger invariant. IMP-017 (model capability profiles) is the next dispatch.
+
+**Master verification:**
+- `npm run test:node` — **641/641 passing** across 48 suites (+46 vs 595 baseline; F-189 contributed `dispatch.test.mjs` 20 cases + `workflow-payload-capture.test.mjs` 20 cases + `autonomy-contract-workflow.test.mjs` 3 cases + 3 modified bizarre-default regression tests).
+- `npx vitest run --root packages/sdk` — **362/362 passing** across 27 test files (no regressions).
+- `npx tsc --noEmit` — exit 0, clean types.
+
+**Files:**
+- `config/workflows/lib/dispatch.js` (NEW) — `dispatchAgent(agentFn, agentName, prompt, opts, context?)` + `dispatchAgentDryRun` + `computeDecision` + `augmentPayload` + `loadDispatchContext` + `selectDispatchModelMirror` (byte-equivalent JS mirror of `packages/sdk/src/router/select-dispatch-model.ts`).
+- `config/workflows/__tests__/dispatch.test.mjs` (NEW, 20 cases) — pins the dispatch contract.
+- `config/workflows/__tests__/workflow-payload-capture.test.mjs` (NEW, 20 cases) — drives every shipped workflow through the captured dispatch.
+- `scripts/__tests__/autonomy-contract-workflow.test.mjs` (NEW, 3 cases) — drift guard against bare `agent(` in workflow scripts.
+- `config/workflows/{bizar-debug,bizar-implement,bizar-research,ultracode,ultracode-research,ultracode-review}.js` — every `agent()` now routes through `dispatchAgent` and ends up carrying `model` + `routingDecisionId`.
+- `config/workflows/__tests__/bizar-default.test.mjs` — ESM-aware update for static imports.
+
+**IMP-014 acceptance gate verification:** "Captured nested Agent payloads contain expected models" — verified via the workflow-payload-capture test trio:
+1. Every captured payload has `routingDecisionId` (UUID format asserted).
+2. At least one captured payload per workflow has non-undefined `model`.
+3. High-risk lanes (`risk: 'high'`) always pick a concrete model (never fall through to `session-inherit` or `no-eligible-selected`).
+
+Drift guard verified by probe: injecting a bare `agent(` into a workflow script fails CI in `autonomy-contract-workflow.test.mjs` test 3.
+
+**Ledger:** F-189 added (passing, source `8a01101`, merge `a9a3d2b`, wip=1 @mike). vcr: passing=68, activated=69, ratio=0.986.
+
+**Date:** 2026-08-27
 **Branch:** `wt/todd-imp014-workflow-routing` (3 source commits; merge pending).
 **Source SHAs:** `9b49cfc` feat(workflows) add dispatch helper, `edfef81` refactor(workflows) route every agent() through dispatchAgent, `803ada8` test(workflows) 43 dispatch + capture + drift-guard cases; plus the F-189 ledger close-out commit.
 **WIP holder:** `@mike` — F-189 lands with `wip: 1` per the ledger invariant; IMP-014 acceptance gate ("Captured nested Agent payloads contain expected models") is fully verified by `config/workflows/__tests__/workflow-payload-capture.test.mjs`.
