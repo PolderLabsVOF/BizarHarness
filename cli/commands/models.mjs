@@ -351,8 +351,8 @@ export function loadRouter(routerPath) {
  * Write `models` (and optional `tierHints`) into `router.userSelected`,
  * preserving every other field. Atomic replace via temp-file + rename.
  *
- * @param {{ routerPath: string, models: string[], tierHints?: Record<string,string>, source?: string }} opts
- * @returns {{ models: string[], lastUpdated: string, source: string, tierHints: Record<string,string> }}
+ * @param {{ routerPath: string, models: string[], tierHints?: Record<string,string>, profiles?: Record<string,object>, source?: string }} opts
+ * @returns {{ models: string[], lastUpdated: string, source: string, tierHints: Record<string,string>, profiles: Record<string,object> }}
  */
 export function applyModels({ routerPath, models, tierHints = {}, profiles = {}, source = 'live-pick' }) {
   const list = Array.isArray(models) ? models.filter((m) => typeof m === 'string' && m.trim()) : [];
@@ -559,7 +559,8 @@ function renderPicker(out, ordered, selected, prompt, candidates = []) {
     const id = ordered[i];
     const mark = selected.has(id) ? chalk.green('[x]') : '[ ]';
     const idx = String(i + 1).padStart(width, ' ');
-    out.write(`  ${mark} ${chalk.dim(idx + '.')} ${id}\n`);
+    const profile = candidates.find((candidate) => candidate.id === id)?.profile;
+    out.write(`  ${mark} ${chalk.dim(idx + '.')} ${id}${chalk.dim(`  [${capabilityLabel(profile)}]`)}\n`);
   }
   out.write(chalk.dim(`\n  ${selected.size}/${ordered.length} selected. Type numbers to toggle, 'all', 'none', or Enter to confirm.\n`));
 }
@@ -593,7 +594,7 @@ function showHelp() {
     -> model-router.json#endpoint
     -> http://localhost:20128/v1
 
-  Auth: $ANTHROPIC_AUTH_TOKEN -> settings.json#env.ANTHROPIC_AUTH_TOKEN.
+  Auth: $ANTHROPIC_AUTH_TOKEN -> settings.json#env.ANTHROPIC_AUTH_TOKEN.\n\n  Discovered models are enriched from https://models.dev/models.json.\n  Metadata lookup is best-effort and never hides gateway-reported models.
 `;
   console.log(help);
 }
