@@ -886,6 +886,59 @@ Router learning, health update, and audit evidence
 - No statistically significant quality regression versus always using the strongest selected model.
 - Deterministic replay for identical config, health snapshot, budget, task features, and router-policy version.
 
+### Implemented foundation — Models.dev capability enrichment
+
+The `bizar models` discovery path now enriches gateway-reported candidates from `https://models.dev/models.json`.
+
+Implemented behavior:
+
+- gateway `/models` remains authoritative for which IDs are selectable;
+- Models.dev is fetched during model discovery;
+- exact catalogue IDs are matched with confidence `0.9`;
+- unique normalized wrapper IDs are matched with confidence `0.7`;
+- ambiguous IDs remain unmatched instead of receiving guessed capabilities;
+- the interactive picker displays reasoning, tool-calling, structured-output, multimodal, and context-window metadata;
+- selected profiles are persisted under `userSelected.profiles`;
+- unselected profiles are not written to the router configuration;
+- Models.dev failures are non-fatal and do not hide gateway-discovered models;
+- profile provenance records source URL, retrieval time, match type, and confidence.
+
+Implementation commits:
+
+- `d3335b2` — fetch and persist Models.dev enrichment;
+- `5e83cde` — display capability summaries in the picker;
+- `a858f53` — cover fetching, failure handling, matching, ambiguity, extraction, and selected-only persistence.
+
+This completes part of `IMP-017` (initial capability profiles), but it does **not** complete automatic model selection. The current dispatch resolver still needs to consume `userSelected.profiles`, classify task requirements, rank eligible selected models, and inject the resulting model into direct, workflow, and team dispatches.
+
+#### Remaining profile work
+
+1. Add provider-specific serving information from `https://models.dev/catalog.json` when it differs from base-model metadata.
+2. Support explicit gateway alias mappings for IDs that cannot be matched conservatively.
+3. Preserve operator corrections separately from fetched metadata so catalogue refreshes cannot overwrite them.
+4. Add metadata expiry and refresh timestamps.
+5. Distinguish protocol capabilities from measured quality:
+   - fetched: tools, reasoning, modalities, structured output, context and token limits;
+   - learned: coding, debugging, architecture, security, visual quality, reliability, latency, and cost efficiency.
+6. Feed selected profiles into the central `selectDispatchModel()` API described above.
+7. Verify the actual provider model returned agrees with the recorded selection.
+8. Add a refresh command such as `bizar models --refresh` and an explanation surface such as `bizar models explain <task>`.
+
+#### Updated backlog status
+
+| ID | Status | Current state |
+| --- | --- | --- |
+| IMP-013 | Pending | Central selector is not yet implemented. |
+| IMP-014 | Pending | Workflows and team spawns still need selector integration. |
+| IMP-015 | Pending | Three-tier and six-tier taxonomies remain inconsistent. |
+| IMP-016 | Partial | Selected IDs persist, but the dispatch resolver does not yet rank from the selected pool. |
+| IMP-017 | Partial | Models.dev capability profiles are fetched, displayed, and persisted. |
+| IMP-018 | Pending | Per-dispatch decision/outcome evidence is not implemented. |
+| IMP-019 | Pending | Health-aware selected-pool failover is not implemented. |
+| IMP-020 | Pending | Contextual model outcome learning is not implemented. |
+| IMP-021 | Pending | Routing shadow/canary mode is not implemented. |
+| IMP-022 | Partial | Metadata unit tests exist; dispatch-level E2E tests remain pending. |
+
 ### Final model-selection assessment
 
 The architecture has most of the pieces needed for intelligent selection, but the pieces currently operate beside one another. The immediate requirement is to connect model choice to the actual workflow and team dispatch payload. Until that E2E path exists, model recommendations and tier-learning results are advisory metadata rather than reliable orchestration behavior.
