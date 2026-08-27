@@ -892,11 +892,30 @@
         "DECISIONS.md"
       ],
       "evidence": "Three-commit close-out. Commit B (7dd87f6, code): cli/provision.mjs deletes the unreachable permissions.ask/deny fallback (the shipped template always defines permissions), exports HARD_MUTATION_ALLOW (37-entry documentation-as-code surface for the nine-category hard approval list) and resolveHookCommand(sub, timeoutMs) (returns the absolute-path wrapper invocation when the shim is executable and falls back to a POSIX-portable sh -c PATH probe otherwise), rewires writeClaudeSettings via a thin hook() wrapper. cli/provision.test.mjs extends the F-169 suite with tests A/B/C/D (wrapper executable → wrapper path; wrapper absent → sh -c fallback; HARD_MUTATION_ALLOW survives normalization round-trip; byte-for-byte factory invariant — no permissions.ask/deny fallback literal in source). Commit A (2c1d531, docs): AGENTS.md preserves all 9 hard-approval categories verbatim, adds F-176 enforcement paragraph naming permission-request.mjs (destructive subset) and git-workflow-guard.mjs (advisory reminders), enumerates the 15 override patterns operators move into ~/.claude/settings.json#permissions.ask to re-enable HITL. docs/decisions/POLICY-full-permissions-and-advisory-hooks.md frontmatter resolves F-XXX → F-176, adds Superseded by: F-180, and resolves the second F-XXX to F-170 (commit 4888ac7). Both CLAUDE.md mirrors regenerated via make mirror-claude-md; --check confirms parity. Commit C (this commit, evidence): PROGRESS.md collapses duplicate ## In Progress — F-176 header, relabels F-176 block as ## Passing — F-176, deletes stale F-169 @steve commits once human approves prose. feature_list.json performs atomic WIP swap (F-169 → passing 12c660b; F-176 → passing ab64e95). DECISIONS.md adds parallel F-180 row. Test counts: node --test cli/provision.test.mjs 20/20 (16 baseline + 4 new F-180 tests); node --test cli/__tests__/settings-permissions.test.mjs 4/4; node --test config/claude/hooks/__tests__/bizar-hook-wrapper.test.mjs 5/5. Gates: make check; make check-arch; make verify-removed-surfaces; make verify-repo-structure; make clean-check; make mirror-claude-md-check. DoD: jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty."
+    },
+    {
+      "id": "F-181",
+      "title": "Expand permissions.allow to maximum per operator directive",
+      "description": "Operator directive: ship permissions.allow at maximum so subagents and primary sessions have the full tool surface available without per-pattern permission prompts. Adds wildcard allow-patterns Bash(*), Read(*), Edit(*), Write(*), Glob(*), Grep(*), WebFetch(*), WebSearch(*), Agent(*), CronCreate(*), CronDelete(*), CronList(*), ScheduleWakeup(*), and mcp__* to config/claude/settings.json. permissions.deny and permissions.ask remain empty arrays per F-176. The factory in cli/provision.mjs already reads shipped.permissions directly from this template (writeClaudeSettings permission: shipped.permissions at L779), so live installs mirror the expansion automatically through `bizar install`. Bash(npm publish *) is intentionally kept outside the allow-list so the HITL floor on package publication stays enforced by permission-request.mjs. No factory rewrite required — only the template payload expands.",
+      "state": "passing",
+      "wip_holder": null,
+      "wip": null,
+      "passed": "2026-08-26",
+      "commit": "2227246",
+      "category": "harness",
+      "owner": "@steve",
+      "scope": [
+        "config/claude/settings.json",
+        "PROGRESS.md",
+        "feature_list.json",
+        "package.json"
+      ],
+      "evidence": "Single template-payload expansion commit (2227246, chore(perms)): 14 wildcard patterns added above the explicit git commit family + 15 mcp__bizar__* / mcp__semble__* entries in config/claude/settings.json permissions.allow; deny and ask remain []; defaultMode remains bypassPermissions. Factory (cli/provision.mjs L779: permissions: shipped.permissions) reads the template directly, so the live mirror step is a plain `bizar install --yes` invocation. Gates: make check green; node --test cli/provision.test.mjs 20/20 (the F-180 byte-for-byte factory invariant still passes because the factory ships the entire shipped.permissions object unchanged). jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty after this commit."
     }
   ],
   "vcr": {
-    "passing": 57,
-    "activated": 57,
-    "ratio": 0.95
+    "passing": 61,
+    "activated": 61,
+    "ratio": 0.984
   }
 }

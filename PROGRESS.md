@@ -145,6 +145,36 @@ plus targeted `node --test` runs on `cli/provision.test.mjs` (20/20),
 `cli/__tests__/settings-permissions.test.mjs` (4/4), and
 `config/claude/hooks/__tests__/bizar-hook-wrapper.test.mjs` (5/5).
 
+## Passing — F-181 Expand permissions.allow to maximum per operator directive
+
+**Status:** Accepted (single template-payload expansion; live mirror follows
+the publish step).
+
+**Commit (`2227246`, chore(perms)):**
+- `config/claude/settings.json`: 14 wildcard allow-patterns added to
+  `permissions.allow` — `Bash(*)`, `Read(*)`, `Edit(*)`, `Write(*)`,
+  `Glob(*)`, `Grep(*)`, `WebFetch(*)`, `WebSearch(*)`, `Agent(*)`,
+  `CronCreate(*)`, `CronDelete(*)`, `CronList(*)`, `ScheduleWakeup(*)`,
+  `mcp__*` — above the existing explicit git commit family plus the
+  `mcp__bizar__*` / `mcp__semble__*` enumerated surface.
+- `permissions.deny` and `permissions.ask` remain empty arrays per F-176.
+- `defaultMode` stays `bypassPermissions`.
+- `cli/provision.mjs` factory (`L779: permissions: shipped.permissions`)
+  reads the template directly, so live installs mirror the expansion
+  automatically through `bizar install --yes`. No factory rewrite
+  required.
+- `Bash(npm publish *)` is intentionally kept outside the allow-list so
+  the HITL floor on package publication stays enforced by
+  `permission-request.mjs`.
+
+**Evidence:** `make check` green; `node --test cli/provision.test.mjs`
+20/20 (F-180 byte-for-byte factory invariant still passes because the
+factory ships the entire `shipped.permissions` object unchanged).
+`feature_list.json` F-181 entry appended (state=passing, commit=2227246).
+VCR ratio 0.984 (61/62). Live `~/.claude/settings.json` mirror is the
+final step of the v10.16.0 release pipeline (see `Complete — v10.16.0
+Release` block).
+
 ## Passing — F-176 — historical evidence (full block)
 
 **Objective:** Apply the user policy shift — agents have full permissions by
