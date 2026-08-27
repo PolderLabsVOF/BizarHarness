@@ -1044,7 +1044,7 @@
       "verification": "vitest run packages/sdk/tests/{tier-taxonomy-drift,model-router,router-orchestrator}.test.mjs (30/30); tsc --noEmit -p packages/sdk/tsconfig.json (exit 0); grep -rE 'flash|expensive|ModelTier' packages/sdk/src/ returns no quoted-literal hits.",
       "state": "passing",
       "passed": "2026-08-27",
-      "commit": "<merge-sha>",
+      "commit": "8689190",
       "category": "routing",
       "layer": "sdk",
       "owner": "@todd",
@@ -1060,7 +1060,7 @@
       ],
       "created": "2026-08-27",
       "wip_holder": null,
-      "evidence": "2026-08-27: 3 commits on worktree-agent-af22e0d2791d76452. a945e8b refactor model-router.ts to BizarTier (TIERS, DEFAULT_PRIORS, getPriors, recordOutcome, REWARDS map budget 1.0 / mid 0.85 / default 0.85 / mid-design 0.7 / high 0.55 / premium 0.4) and drop ModelTier from router/index.ts. 9fcf4a1 adds packages/sdk/tests/tier-taxonomy-drift.test.mjs (129 lines) scanning packages/sdk/src/ for ModelTier declarations, 'flash'/'expensive' literals, and ModelTier identifiers. bbad0f0 closes the ledger. Merged at <merge-sha>."
+      "evidence": "2026-08-27: 3 commits on worktree-agent-af22e0d2791d76452. a945e8b refactor model-router.ts to BizarTier (TIERS, DEFAULT_PRIORS, getPriors, recordOutcome, REWARDS map budget 1.0 / mid 0.85 / default 0.85 / mid-design 0.7 / high 0.55 / premium 0.4) and drop ModelTier from router/index.ts. 9fcf4a1 adds packages/sdk/tests/tier-taxonomy-drift.test.mjs (129 lines) scanning packages/sdk/src/ for ModelTier declarations, 'flash'/'expensive' literals, and ModelTier identifiers. bbad0f0 closes the ledger. Merged at 8689190."
     }
   ],
   "vcr": {
