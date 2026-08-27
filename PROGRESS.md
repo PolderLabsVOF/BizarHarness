@@ -2,7 +2,11 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — IMP-016 Selected-pool resolver (F-184)
+## Complete — F-184 Selected-pool resolver (IMP-016)
+
+**Date:** 2026-08-27
+**Closing commit:** `90f99bc` (merge of `wt/todd-imp016-resolver` at `6071f41`).
+**WIP holder:** none (F-176 continues to hold `wip: 1`).
 
 **Objective:** Close IMP-016 from `IMPROVEMENTS.md` line 869: the dispatch
 resolver still consumed `tiers.<tier>.modelIds` and ignored
@@ -89,6 +93,23 @@ a separate follow-up; this commit ships the ranking half only.
   re-applies the same regex at write time).
 - IMP-019 (health-aware failover + negative-cache probe) is deferred
   to a follow-up.
+
+**Verification (master after merge):**
+- `make check` — TypeScript clean.
+- `make test` — 577/577 across 48 suites (was 577/577 before merge; the
+  new tests live in vitest and don't move the node:test count).
+- `npx vitest run packages/sdk/tests/agent-model-registry.test.mjs` —
+  19/19 (10 pre-existing + 9 new resolver tests).
+- `npx vitest run packages/sdk/tests/` — 315/315 across 23 files
+  (excluding stale worktrees under `.claude/worktrees/`).
+
+**vcr:** activated bumped 62 → 63; passing 62 → 63.
+
+**Next backlog (tracked in `IMPROVEMENTS.md`):** IMP-014 (workflow/team
+routing integration — wire `rankUserSelectedForRole` into actual
+dispatch surfaces) + IMP-019 (health-aware selected-pool failover).
+Greg's research at `$CLAUDE_JOB_DIR/tmp/imp014-research.md` enumerates
+the surfaces.
 
 ## Complete — F-166 User-controlled model picker (`bizar models`)
 

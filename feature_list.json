@@ -964,13 +964,13 @@
       "id": "F-184",
       "title": "User-selected-aware resolver (IMP-016)",
       "description": "Land a userSelected-aware resolver that ranks the operator-selected pool by capability profile before falling back to the tier default. The ModelCapabilityProfile type mirrors cli/commands/models.mjs:toCapabilityProfile; parseUserSelected now reads userSelected.profiles defensively and silently skips invalid entries (corrupt profiles never poison the registry). rankUserSelectedForRole(registry, role, requirements) returns the ranked + eligible candidate list sorted by (eligible desc, capabilityScore desc, hasProfile desc, originalIndex asc). Capability score weights reasoning=0.3, toolCall=0.25, structuredOutput=0.15, attachment=0.1, temperature=0.05, +0.15 if inputModalities includes 'image'. Hard floors: minContextTokens, requireReasoning/ToolCall/StructuredOutput, requireImageInput, preferredTiers — each surfaces a human-readable ineligibleReasons string. resolveTierModel prefers the ranked userSelected pool (intersected with availableModelIds) over the tier default; resolveAgentModel emits 'userSelected-ranked' / 'first live tier candidate' / 'inherit active session model' rationale. defaultTierHintForId mirrors the picker heuristic so the resolver can derive a tier for any selected ID even when userSelected.tierHints is missing. IMP-019 (health-aware failover) is deferred to a follow-up.",
-      "state": "in_progress",
-      "wip_holder": "@todd",
-      "wip": 1,
-      "commit": "pending",
+      "state": "passing",
+      "passed": "2026-08-27",
+      "commit": "90f99bc",
       "category": "harness",
       "layer": "harness",
       "owner": "@todd",
+      "verification": "npx vitest run packages/sdk/tests/agent-model-registry.test.mjs — 19/19 (10 pre-existing + 9 new resolver tests); make test — 577/577 across 48 suites; make check — TypeScript clean",
       "scope": [
         "packages/sdk/src/router/agent-model-registry.ts",
         "packages/sdk/src/router/index.ts",
@@ -980,12 +980,13 @@
         "feature_list.json",
         "DECISIONS.md"
       ],
-      "created": "2026-08-27"
+      "created": "2026-08-27",
+      "evidence": "2026-08-27: shipped in 4 commits on wt/todd-imp016-resolver (6c39c58 parseUserSelected profiles + defensive validation; 8c105f4 rankUserSelectedForRole + helpers scoreCapabilityProfile/evaluateRoleRequirements/compareRankedEntries/defaultTierHintForId; 3e72ecf resolveTierModel wire-up + 'userSelected-ranked' rationale; 6071f41 ledger + office-manager prompt). Merged to master at 90f99bc. 9 new vitest tests cover: missing userSelected, original-order preservation, profile vs no-profile ordering, capability-score tie-breaks, minContextTokens floor + reason string, defensive parseUserSelected on corrupt profiles (string/number/array/null + wrong-typed nested fields), defaultTierHintForId heuristic ordering, evaluateRoleRequirements multi-floor output, scoreCapabilityProfile extremes, compareRankedEntries order, resolveTierModel userSelected-pick branch, resolveTierModel userSelected-fallthrough branch. make test green across 48 suites (577/577). vcr.activated bumped 62 → 63."
     }
   ],
   "vcr": {
-    "passing": 62,
-    "activated": 63,
+    "passing": 63,
+    "activated": 64,
     "ratio": 0.984
   }
 }
