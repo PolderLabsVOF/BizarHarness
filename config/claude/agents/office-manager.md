@@ -19,6 +19,8 @@ Decision tree per dispatch:
 1. **Read `userSelected.models`** from the synced `~/.claude/model-router.json`. If the field is missing or `models` is `[]`, **omit `model`** so the subagent inherits the active session model. Do NOT auto-discover.
 2. **Map each tier to a preferred model.** Use the heuristic table below — pick the cheapest sufficient tier whose `userSelected.tierHints[model]` field matches the requested tier. If no match, use the cheapest model in `userSelected.models` (sorted by the tier order: `budget → mid → default → mid-design → high → premium`).
 
+Health-aware failover (F-185 / IMP-019): on a transport/availability failure (`invalid-model`, `auth-failure`, `rate-limit`, `timeout`, `provider-outage`), the dispatch wrapper may chain `pickFailover` (`packages/sdk/src/router/failover.ts`) once to the next eligible ranked user-selected ID and re-issue the call. Failures that are NOT transport/availability (`context-overflow`, `model-quality`) are NOT eligible for failover — a different model does not fix a too-long prompt or a too-low quality floor; surface the failure instead. The 1-failover cap is strict: never alias-cycle, never retry the same failed request, never walk past the first eligible ranked ID. When the orchestrator wants to pass the failover target alongside the primary, set `additionalContext.routingDecisionId` + `additionalContext.fallback` on the Agent tool input; the Agent-model-guard accepts both without re-probing the gateway.
+
 Default tier classification heuristic (set by the picker, overridable per-model in `userSelected.tierHints`):
 
 | Suffix / family | Tier |

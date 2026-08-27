@@ -982,11 +982,39 @@
       ],
       "created": "2026-08-27",
       "evidence": "2026-08-27: shipped in 4 commits on wt/todd-imp016-resolver (6c39c58 parseUserSelected profiles + defensive validation; 8c105f4 rankUserSelectedForRole + helpers scoreCapabilityProfile/evaluateRoleRequirements/compareRankedEntries/defaultTierHintForId; 3e72ecf resolveTierModel wire-up + 'userSelected-ranked' rationale; 6071f41 ledger + office-manager prompt). Merged to master at 90f99bc. 9 new vitest tests cover: missing userSelected, original-order preservation, profile vs no-profile ordering, capability-score tie-breaks, minContextTokens floor + reason string, defensive parseUserSelected on corrupt profiles (string/number/array/null + wrong-typed nested fields), defaultTierHintForId heuristic ordering, evaluateRoleRequirements multi-floor output, scoreCapabilityProfile extremes, compareRankedEntries order, resolveTierModel userSelected-pick branch, resolveTierModel userSelected-fallthrough branch. make test green across 48 suites (577/577). vcr.activated bumped 62 → 63."
+    },
+    {
+      "id": "F-185",
+      "title": "Health-aware selected-pool failover (IMP-019)",
+      "description": "Deterministic 1-failover walker over the ranked user-selected pool, gated by a transport/availability whitelist. pickFailover(registry, role, requirements, attemptedIds, failure) consumes rankUserSelectedForRole (F-184), skips any ID in attemptedIds, and returns the next eligible ranked ID plus a FailoverVerdict audit trail (primary, failover, attempts, exhaustReason, chain). Whitelist: invalid-model, auth-failure, rate-limit, timeout, provider-outage. NOT eligible: context-overflow (different model does not change prompt size) and model-quality (re-select with tighter requirements; failover hides the floor). 1-failover cap is strict; no alias cycling, no random picks. Agent-model-guard.mjs accepts additionalContext.routingDecisionId + additionalContext.fallback without re-probing the gateway when both are set; the contract is both-or-neither and existing callers see no behavior change. classifyError maps wire-level messages into the FailureReason taxonomy. bizar models explain <role> ranks the persisted userSelected pool without touching the gateway. Closes IMP-019.",
+      "state": "in_progress",
+      "wip": 1,
+      "commit": "pending",
+      "category": "harness",
+      "layer": "harness",
+      "owner": "@todd",
+      "verification": "npx vitest run packages/sdk/tests/agent-model-registry.test.mjs — 31/31 (12 new failover tests); node --test config/claude/hooks/__tests__/agent-model-guard.test.mjs — 12/12 (4 new contract tests); node --test cli/__tests__/models-picker.test.mjs — 34/34 (5 new explain tests); node cli/bin.mjs models explain todd exits 0 and prints ranked rows; node cli/bin.mjs models explain exits 2 with actionable error.",
+      "scope": [
+        "packages/sdk/src/router/failover.ts",
+        "packages/sdk/src/router/failover-mirror.mjs",
+        "packages/sdk/src/router/agent-model-registry.ts",
+        "packages/sdk/src/router/index.ts",
+        "packages/sdk/tests/agent-model-registry.test.mjs",
+        "config/claude/hooks/agent-model-guard.mjs",
+        "config/claude/hooks/__tests__/agent-model-guard.test.mjs",
+        "cli/commands/models.mjs",
+        "cli/__tests__/models-picker.test.mjs",
+        "config/claude/agents/office-manager.md",
+        "PROGRESS.md",
+        "feature_list.json",
+        "DECISIONS.md"
+      ],
+      "created": "2026-08-27"
     }
   ],
   "vcr": {
     "passing": 63,
-    "activated": 64,
-    "ratio": 0.984
+    "activated": 65,
+    "ratio": 0.969
   }
 }
