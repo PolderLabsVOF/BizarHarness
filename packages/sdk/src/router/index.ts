@@ -84,9 +84,9 @@ export interface RouteInput {
   /** Forwarded to `selectDispatchModel` for the exact-capability match. */
   capabilities?: readonly string[];
   /** Pre-validated operator-selected profiles (one per `userSelected` ID). */
-  selectedProfiles?: readonly import("./select-dispatch-model.js").ModelProfile[];
+  selectedProfiles?: readonly import("./select-dispatch-model.js").ModelCandidate[];
   /** Static tier defaults — metadata, never an exclusion. */
-  staticProfiles?: readonly import("./select-dispatch-model.js").ModelProfile[];
+  staticProfiles?: readonly import("./select-dispatch-model.js").ModelCandidate[];
   /** Active session model — used only when the selected pool is empty. */
   activeSessionModel?: string;
   /** Provider health snapshot — failed providers are skipped. */
@@ -366,7 +366,7 @@ export {
 export type {
   ModelDecision,
   TaskFeatures,
-  ModelProfile,
+  ModelCandidate,
   ProviderHealth,
   ProviderHealthMap,
   BudgetState,
@@ -427,3 +427,22 @@ export {
   type FailoverChainEntry,
   type PickFailoverInput,
 } from "./agent-model-registry.js";
+
+// F-190 / IMP-017 discriminated ModelProfile schema.
+export {
+  type ModelProfile,
+  type ModelProtocolCapabilities,
+  type ModelMeasuredCapabilities,
+  type ModelProfileProvenance,
+  type ModelServingMetadata,
+  type Modality,
+  type ProfileSource,
+  type ProfileMatchType,
+  mergeProfile,
+  isStale,
+  needsRefresh,
+  deriveExpiry,
+  operatorExpiry,
+  protocolMeets,
+  measuredScore,
+} from "./model-profile.js";
