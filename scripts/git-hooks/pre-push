@@ -20,6 +20,12 @@ while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
   if [ -z "$LOCAL_SHA" ] || [ "$LOCAL_SHA" = "0000000000000000000000000000000000000000" ]; then
     continue
   fi
+  # Tag pushes (refs/tags/*) point at existing commits; they don't introduce
+  # new file changes. Skip tag-only ref updates so an annotated tag pointing
+  # at a commit already pushed via master doesn't scan the full history.
+  case "$LOCAL_REF" in
+    refs/tags/*) continue ;;
+  esac
   if [ -z "$REMOTE_SHA" ] || [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
     # New branch — scan all commits on the local side
     RANGE="$LOCAL_SHA"
