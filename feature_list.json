@@ -1011,7 +1011,7 @@
       "description": "Deterministic 1-failover walker over the ranked user-selected pool, gated by a transport/availability whitelist. pickFailover(registry, role, requirements, attemptedIds, failure) consumes rankUserSelectedForRole (F-184), skips any ID in attemptedIds, and returns the next eligible ranked ID plus a FailoverVerdict audit trail (primary, failover, attempts, exhaustReason, chain). Whitelist: invalid-model, auth-failure, rate-limit, timeout, provider-outage. NOT eligible: context-overflow (different model does not change prompt size) and model-quality (re-select with tighter requirements; failover hides the floor). 1-failover cap is strict; no alias cycling, no random picks. Agent-model-guard.mjs accepts additionalContext.routingDecisionId + additionalContext.fallback without re-probing the gateway when both are set; the contract is both-or-neither and existing callers see no behavior change. classifyError maps wire-level messages into the FailureReason taxonomy. bizar models explain <role> ranks the persisted userSelected pool without touching the gateway. Closes IMP-019.",
       "state": "passing",
       "wip": null,
-      "commit": "<merge-sha>",
+      "commit": "815481ca884276c73435a1bc283812021923050a",
       "category": "harness",
       "layer": "harness",
       "owner": "@todd",
@@ -1034,7 +1034,7 @@
       "created": "2026-08-27",
       "wip_holder": null,
       "passed": "2026-08-27",
-      "evidence": " Merged at <merge-sha>."
+      "evidence": " Merged at 815481ca884276c73435a1bc283812021923050a."
     }
   ],
   "vcr": {
