@@ -26,6 +26,7 @@ import {
   resolveEndpoint,
   resolveRouterPath,
   currentSelection,
+  explainSelection,
 } from '../commands/models.mjs';
 
 function tmpDir() {
@@ -446,4 +447,93 @@ test('applyModels: persists profiles only for selected models', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ─── F-185 / IMP-019 `bizar models explain` ────────────────────────────────
+
+test('explainSelection: rejects missing role argument', () => {
+  const dir = tmpDir();
+  try {
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({ version: '13.0.0' }));
+    assert.throws(() => explainSelection({ routerPath }), /role is required/);
+    assert.throws(() => explainSelection({ routerPath, role: '' }), /role is required/);
+    assert.throws(() => explainSelection({ role: 'todd' }), /routerPath is required/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('explainSelection: ranks 3 user-selected candidates by capability profile', () => {
+  const dir = tmpDir();
+  try {
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({
+      version: '13.0.0',
+      userSelected: {
+        models: ['claude-minimax/MiniMax-M3', 'claude-qwen/qwen3.8-max', 'claude/haiku-4-5'],
+        tierHints: { 'claude-minimax/MiniMax-M3': 'default', 'claude-qwen/qwen3.8-max': 'premium', 'claude/haiku-4-5': 'high' },
+        profiles: {
+          'claude-minimax/MiniMax-M3': { capabilities: { reasoning: true, toolCall: true } },
+          'claude-qwen/qwen3.8-max': { capabilities: { reasoning: true, toolCall: true, structuredOutput: true, attachment: true, temperature: true, inputModalities: ['text', 'image'] } },
+        },
+      },
+    }));
+    const verdict = explainSelection({ routerPath, role: 'todd' });
+    assert.deepEqual(verdict, {
+      ranked: [
+        { id: 'claude-qwen/qwen3.8-max', tier: 'premium', eligible: true, ineligibleReasons: [], capabilityScore: 1, hasProfile: true },
+        { id: 'claude-minimax/MiniMax-M3', tier: 'default', eligible: true, ineligibleReasons: [], capabilityScore: 0.55, hasProfile: true },
+        { id: 'claude/haiku-4-5', tier: 'high', eligible: true, ineligibleReasons: [], capabilityScore: 0, hasProfile: false },
+      ],
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('explainSelection: empty userSelected returns empty ranked list', () => {
+  const dir = tmpDir();
+  try {
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({ version: '13.0.0', userSelected: { models: [] } }));
+    const verdict = explainSelection({ routerPath, role: 'todd' });
+    assert.deepEqual(verdict, { ranked: [] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('explainSelection: surfaces ineligibleReasons when requirements filter candidates', () => {
+  const dir = tmpDir();
+  try {
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({
+      version: '13.0.0',
+      userSelected: {
+        models: ['claude-minimax/MiniMax-M3', 'claude/haiku-4-5'],
+        tierHints: { 'claude-minimax/MiniMax-M3': 'default', 'claude/haiku-4-5': 'high' },
+        profiles: {
+          'claude-minimax/MiniMax-M3': { capabilities: { reasoning: true }, limits: { contextTokens: 128000, inputTokens: null, outputTokens: null } },
+          'claude/haiku-4-5': { capabilities: { reasoning: true }, limits: { contextTokens: 8000, inputTokens: null, outputTokens: null } },
+        },
+      },
+    }));
+    const verdict = explainSelection({ routerPath, role: 'karen', requirements: { minContextTokens: 32000 } });
+    const haiku = verdict.ranked.find((entry) => entry.id === 'claude/haiku-4-5');
+    assert.equal(haiku.eligible, false);
+    assert.deepEqual(haiku.ineligibleReasons, ['contextTokens 8000 < required 32000']);
+    const minimax = verdict.ranked.find((entry) => entry.id === 'claude-minimax/MiniMax-M3');
+    assert.equal(minimax.eligible, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('explainSelection: missing router file degrades to empty userSelected without crashing', () => {
+  const dir = tmpDir();
+  const routerPath = join(dir, 'does-not-exist.json');
+  const verdict = explainSelection({ routerPath, role: 'todd' });
+  assert.deepEqual(verdict, { ranked: [] });
+  rmSync(dir, { recursive: true, force: true });
 });
