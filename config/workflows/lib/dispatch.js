@@ -27,10 +27,12 @@
  * bare `agent(` call is reintroduced without a documented bypass.
  */
 
-import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { randomUUID, createHash } from 'node:crypto';
+import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, renameSync, openSync, closeSync, fsyncSync, constants as fsConstants } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+
+const { O_APPEND, O_CREAT, O_WRONLY } = fsConstants;
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /*                         JS mirror of selectDispatchModel                    */
@@ -421,7 +423,208 @@ export function loadDispatchContext({ cwd = process.cwd(), env = process.env } =
   const healthRaw = readJson(paths.health) ?? {};
   const health = (healthRaw && typeof healthRaw === 'object' && healthRaw.models) || {};
   const activeSessionModel = env.BIZAR_ACTIVE_SESSION_MODEL ?? loadActiveSessionModel();
-  return { selectedProfiles, staticProfiles, activeSessionModel, budget, health };
+  return { selectedProfiles, staticProfiles, activeSessionModel, budget, health, evidenceDir: resolveEvidenceDir() };
+}
+
+function resolveEvidenceDir({ cwd = process.cwd(), env = process.env } = {}) {
+  if (env.BIZAR_EVIDENCE_DIR && typeof env.BIZAR_EVIDENCE_DIR === 'string') {
+    return isAbsolute(env.BIZAR_EVIDENCE_DIR) ? env.BIZAR_EVIDENCE_DIR : resolve(cwd, env.BIZAR_EVIDENCE_DIR);
+  }
+  const home = env.BIZAR_HOME || (env.HOME ? `${env.HOME}/.config/bizar` : null);
+  if (!home) return resolve(cwd, '.config', 'bizar', 'evidence');
+  return join(home, 'evidence');
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*                   F-191 / IMP-018 evidence writer                          */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * JS mirror of `packages/sdk/src/router/dispatch-evidence.ts`. The
+ * workflow runtime is plain Node ESM without a build step, so we
+ * duplicate the wire format (JSONL, O_APPEND, fsync, sha256 canonical
+ * hash, sequence-numbered follow-ups) here. The CLI reader
+ * (`cli/commands/evidence.mjs`) and the SDK `EvidenceStore` both
+ * consume the same line format — divergence fails the CLI tests.
+ */
+const EVIDENCE_SCHEMA_VERSION = 1;
+
+function canonicalize(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(canonicalize);
+  const out = {};
+  for (const key of Object.keys(value).sort()) {
+    out[key] = canonicalize(value[key]);
+  }
+  return out;
+}
+
+function sha256Hex(input) {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+function computeEvidenceHashes({ selectedProfiles, staticProfiles, activeSessionModel, budget, health }) {
+  return {
+    selectedProfilesHash: sha256Hex(JSON.stringify(canonicalize(selectedProfiles ?? []))),
+    staticProfilesHash: sha256Hex(JSON.stringify(canonicalize(staticProfiles ?? []))),
+    activeSessionModel,
+    budgetHash: sha256Hex(JSON.stringify(canonicalize(budget ?? {}))),
+    healthHash: sha256Hex(JSON.stringify(canonicalize(health ?? {}))),
+  };
+}
+
+/**
+ * Read every line in the JSONL evidence file into memory. The file
+ * is small (one row per dispatch); this is a deliberate whole-file
+ * rewrite strategy for outcome attachment, mirroring the SDK's
+ * file-backed store.
+ */
+function readEvidenceFile(filePath) {
+  if (!existsSync(filePath)) return [];
+  const raw = readFileSync(filePath, 'utf8');
+  const rows = [];
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try { rows.push(JSON.parse(trimmed)); } catch { /* skip malformed */ }
+  }
+  return rows;
+}
+
+function appendEvidenceLine(filePath, line) {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    try { mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
+  }
+  let fd = null;
+  try {
+    fd = openSync(filePath, O_APPEND | O_CREAT | O_WRONLY, 0o600);
+    writeFileSync(fd, line, { encoding: 'utf8' });
+    try { fsyncSync(fd); } catch { /* fsync unsupported on some FS */ }
+  } finally {
+    if (fd !== null) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}
+
+function writeEvidenceFile(filePath, rows) {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    try { mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
+  }
+  const tmp = `${filePath}.tmp`;
+  const body = rows.map((r) => JSON.stringify(r)).join('\n') + (rows.length ? '\n' : '');
+  writeFileSync(tmp, body, { encoding: 'utf8', mode: 0o600 });
+  renameSync(tmp, filePath);
+}
+
+function sameRowContent(existing, next) {
+  const a = JSON.stringify(canonicalize({
+    decision: next.decision,
+    taskFeatures: next.taskFeatures,
+    inputs: computeEvidenceHashes(next),
+  }));
+  const b = JSON.stringify(canonicalize({
+    decision: existing.decision,
+    taskFeatures: existing.taskFeatures,
+    inputs: existing.inputs,
+  }));
+  return a === b;
+}
+
+/**
+ * Append a DispatchEvidence row to the JSONL store. Mirrors the SDK's
+ * `EvidenceStore.append`:
+ *   - schemaVersion=1 stamped server-side;
+ *   - createdAt stamped server-side (default ISO now);
+ *   - sequence number assigned from the existing chain (0 for primary,
+ *     N for follow-up);
+ *   - throws a plain Error on duplicate content.
+ *
+ * @param {object} record same shape as the SDK's EvidenceStoreAppendInput
+ * @param {object} [opts]
+ * @param {string} [opts.evidenceDir] override the default evidence dir
+ * @param {() => Date} [opts.now] clock injection for deterministic tests
+ * @returns {object} the persisted record
+ */
+export function appendEvidence(record, opts = {}) {
+  const dir = opts.evidenceDir ?? resolveEvidenceDir();
+  const filePath = join(dir, 'dispatch.jsonl');
+  const now = opts.now ?? (() => new Date());
+  const existing = readEvidenceFile(filePath);
+  const dup = existing.find((row) => row.routingDecisionId === record.routingDecisionId && sameRowContent(row, record));
+  if (dup) {
+    const err = new Error(`DispatchEvidence with routingDecisionId=${record.routingDecisionId} already exists`);
+    err.code = 'duplicate-routingDecisionId';
+    throw err;
+  }
+  const chain = existing.filter((row) => row.routingDecisionId === record.routingDecisionId);
+  const sequence = chain.length;
+  const built = {
+    routingDecisionId: record.routingDecisionId,
+    createdAt: now().toISOString(),
+    schemaVersion: EVIDENCE_SCHEMA_VERSION,
+    decision: record.decision,
+    taskFeatures: record.taskFeatures,
+    inputs: computeEvidenceHashes(record),
+    runId: record.runId,
+    agentName: record.agentName,
+    workflowPhase: record.workflowPhase,
+    sequence,
+    isFollowUp: sequence > 0 ? true : undefined,
+  };
+  appendEvidenceLine(filePath, JSON.stringify(built) + '\n');
+  return built;
+}
+
+/**
+ * Attach an outcome block to the primary (sequence=0) row of a
+ * dispatch chain. Mirrors the SDK's `EvidenceStore.attachOutcome`:
+ * idempotent on identical outcome, throws on conflict.
+ *
+ * @param {string} routingDecisionId
+ * @param {object} outcome the DispatchOutcome payload
+ * @param {object} [opts]
+ * @param {string} [opts.evidenceDir]
+ * @param {() => Date} [opts.now]
+ * @returns {object} the updated primary row
+ */
+export function attachEvidenceOutcome(routingDecisionId, outcome, opts = {}) {
+  const dir = opts.evidenceDir ?? resolveEvidenceDir();
+  const filePath = join(dir, 'dispatch.jsonl');
+  const now = opts.now ?? (() => new Date());
+  const rows = readEvidenceFile(filePath);
+  const chain = rows.filter((r) => r.routingDecisionId === routingDecisionId);
+  if (chain.length === 0) {
+    const err = new Error(`DispatchEvidence with routingDecisionId=${routingDecisionId} not found`);
+    err.code = 'not-found';
+    throw err;
+  }
+  const primary = chain.find((r) => r.sequence === 0) ?? chain[0];
+  if (primary.outcome) {
+    if (JSON.stringify(canonicalize(primary.outcome)) === JSON.stringify(canonicalize(outcome))) {
+      return primary;
+    }
+    const err = new Error(`Outcome for routingDecisionId=${routingDecisionId} already attached with a different value`);
+    err.code = 'outcome-conflict';
+    throw err;
+  }
+  const idx = rows.findIndex((r) => r.routingDecisionId === routingDecisionId && r.sequence === primary.sequence);
+  const capturedAt = outcome.capturedAt ?? now().toISOString();
+  rows[idx] = { ...primary, outcome: { ...outcome, capturedAt } };
+  writeEvidenceFile(filePath, rows);
+  return rows[idx];
+}
+
+/**
+ * Convenience: read every evidence row back from the JSONL store.
+ * Used by tests + the `evidence run <id>` CLI subcommand.
+ */
+export function readEvidenceRows(opts = {}) {
+  const dir = opts.evidenceDir ?? resolveEvidenceDir();
+  const filePath = join(dir, 'dispatch.jsonl');
+  return readEvidenceFile(filePath);
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -483,6 +686,75 @@ export function computeDecision(agentName, prompt, opts, context) {
 }
 
 /**
+ * Persist the dispatch decision to the F-191 evidence store. Best-effort:
+ * a write failure MUST NOT abort the dispatch — telemetry is downstream
+ * of the user-facing contract. Returns the persisted record (or null
+ * when no evidence context was supplied).
+ */
+export function writeDispatchEvidence(agentName, prompt, opts, decision, context) {
+  const ctx = context ?? loadDispatchContext();
+  const task = buildTaskFeatures(agentName, prompt, opts);
+  try {
+    return appendEvidence({
+      routingDecisionId: decision.routingDecisionId,
+      decision,
+      taskFeatures: task,
+      runId: opts.runId ?? decision.routingDecisionId,
+      agentName,
+      workflowPhase: opts.phase,
+      selectedProfiles: ctx.selectedProfiles,
+      staticProfiles: ctx.staticProfiles,
+      activeSessionModel: ctx.activeSessionModel,
+      budget: ctx.budget,
+      health: ctx.health,
+    }, { evidenceDir: ctx.evidenceDir });
+  } catch (err) {
+    // Best-effort: never fail a dispatch because telemetry is down.
+    return null;
+  }
+}
+
+/**
+ * Attach the post-dispatch outcome to the evidence row. Best-effort.
+ */
+export function writeDispatchOutcome(routingDecisionId, outcome, context) {
+  const ctx = context ?? loadDispatchContext();
+  try {
+    return attachEvidenceOutcome(routingDecisionId, outcome, { evidenceDir: ctx.evidenceDir });
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Map a dispatch result (success / thrown error) into the F-191
+ * DispatchOutcome shape. Best-effort — the dispatch wrapper never
+ * blocks on outcome capture.
+ */
+export function classifyDispatchOutcome(result, error, startMs) {
+  const durationMs = Date.now() - startMs;
+  if (!error) {
+    return {
+      status: 'success',
+      durationMs,
+      actualProviderModel: result && typeof result === 'object' && typeof result.model === 'string' ? result.model : undefined,
+      capturedAt: new Date().toISOString(),
+    };
+  }
+  const message = String(error?.message ?? error ?? '');
+  const lower = message.toLowerCase();
+  let status = 'failure';
+  if (/(timeout|timed out|etimedout|aborted|deadline)/.test(lower)) status = 'timeout';
+  else if (/(context.*length|context.*overflow|context.*window|too long|maximum context)/.test(lower)) status = 'context-overflow';
+  return {
+    status,
+    durationMs,
+    errorMessage: message,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+/**
  * Build the augmented agent-call payload. Adds `model`,
  * `routingDecisionId`, `tier`, and `selectorReason` so the Agent
  * tool can route correctly and the audit trail can prove which
@@ -537,6 +809,14 @@ export async function dispatchAgent(agentFn, agentName, prompt, opts = {}, conte
   const decision = computeDecision(agentName, prompt, opts, context);
   const augmented = augmentPayload(opts, decision, agentName);
 
+  // F-191 / IMP-018 audit trail — persist the decision before invoking
+  // the agent. Best-effort: telemetry failures MUST NOT abort the
+  // dispatch. Tests can disable the write via opts.dryRun=true or by
+  // passing an explicit context with a missing evidenceDir.
+  if (opts.dryRun !== true) {
+    writeDispatchEvidence(agentName, prompt, opts, decision, context);
+  }
+
   if (captureFn) {
     try {
       captureFn({
@@ -559,7 +839,15 @@ export async function dispatchAgent(agentFn, agentName, prompt, opts = {}, conte
     augmented.model = opts.forceModel;
   }
 
-  return agentFn(prompt, augmented);
+  const startMs = Date.now();
+  try {
+    const result = await agentFn(prompt, augmented);
+    writeDispatchOutcome(decision.routingDecisionId, classifyDispatchOutcome(result, null, startMs), context);
+    return result;
+  } catch (err) {
+    writeDispatchOutcome(decision.routingDecisionId, classifyDispatchOutcome(null, err, startMs), context);
+    throw err;
+  }
 }
 
 /**
