@@ -959,11 +959,33 @@
       ],
       "evidence": "Merge commit f107ab2 (Merge branch 'wt/todd-f182-hooks-advisory' into master (F-182)). Branch tip d931393 carries the three hook conversions (simplify-guard.mjs, content-style-guard.mjs, agent-model-guard.mjs) flipped from permissionDecision 'deny' to 'allow' + 🟡 advisory additionalContext; same three hooks' tests updated (config/claude/hooks/__tests__/agent-model-guard.test.mjs and config/claude/hooks/__tests__/workflow-guards.test.mjs). Pre-merge verification on the worktree: node --test config/claude/hooks/__tests__/advisory-hooks.test.mjs config/claude/hooks/__tests__/agent-model-guard.test.mjs config/claude/hooks/__tests__/workflow-guards.test.mjs — 35/35 green. make check green on master after merge. Hard approval gates (push, force-push, rebase, gh, publish, deploy) unchanged in git-workflow-guard.mjs and permission-request.mjs per F-176. jq '.features[] | select(.wip == 1) | .id' feature_list.json returns empty after this commit.",
       "created": "2026-08-26"
+    },
+    {
+      "id": "F-184",
+      "title": "User-selected-aware resolver (IMP-016)",
+      "description": "Land a userSelected-aware resolver that ranks the operator-selected pool by capability profile before falling back to the tier default. The ModelCapabilityProfile type mirrors cli/commands/models.mjs:toCapabilityProfile; parseUserSelected now reads userSelected.profiles defensively and silently skips invalid entries (corrupt profiles never poison the registry). rankUserSelectedForRole(registry, role, requirements) returns the ranked + eligible candidate list sorted by (eligible desc, capabilityScore desc, hasProfile desc, originalIndex asc). Capability score weights reasoning=0.3, toolCall=0.25, structuredOutput=0.15, attachment=0.1, temperature=0.05, +0.15 if inputModalities includes 'image'. Hard floors: minContextTokens, requireReasoning/ToolCall/StructuredOutput, requireImageInput, preferredTiers — each surfaces a human-readable ineligibleReasons string. resolveTierModel prefers the ranked userSelected pool (intersected with availableModelIds) over the tier default; resolveAgentModel emits 'userSelected-ranked' / 'first live tier candidate' / 'inherit active session model' rationale. defaultTierHintForId mirrors the picker heuristic so the resolver can derive a tier for any selected ID even when userSelected.tierHints is missing. IMP-019 (health-aware failover) is deferred to a follow-up.",
+      "state": "in_progress",
+      "wip_holder": "@todd",
+      "wip": 1,
+      "commit": "pending",
+      "category": "harness",
+      "layer": "harness",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/src/router/agent-model-registry.ts",
+        "packages/sdk/src/router/index.ts",
+        "packages/sdk/tests/agent-model-registry.test.mjs",
+        "config/claude/agents/office-manager.md",
+        "PROGRESS.md",
+        "feature_list.json",
+        "DECISIONS.md"
+      ],
+      "created": "2026-08-27"
     }
   ],
   "vcr": {
     "passing": 62,
-    "activated": 62,
+    "activated": 63,
     "ratio": 0.984
   }
 }

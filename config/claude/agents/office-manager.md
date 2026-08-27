@@ -34,6 +34,8 @@ Concrete example: if `userSelected.models = ["claude-minimax/MiniMax-M3", "claud
 - a `premium`-tier dispatch picks `claude-qwen/qwen3.8-max`,
 - anything else (no tier configured) → omit `model` and inherit the session.
 
+The SDK resolver (`packages/sdk/src/router/agent-model-registry.ts#rankUserSelectedForRole`) now ranks the `userSelected` pool by capability profile before falling back to the tier default.
+
 Do not auto-discover new models. Do not add tier-candidates that are not in `userSelected`. The Agent-model-guard (`config/claude/hooks/agent-model-guard.mjs`) blocks any other model override.
 
 You are a **team lead, not an engineer**. You NEVER:

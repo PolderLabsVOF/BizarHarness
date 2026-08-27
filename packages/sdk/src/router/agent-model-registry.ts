@@ -64,17 +64,94 @@ export interface ModelRegistryPolicy extends Record<string, unknown> {
 }
 
 /**
+ * Capability profile for a single selected model. Shape mirrors
+ * `cli/commands/models.mjs:toCapabilityProfile` so the picker can persist
+ * it under `userSelected.profiles` and the SDK resolver can consume it
+ * without re-fetching Models.dev. All fields are optional on read — the
+ * resolver tolerates partial profiles (legacy entries or sparse fetches).
+ */
+export interface ModelCapabilityProfile {
+  name?: string;
+  baseModel?: string | null;
+  family?: string | null;
+  gatewayId?: string | null;
+  capabilities?: {
+    attachment?: boolean;
+    reasoning?: boolean;
+    toolCall?: boolean;
+    structuredOutput?: boolean;
+    temperature?: boolean;
+    inputModalities?: readonly string[];
+    outputModalities?: readonly string[];
+  };
+  limits?: {
+    contextTokens?: number | null;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+  };
+  releaseDate?: string | null;
+  lastUpdated?: string | null;
+  metadata?: {
+    source?: string;
+    sourceUrl?: string | null;
+    retrievedAt?: string | null;
+    matchType?: string;
+    confidence?: number;
+  };
+}
+
+/**
  * Block of user-controlled model picks. Persisted under
  * `model-router.json#userSelected`. The orchestrator dispatches subagents
  * using ONLY these IDs (plus the active session model). The picker is the
  * discovery surface — live gateway discovery is NOT required to validate
  * picks.
+ *
+ * `profiles` carries Models.dev-derived capability metadata for each
+ * selected ID (F-166 + Models.dev enrichment). The resolver
+ * (`rankUserSelectedForRole`) uses `profiles` to rank eligible candidates;
+ * entries with no profile still participate in ranking (they sort last).
  */
 export interface UserSelectedModels {
   models: string[];
   lastUpdated?: string;
   source?: string;
   tierHints?: Partial<Record<BizarTier, string[]>> & Record<string, BizarTier>;
+  profiles?: Record<string, ModelCapabilityProfile>;
+}
+
+/**
+ * Optional requirements used by `rankUserSelectedForRole` to filter
+ * candidates. Defaults are permissive (no floors): every candidate is
+ * eligible when no requirements are supplied.
+ */
+export interface RoleRequirements {
+  /** Minimum context window in tokens. Profiles with `null`/missing context pass. */
+  minContextTokens?: number;
+  /** Require reasoning capability. */
+  requireReasoning?: boolean;
+  /** Require tool-calling capability. */
+  requireToolCall?: boolean;
+  /** Require structured-output capability. */
+  requireStructuredOutput?: boolean;
+  /** Require image input modality. */
+  requireImageInput?: boolean;
+  /** Eligible only when derived tier is in this list. Empty/missing = no constraint. */
+  preferredTiers?: readonly BizarTier[];
+}
+
+/**
+ * A ranked user-selected model candidate. Sort order is
+ * `(eligible desc, capabilityScore desc, hasProfile desc, originalIndex asc)`.
+ */
+export interface RankedUserSelectedEntry {
+  id: string;
+  tier: BizarTier;
+  eligible: boolean;
+  ineligibleReasons: string[];
+  capabilityScore: number;
+  hasProfile: boolean;
+  originalIndex: number;
 }
 
 export interface ModelRegistry {
@@ -168,31 +245,246 @@ function parseUserSelected(raw: unknown): UserSelectedModels | undefined {
   if (!isRecord(raw)) return undefined;
   const models = modelIds(raw.models);
   const tierHints = isRecord(raw.tierHints) ? Object.fromEntries(Object.entries(raw.tierHints).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, v as BizarTier])) : undefined;
-  if (models.length === 0 && !tierHints) return undefined;
-  return {
+  const profiles = parseUserSelectedProfiles(raw.profiles);
+  if (models.length === 0 && !tierHints && !profiles) return undefined;
+  const block: UserSelectedModels = {
     models,
     lastUpdated: typeof raw.lastUpdated === "string" ? raw.lastUpdated : undefined,
     source: typeof raw.source === "string" ? raw.source : undefined,
-    ...(tierHints ? { tierHints } : {}),
+  };
+  if (tierHints) block.tierHints = tierHints;
+  if (profiles) block.profiles = profiles;
+  return block;
+}
+
+/**
+ * Defensive reader for `userSelected.profiles`. Mirrors the shape
+ * produced by `cli/commands/models.mjs:toCapabilityProfile`. Invalid
+ * entries (non-objects, wrong primitive types) are skipped silently so
+ * a single corrupt profile never poisons the whole registry — this is
+ * the F-184 fix that closes the IMP-016 entry in `IMPROVEMENTS.md`.
+ */
+function parseUserSelectedProfiles(raw: unknown): Record<string, ModelCapabilityProfile> | undefined {
+  if (!isRecord(raw)) return undefined;
+  const out: Record<string, ModelCapabilityProfile> = {};
+  let any = false;
+  for (const [id, value] of Object.entries(raw)) {
+    if (typeof id !== "string" || !id.trim() || !isRecord(value)) continue;
+    const profile = parseCapabilityProfile(value);
+    if (profile) {
+      out[id.trim()] = profile;
+      any = true;
+    }
+  }
+  return any ? out : undefined;
+}
+
+function parseCapabilityProfile(raw: Record<string, unknown>): ModelCapabilityProfile | undefined {
+  if (!isRecord(raw)) return undefined;
+  const caps = isRecord(raw.capabilities) ? raw.capabilities : {};
+  const lims = isRecord(raw.limits) ? raw.limits : {};
+  const meta = isRecord(raw.metadata) ? raw.metadata : {};
+  return {
+    name: typeof raw.name === "string" ? raw.name : undefined,
+    baseModel: raw.baseModel === null || typeof raw.baseModel === "string" ? raw.baseModel : undefined,
+    family: raw.family === null || typeof raw.family === "string" ? raw.family : undefined,
+    gatewayId: raw.gatewayId === null || typeof raw.gatewayId === "string" ? raw.gatewayId : undefined,
+    capabilities: {
+      attachment: caps.attachment === true,
+      reasoning: caps.reasoning === true,
+      toolCall: caps.toolCall === true,
+      structuredOutput: caps.structuredOutput === true,
+      temperature: caps.temperature !== false,
+      inputModalities: Array.isArray(caps.inputModalities) ? caps.inputModalities.filter((m): m is string => typeof m === "string") : undefined,
+      outputModalities: Array.isArray(caps.outputModalities) ? caps.outputModalities.filter((m): m is string => typeof m === "string") : undefined,
+    },
+    limits: {
+      contextTokens: lims.contextTokens === null || Number.isFinite(lims.contextTokens) ? (lims.contextTokens as number | null) : undefined,
+      inputTokens: lims.inputTokens === null || Number.isFinite(lims.inputTokens) ? (lims.inputTokens as number | null) : undefined,
+      outputTokens: lims.outputTokens === null || Number.isFinite(lims.outputTokens) ? (lims.outputTokens as number | null) : undefined,
+    },
+    releaseDate: raw.releaseDate === null || typeof raw.releaseDate === "string" ? raw.releaseDate : undefined,
+    lastUpdated: raw.lastUpdated === null || typeof raw.lastUpdated === "string" ? raw.lastUpdated : undefined,
+    metadata: Object.keys(meta).length > 0 ? {
+      source: typeof meta.source === "string" ? meta.source : undefined,
+      sourceUrl: meta.sourceUrl === null || typeof meta.sourceUrl === "string" ? meta.sourceUrl : undefined,
+      retrievedAt: meta.retrievedAt === null || typeof meta.retrievedAt === "string" ? meta.retrievedAt : undefined,
+      matchType: typeof meta.matchType === "string" ? meta.matchType : undefined,
+      confidence: Number.isFinite(meta.confidence) ? (meta.confidence as number) : undefined,
+    } : undefined,
   };
 }
 
+/**
+ * Default tier classification for a model ID, mirroring the heuristic
+ * exported from `cli/commands/models.mjs:defaultTierHint`. The picker
+ * uses the same regex set; this SDK-side helper guarantees the
+ * resolver can derive a tier for any selected ID even when
+ * `userSelected.tierHints` is missing. Most-specific patterns run first
+ * so `haiku-4-x` lands in `high` and bare `haiku` lands in `budget`.
+ */
+export function defaultTierHintForId(modelId: string): BizarTier {
+  const id = String(modelId || "").toLowerCase();
+  if (!id) return "default";
+  if (/(qwen3\.8|gpt-5|opus|o3-pro|o4-mini|sonnet-4)/.test(id)) return "premium";
+  if (/(haiku-4|sonnet-3-7|mini-high|m3-high|grok-3)/.test(id)) return "high";
+  if (/(sonnet|gpt-4|m3(-|$)|(^|[^a-z])default($|[^a-z]))/.test(id)) return "default";
+  if (/(nano|mini[-/]|flash|lite|tiny|haiku($|[-_]\d))/.test(id)) return "budget";
+  return "mid";
+}
+
+/**
+ * Resolve the model ID for a tier.
+ *
+ * Precedence (F-184):
+ *   1. If `registry.userSelected.models` is non-empty, rank the pool via
+ *      `rankUserSelectedForRole` and pick the first *eligible* candidate.
+ *      When `availableModelIds` is provided, that pick is intersected with
+ *      the live set; no intersection falls through to (2).
+ *   2. Otherwise (or when the user-selected pick has no eligible live
+ *      candidate), use the first live entry from `registry.tiers[tier]`.
+ *   3. When no live candidate exists, `modelId` is `null` and
+ *      `inheritSession` is `true` — the orchestrator keeps the active
+ *      session model.
+ */
 export function resolveTierModel(tier: BizarTier, registry: ModelRegistry, availableModelIds?: readonly string[]): ResolvedTierModel {
   const entry = registry.tiers.get(tier);
   if (!entry) registryError("UNKNOWN_TIER", `Unknown model tier ${tier}.`);
   const available = availableModelIds === undefined ? null : new Set(availableModelIds);
+  const userSelected = registry.userSelected;
+  if (userSelected && userSelected.models.length > 0) {
+    const { eligible } = rankUserSelectedForRole(registry, String(tier));
+    const pick = available ? eligible.find((entry) => available.has(entry.id)) : eligible[0];
+    if (pick) {
+      return { ...entry, modelId: pick.id, fallback: [], endpoint: registry.endpoint, inheritSession: false };
+    }
+  }
   const selected = available ? entry.modelIds.find((id) => available.has(id)) || null : null;
   return { ...entry, modelId: selected, fallback: [], endpoint: registry.endpoint, inheritSession: selected === null };
 }
 
+/**
+ * Resolve the model ID for an agent.
+ *
+ * Rationale values:
+ *   - `"userSelected-ranked"`  — picked from the operator's userSelected pool.
+ *   - `"first live tier candidate"` — fell through to the tier default (live).
+ *   - `"inherit active session model"` — no live candidate; orchestrator inherits.
+ */
 export function resolveAgentModel(agent: string, registry: ModelRegistry, availableModelIds?: readonly string[], tier?: BizarTier): ResolvedAgentModel {
   const chosenTier = tier || registry.roleDefaults.get(agent) || "default";
   const resolved = resolveTierModel(chosenTier, registry, availableModelIds);
-  return { agent, tier: chosenTier, modelId: resolved.modelId, inheritSession: resolved.inheritSession, rationale: resolved.inheritSession ? "inherit active session model" : "first live tier candidate", endpoint: registry.endpoint };
+  const rationale = !resolved.modelId
+    ? "inherit active session model"
+    : registry.userSelected && registry.userSelected.models.includes(resolved.modelId)
+      ? "userSelected-ranked"
+      : "first live tier candidate";
+  return { agent, tier: chosenTier, modelId: resolved.modelId, inheritSession: resolved.inheritSession, rationale, endpoint: registry.endpoint };
 }
 
 export function listAgentModels(registry: ModelRegistry): AgentModelEntry[] {
   return Array.from(registry.roleDefaults, ([agent, tier]) => resolveAgentModel(agent, registry, undefined, tier));
+}
+
+/**
+ * Rank user-selected models for a role. Pure function — no I/O, no side
+ * effects. Used by `resolveTierModel` to honour the operator's selection
+ * before falling back to the live tier candidates.
+ *
+ * Sorting rules (descending primary, ascending tie-breaker):
+ *   1. `eligible` desc      — role floors pass
+ *   2. `capabilityScore` desc — weighted capability sum
+ *   3. `hasProfile` desc    — profiles beat unprofiled
+ *   4. `originalIndex` asc  — first selected wins
+ *
+ * Hard-floor defaults are permissive: with no `requirements`, every
+ * candidate is eligible. Profile-less candidates stay last via
+ * `hasProfile=false` but still participate.
+ *
+ * @param registry Model registry (`registry.userSelected.models` is the pool).
+ * @param role Free-form role label (kept for future filtering / logs).
+ * @param requirements Optional eligibility floors.
+ */
+export function rankUserSelectedForRole(registry: ModelRegistry, role: string, requirements: RoleRequirements = {}): { ranked: RankedUserSelectedEntry[]; eligible: RankedUserSelectedEntry[] } {
+  const candidates = userSelectedModelIds(registry);
+  if (candidates.length === 0) return { ranked: [], eligible: [] };
+  const tierHints = registry.userSelected?.tierHints;
+  const profiles = registry.userSelected?.profiles;
+  const ranked: RankedUserSelectedEntry[] = candidates.map((id, originalIndex) => {
+    const profile = profiles?.[id];
+    const hasProfile = Boolean(profile);
+    const tier = (tierHints && typeof tierHints[id] === "string" ? tierHints[id] : defaultTierHintForId(id)) as BizarTier;
+    const { eligible, ineligibleReasons } = evaluateRoleRequirements(profile, requirements, tier);
+    const capabilityScore = scoreCapabilityProfile(profile);
+    const entry: RankedUserSelectedEntry = { id, tier, eligible, ineligibleReasons, capabilityScore, hasProfile, originalIndex };
+    return entry;
+  });
+  ranked.sort(compareRankedEntries);
+  const eligible = ranked.filter((entry) => entry.eligible);
+  // role is consumed only for future per-role filtering / logging hooks.
+  void role;
+  return { ranked, eligible };
+}
+
+/**
+ * Pure sorter extracted for testability. Mutates and returns the input
+ * array. Sort key: `(eligible desc, capabilityScore desc, hasProfile desc,
+ * originalIndex asc)`.
+ */
+export function compareRankedEntries(a: RankedUserSelectedEntry, b: RankedUserSelectedEntry): number {
+  if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+  if (a.capabilityScore !== b.capabilityScore) return b.capabilityScore - a.capabilityScore;
+  if (a.hasProfile !== b.hasProfile) return a.hasProfile ? -1 : 1;
+  return a.originalIndex - b.originalIndex;
+}
+
+/**
+ * Weighted capability score: reasoning=0.3, toolCall=0.25,
+ * structuredOutput=0.15, attachment=0.1, temperature=0.05,
+ * +0.15 when `inputModalities` includes "image". Missing/partial
+ * profiles score 0 — they sort last via `hasProfile=false`.
+ */
+export function scoreCapabilityProfile(profile: ModelCapabilityProfile | undefined): number {
+  if (!profile || !profile.capabilities) return 0;
+  const caps = profile.capabilities;
+  let score = 0;
+  if (caps.reasoning) score += 0.3;
+  if (caps.toolCall) score += 0.25;
+  if (caps.structuredOutput) score += 0.15;
+  if (caps.attachment) score += 0.1;
+  if (caps.temperature) score += 0.05;
+  if (Array.isArray(caps.inputModalities) && caps.inputModalities.includes("image")) score += 0.15;
+  return Math.round(score * 1e6) / 1e6;
+}
+
+/**
+ * Evaluate the role requirements against a (possibly missing) profile.
+ * Returns `eligible=true` with no reasons when no requirements are set.
+ * Profiles missing the relevant data (e.g., `null` context tokens) pass
+ * unknown-values — the resolver only downgrades when a known value
+ * violates a floor.
+ */
+export function evaluateRoleRequirements(profile: ModelCapabilityProfile | undefined, requirements: RoleRequirements, tier: BizarTier): { eligible: boolean; ineligibleReasons: string[] } {
+  const reasons: string[] = [];
+  if (typeof requirements.minContextTokens === "number" && profile?.limits && Number.isFinite(profile.limits.contextTokens) && (profile.limits.contextTokens as number) < requirements.minContextTokens) {
+    reasons.push(`contextTokens ${profile.limits.contextTokens} < required ${requirements.minContextTokens}`);
+  }
+  if (requirements.requireReasoning && profile?.capabilities && profile.capabilities.reasoning !== true) {
+    reasons.push("missing required reasoning capability");
+  }
+  if (requirements.requireToolCall && profile?.capabilities && profile.capabilities.toolCall !== true) {
+    reasons.push("missing required tool-call capability");
+  }
+  if (requirements.requireStructuredOutput && profile?.capabilities && profile.capabilities.structuredOutput !== true) {
+    reasons.push("missing required structured-output capability");
+  }
+  if (requirements.requireImageInput && profile?.capabilities && !(Array.isArray(profile.capabilities.inputModalities) && profile.capabilities.inputModalities.includes("image"))) {
+    reasons.push("missing required image input modality");
+  }
+  if (Array.isArray(requirements.preferredTiers) && requirements.preferredTiers.length > 0 && !requirements.preferredTiers.includes(tier)) {
+    reasons.push(`tier ${tier} not in preferred list`);
+  }
+  return { eligible: reasons.length === 0, ineligibleReasons: reasons };
 }
 
 /**
