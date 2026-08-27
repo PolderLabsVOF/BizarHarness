@@ -2,6 +2,79 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-186 AUTONOMY_CONTRACT.md + consistency test (IMP-001)
+
+**Date:** 2026-08-27
+**WIP holder:** none (IMP-019 health-aware failover is the active IMP item
+and is tracked under its own worktree; F-176 keeps `wip: 1` per the
+ledger invariant — F-186 lands as `passing` because the contract + test
+are complete in this commit).
+
+**Objective:** Close IMP-001 from `IMPROVEMENTS.md` line 448 — the audit
+flagged "important documentation and contract drift" because the
+settings template, the hook chain, the orchestrator prompt, and AGENTS.md
+each carried partially-overlapping autonomy prose. Land one canonical
+contract document and a consistency test that fails CI if any surface
+drifts away from the contract.
+
+**Files touched:**
+- `docs/decisions/AUTONOMY_CONTRACT.md` (NEW, 115 lines) — canonical
+  contract. Four tiers: Tier 1 (full autonomy, no prompts), Tier 2
+  (advisory `allow` + 🟡 reminder via `additionalContext`), Tier 3
+  (HitL categories gated by `permission-request.mjs` and
+  `git-workflow-guard.mjs`), Tier 4 (blocked at the hook layer). Lists
+  the settings template contract (`permissions.deny: []`,
+  `permissions.ask: []`, `defaultMode: "bypassPermissions"`,
+  `permissions.allow` covers Tier 1) and cross-references every
+  enforcement surface: `permission-request.mjs`,
+  `git-workflow-guard.mjs`, `pretooluse-bash.mjs`,
+  `pretooluse-editwrite.mjs`, `simplify-guard.mjs`,
+  `content-style-guard.mjs`, `agent-model-guard.mjs`, `AGENTS.md`, and
+  the consistency test itself.
+- `scripts/__tests__/autonomy-contract.test.mjs` (NEW, 9 tests) — node:test
+  suite that asserts: the contract file exists and is non-empty; the
+  contract enumerates all four tiers and declares its `Status: Accepted`;
+  `settings.json` ships `deny: []`, `ask: []`, `defaultMode:
+  "bypassPermissions"`; `permissions.allow` includes every Tier-1
+  pattern (git commit family + Read/Edit/Write/Glob/Grep/WebFetch/
+  WebSearch/Agent/Cron*/ScheduleWakeup); `permission-request.mjs`
+  hard-denies force-push, rebase, `rm -rf`, and `mkfs`;
+  `pretooluse-bash.mjs` enumerates rm-rf-root / rm-rf-system / mkfs /
+  sudo / dd-of-dev as advisories; `pretooluse-editwrite.mjs` advisories
+  cover `node_modules/` and the env-template allow-list
+  (`.env.example` / `.sample` / `.template` / `.dist` and lockfiles);
+  `git-workflow-guard.mjs` enumerates the Tier-3 HITL categories
+  (`gh pr`, `gh release`, `npm|bun|pnpm publish`, `vercel|wrangler|
+  flyctl deploy`, `--force`, `-f`, `rebase`, `push`) AND scans
+  commit-time secret paths (`.env`, `.envrc`, `secrets/`,
+  `credentials/`, `*.pem`, `*.key`); the contract cross-references
+  every enforcement surface.
+- `feature_list.json` — F-186 entry (passing, owner @brenda).
+- `DECISIONS.md` — F-186 row.
+
+**Verification matrix:**
+- `node --test scripts/__tests__/autonomy-contract.test.mjs` — 9/9.
+- `npm run test:node` — 586/586 across 48 suites (was 577 before;
+  +9 new consistency tests). The runner discovers the file via
+  `scripts/run-node-tests.mjs` (which globs `*.test.mjs` under
+  `scripts/`).
+- `cli/__tests__/settings-permissions.test.mjs` — still green (the
+  Tier-1 allow-list and the settings shape contract stay locked).
+- `git-workflow-guard.mjs` __tests__ (config/claude/hooks/__tests__/
+  git-workflow-guard.test.mjs and friends) — still green; the contract
+  test only checks for source-level pattern tokens, not for runtime
+  hook decisions, so it never duplicates the existing behavioural
+  suite.
+
+**Drift policy:** any change to `permissions.allow`, `permissions.deny`,
+`permissions.ask`, `defaultMode`, or to the Tier-3 / Tier-4 pattern
+lists in `permission-request.mjs`, `git-workflow-guard.mjs`,
+`pretooluse-bash.mjs`, or `pretooluse-editwrite.mjs` MUST land in the
+same commit as the matching edit to `AUTONOMY_CONTRACT.md` and the
+matching assertion update in
+`scripts/__tests__/autonomy-contract.test.mjs`. The test fails CI on
+the first mismatch.
+
 ## Complete — F-184 Selected-pool resolver (IMP-016)
 
 **Date:** 2026-08-27

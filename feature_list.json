@@ -982,11 +982,33 @@
       ],
       "created": "2026-08-27",
       "evidence": "2026-08-27: shipped in 4 commits on wt/todd-imp016-resolver (6c39c58 parseUserSelected profiles + defensive validation; 8c105f4 rankUserSelectedForRole + helpers scoreCapabilityProfile/evaluateRoleRequirements/compareRankedEntries/defaultTierHintForId; 3e72ecf resolveTierModel wire-up + 'userSelected-ranked' rationale; 6071f41 ledger + office-manager prompt). Merged to master at 90f99bc. 9 new vitest tests cover: missing userSelected, original-order preservation, profile vs no-profile ordering, capability-score tie-breaks, minContextTokens floor + reason string, defensive parseUserSelected on corrupt profiles (string/number/array/null + wrong-typed nested fields), defaultTierHintForId heuristic ordering, evaluateRoleRequirements multi-floor output, scoreCapabilityProfile extremes, compareRankedEntries order, resolveTierModel userSelected-pick branch, resolveTierModel userSelected-fallthrough branch. make test green across 48 suites (577/577). vcr.activated bumped 62 → 63."
+    },
+    {
+      "id": "F-186",
+      "title": "AUTONOMY_CONTRACT.md plus consistency test (IMP-001)",
+      "description": "Close IMP-001 from IMPROVEMENTS.md line 448 — the audit flagged 'important documentation and contract drift' because the settings template, the hook chain, the orchestrator prompt, and AGENTS.md each carried partially-overlapping autonomy prose. Land one canonical AUTONOMY_CONTRACT.md under docs/decisions/ that enumerates four tiers (Tier 1 full autonomy, Tier 2 advisory allow+🟡, Tier 3 HitL via permission-request.mjs + git-workflow-guard.mjs, Tier 4 blocked at the hook layer), declares the settings template contract (permissions.deny: [], permissions.ask: [], defaultMode: 'bypassPermissions', permissions.allow covers Tier 1), and cross-references every enforcement surface (permission-request.mjs, git-workflow-guard.mjs, pretooluse-bash.mjs, pretooluse-editwrite.mjs, simplify-guard.mjs, content-style-guard.mjs, agent-model-guard.mjs, AGENTS.md, and the consistency test itself). Add an automated documentation-as-code test scripts/__tests__/autonomy-contract.test.mjs that asserts the contract exists, settings.json satisfies the contract, every Tier-1 pattern is in permissions.allow, the destructive floor (force-push, rebase, rm-rf /, mkfs) is hard-denied by permission-request.mjs, the advisory hook chain (pretooluse-bash, pretooluse-editwrite, git-workflow-guard) enumerates the Tier-3/4 categories and the secret-path guard, and the contract cross-references every enforcement surface. Drift policy: any change to the allow/deny/ask lists or to the Tier-3/4 pattern lists MUST land in the same commit as the matching AUTONOMY_CONTRACT.md edit and the matching assertion update.",
+      "behavior": "node --test scripts/__tests__/autonomy-contract.test.mjs passes 9/9; npm run test:node passes 586/586 across 48 suites; cli/__tests__/settings-permissions.test.mjs still green (the Tier-1 allow-list and settings shape contract stay locked).",
+      "verification": "node --test scripts/__tests__/autonomy-contract.test.mjs (9/9); npm run test:node (586/586); git diff --check",
+      "state": "passing",
+      "passed": "2026-08-27",
+      "commit": null,
+      "category": "policy",
+      "layer": "docs",
+      "owner": "@brenda",
+      "scope": [
+        "docs/decisions/AUTONOMY_CONTRACT.md",
+        "scripts/__tests__/autonomy-contract.test.mjs",
+        "feature_list.json",
+        "DECISIONS.md",
+        "PROGRESS.md"
+      ],
+      "created": "2026-08-27",
+      "evidence": "2026-08-27: closed in this commit. AUTONOMY_CONTRACT.md (115 lines) declares the four-tier autonomy model, the settings template contract, and the cross-references list. scripts/__tests__/autonomy-contract.test.mjs (9 node:test cases) verifies the contract is non-empty and accepted, the settings template shape, every Tier-1 allow pattern, the hard-deny floor in permission-request.mjs (force-push, rebase, rm-rf /, mkfs), the advisory pattern enumeration in pretooluse-bash.mjs (rm-rf-root, rm-rf-system, mkfs, sudo, dd-of-dev), the env-template allow-list and node_modules/ advisory in pretooluse-editwrite.mjs, the Tier-3 HITL enumeration in git-workflow-guard.mjs (gh pr, gh release, npm|bun|pnpm publish, vercel|wrangler|flyctl deploy, --force, -f, rebase, push), and the commit-time secret-path guard in git-workflow-guard.mjs (.env, .envrc, secrets/, credentials/, *.pem, *.key). npm run test:node stays green across 48 suites (586/586, +9 vs 577 baseline)."
     }
   ],
   "vcr": {
-    "passing": 63,
-    "activated": 64,
-    "ratio": 0.984
+    "passing": 64,
+    "activated": 65,
+    "ratio": 0.985
   }
 }
