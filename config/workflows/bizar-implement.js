@@ -1,3 +1,5 @@
+import { dispatchAgent } from './lib/dispatch.js'
+
 export const meta = {
   name: 'bizar-implement',
   description: 'Run disjoint implementation lanes concurrently, barrier-merge their results, and synthesize an integration report without sequential pipeline stages',
@@ -38,7 +40,7 @@ const LANES = {
 }
 
 phase('Scope')
-const scoped = await agent(`Extract 2-6 disjoint edit lanes for: ${TOPIC}\nProvided scope: ${JSON.stringify(SCOPE)}\nEach lane owns a non-overlapping file scope. Shared root/config/lock files must have one owner. Return lanes with name/scope/task.`, { label: 'scope-extract', phase: 'Scope', schema: LANES })
+const scoped = await dispatchAgent(agent, 'scope-extractor', `Extract 2-6 disjoint edit lanes for: ${TOPIC}\nProvided scope: ${JSON.stringify(SCOPE)}\nEach lane owns a non-overlapping file scope. Shared root/config/lock files must have one owner. Return lanes with name/scope/task.`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'scope-extract', phase: 'Scope', schema: LANES })
 if (!scoped || !Array.isArray(scoped.lanes) || scoped.lanes.length === 0) {
   return { status: 'blocked', reason: 'Scope agent produced no lanes.' }
 }
@@ -49,9 +51,11 @@ if (scoped.lanes.length > lanes.length) {
 
 phase('Implement')
 const implementations = (await parallel(
-  lanes.map((lane, index) => () => agent(
+  lanes.map((lane, index) => () => dispatchAgent(
+    agent,
+    `lane-implementer-${index + 1}`,
     `Implement this owned lane for the topic "${TOPIC}".\nLane: ${JSON.stringify(lane)}\nDo not edit outside the listed scope. Do not revert sibling work. Add regression tests and run the smallest relevant checks. Return changed files, commands, exact results, and blockers. Do not commit, push, publish, or deploy.`,
-    { label: `implement:${index + 1}:${lane.name}`, phase: 'Implement', isolation: 'worktree' },
+    { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: `implement:${index + 1}:${lane.name}`, phase: 'Implement', isolation: 'worktree' },
   )),
 )).filter(Boolean)
 if (implementations.length === 0) {
@@ -59,13 +63,13 @@ if (implementations.length === 0) {
 }
 
 phase('Barrier')
-const merge = await agent(`Reconcile the lane outputs for topic "${TOPIC}" into one MERGE plan. Identify conflicts between worktrees, exact integration order, shared-file ownership, and any human approvals required.\nLanes: ${JSON.stringify(lanes)}\nImplementations: ${JSON.stringify(implementations)}`, { label: 'barrier-merge', phase: 'Barrier' })
+const merge = await dispatchAgent(agent, 'barrier-merger', `Reconcile the lane outputs for topic "${TOPIC}" into one MERGE plan. Identify conflicts between worktrees, exact integration order, shared-file ownership, and any human approvals required.\nLanes: ${JSON.stringify(lanes)}\nImplementations: ${JSON.stringify(implementations)}`, { role: 'implementer', risk: 'high', capabilities: ['structured-output', 'reasoning', 'architecture'], label: 'barrier-merge', phase: 'Barrier' })
 
 phase('Verify')
-const verify = await agent(`Re-check this MERGE plan against the original scope for topic "${TOPIC}". Reject it if any lane output is missing, any conflict is unresolved, or any test gate is unbounded. Return the verified plan plus the exact gating tests.\nScope: ${JSON.stringify(SCOPE)}\nMerge: ${String(merge)}`, { label: 'barrier-verify', phase: 'Verify' })
+const verify = await dispatchAgent(agent, 'barrier-verifier', `Re-check this MERGE plan against the original scope for topic "${TOPIC}". Reject it if any lane output is missing, any conflict is unresolved, or any test gate is unbounded. Return the verified plan plus the exact gating tests.\nScope: ${JSON.stringify(SCOPE)}\nMerge: ${String(merge)}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: 'barrier-verify', phase: 'Verify' })
 
 phase('Synthesis')
-const synthesis = await agent(`Produce the final integration report for topic "${TOPIC}". State exact integration order, remaining gates, evidence commands to run, and any required human approvals. Do not claim success without fresh command evidence.\nMerge: ${String(merge)}\nVerify: ${String(verify)}`, { label: 'integration-report', phase: 'Synthesis' })
+const synthesis = await dispatchAgent(agent, 'integration-reporter', `Produce the final integration report for topic "${TOPIC}". State exact integration order, remaining gates, evidence commands to run, and any required human approvals. Do not claim success without fresh command evidence.\nMerge: ${String(merge)}\nVerify: ${String(verify)}`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'integration-report', phase: 'Synthesis' })
 
 return {
   status: 'ready-for-integration',

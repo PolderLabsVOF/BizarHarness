@@ -1,3 +1,5 @@
+import { dispatchAgent } from './lib/dispatch.js'
+
 export const meta = {
   name: 'bizar-research',
   description: 'Research, plan, audit, and implement a bounded task across disjoint lanes with sequential pipeline verification',
@@ -51,20 +53,20 @@ const PLAN = {
 
 phase('Research')
 const research = (await parallel([
-  () => agent(`Repository research for: ${TOPIC}. Map existing implementations, tests, constraints, and reusable utilities. Do not edit.`, { label: 'repository-map', phase: 'Research', schema: BRIEF }),
-  () => agent(`Official-documentation research for: ${TOPIC}. Verify current external APIs/features from primary sources and identify version-sensitive constraints. Do not edit.`, { label: 'official-docs', phase: 'Research', schema: BRIEF }),
+  () => dispatchAgent(agent, 'repo-researcher', `Repository research for: ${TOPIC}. Map existing implementations, tests, constraints, and reusable utilities. Do not edit.`, { role: 'research-analyst', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'repository-map', phase: 'Research', schema: BRIEF }),
+  () => dispatchAgent(agent, 'docs-researcher', `Official-documentation research for: ${TOPIC}. Verify current external APIs/features from primary sources and identify version-sensitive constraints. Do not edit.`, { role: 'research-analyst', risk: 'medium', capabilities: ['structured-output', 'reasoning', 'web-fetch'], label: 'official-docs', phase: 'Research', schema: BRIEF }),
 ])).filter(Boolean)
 
 if (research.length === 0) return { status: 'blocked', reason: 'No research agent completed successfully.' }
 
 phase('Plan')
-const plan = await agent(`Design one reversible implementation for: ${TOPIC}\nResearch:\n${JSON.stringify(research)}\nReturn disjoint edit lanes. Shared root/config/lock files must have one owner. Include bounded tests and stop conditions.`, { label: 'plan', phase: 'Plan', schema: PLAN })
+const plan = await dispatchAgent(agent, 'plan-author', `Design one reversible implementation for: ${TOPIC}\nResearch:\n${JSON.stringify(research)}\nReturn disjoint edit lanes. Shared root/config/lock files must have one owner. Include bounded tests and stop conditions.`, { role: 'architect', risk: 'medium', capabilities: ['structured-output', 'reasoning', 'architecture'], label: 'plan', phase: 'Plan', schema: PLAN })
 if (!plan || !Array.isArray(plan.lanes) || plan.lanes.length === 0) {
   return { status: 'blocked', reason: 'Planning produced no implementation lanes.', research }
 }
 
 phase('Audit')
-const audit = await agent(`Adversarially review this plan for correctness, security, conflicting file ownership, missing regression tests, and unbounded retry loops. Return a corrected plan, not commentary. Topic: ${TOPIC}\nPlan: ${JSON.stringify(plan)}`, { label: 'plan-audit', phase: 'Audit', schema: PLAN })
+const audit = await dispatchAgent(agent, 'plan-auditor', `Adversarially review this plan for correctness, security, conflicting file ownership, missing regression tests, and unbounded retry loops. Return a corrected plan, not commentary. Topic: ${TOPIC}\nPlan: ${JSON.stringify(plan)}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning', 'architecture', 'security'], label: 'plan-audit', phase: 'Audit', schema: PLAN })
 const approved = audit || plan
 
 phase('Implement')
@@ -73,9 +75,11 @@ if (approved.lanes.length > lanes.length) {
   log(`Bounded implementation to 8 of ${approved.lanes.length} lanes; ${approved.lanes.length - lanes.length} lanes were not dispatched.`)
 }
 const implementation = await parallel(
-  lanes.map((lane, index) => () => agent(
+  lanes.map((lane, index) => () => dispatchAgent(
+    agent,
+    `lane-implementer-${index + 1}`,
     `Implement this owned lane for the topic "${TOPIC}".\nLane: ${JSON.stringify(lane)}\nDo not edit outside the listed scope. Do not revert sibling work. Add regression tests and run the smallest relevant checks. Return changed files, commands, exact results, and blockers. Do not commit, push, publish, or deploy.`,
-    { label: `implement:${index + 1}:${lane.name}`, phase: 'Implement', isolation: 'worktree' },
+    { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: `implement:${index + 1}:${lane.name}`, phase: 'Implement', isolation: 'worktree' },
   )),
 )
 const completed = implementation.filter(Boolean)
@@ -86,11 +90,13 @@ if (completed.length === 0) {
 phase('Verify')
 const reviews = await pipeline(
   completed,
-  (result, _original, index) => agent(
+  (result, _original, index) => dispatchAgent(
+    agent,
+    `reviewer-${index + 1}`,
     `Try to refute this implementation result for topic "${TOPIC}". Check correctness, security, scope, test evidence, and integration assumptions. Return only verified findings and required checks.\nResult: ${String(result)}`,
-    { label: `review:${index + 1}`, phase: 'Verify' },
+    { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: `review:${index + 1}`, phase: 'Verify' },
   ),
 )
-const final = await agent(`Synthesize a bounded integration and verification report for topic "${TOPIC}". Do not claim success without fresh command evidence. Identify conflicts between worktrees, exact integration order, remaining gates, and any required human approvals.\nPlan: ${JSON.stringify(approved)}\nImplementations: ${JSON.stringify(completed)}\nReviews: ${JSON.stringify(reviews.filter(Boolean))}`, { label: 'final-verification', phase: 'Verify' })
+const final = await dispatchAgent(agent, 'final-verifier', `Synthesize a bounded integration and verification report for topic "${TOPIC}". Do not claim success without fresh command evidence. Identify conflicts between worktrees, exact integration order, remaining gates, and any required human approvals.\nPlan: ${JSON.stringify(approved)}\nImplementations: ${JSON.stringify(completed)}\nReviews: ${JSON.stringify(reviews.filter(Boolean))}`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'final-verification', phase: 'Verify' })
 
 return { status: 'ready-for-integration', topic: TOPIC, research, plan: approved, implementation: completed, reviews: reviews.filter(Boolean), final }

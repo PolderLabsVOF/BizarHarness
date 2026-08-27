@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const workflowsDir = resolve(here, '..');
@@ -11,6 +11,9 @@ const SCRIPTS = [
   { name: 'bizar-research', file: 'bizar-research.js', args: { topic: 'stub-topic' } },
   { name: 'bizar-implement', file: 'bizar-implement.js', args: { topic: 'stub-topic', scope: ['a', 'b'] } },
   { name: 'bizar-debug', file: 'bizar-debug.js', args: { bug_id: 'BUG-1' } },
+  { name: 'ultracode', file: 'ultracode.js', args: { task: 'stub-task' } },
+  { name: 'ultracode-research', file: 'ultracode-research.js', args: { question: 'stub-question' } },
+  { name: 'ultracode-review', file: 'ultracode-review.js', args: { target: 'stub-target' }, minPhases: 1 },
 ];
 
 function loadSource(file) {
@@ -44,10 +47,26 @@ function extractMeta(source) {
   return new Function(`return (${source.slice(open, end + 1)});`)();
 }
 
+/**
+ * Strip `export const meta = { ... };` (including any leading `import`
+ * statements) from the workflow source. Static `import` is not valid in
+ * `new Function`, so we replace it with `await import(...)` calls inside
+ * the evaluated async IIFE. Returns `{ imports, body }` so the caller can
+ * resolve imports relative to the workflow file's directory.
+ */
 function extractBody(source) {
-  const start = source.search(/export\s+const\s+meta\s*=\s*\{/);
-  if (start < 0) throw new Error('meta export not found');
-  const open = source.indexOf('{', start);
+  const importRegex = /^\s*import\s+(?:\{([^}]+)\}|([^\s{]+))\s+from\s+['"]([^'"]+)['"];?\s*$/gm;
+  const imports = [];
+  for (const match of source.matchAll(importRegex)) {
+    const names = match[1]
+      ? match[1].split(',').map((n) => n.trim()).filter(Boolean)
+      : [match[2].trim()].filter(Boolean);
+    imports.push({ names, source: match[3] });
+  }
+
+  const metaStart = source.search(/export\s+const\s+meta\s*=\s*\{/);
+  if (metaStart < 0) throw new Error('meta export not found');
+  const open = source.indexOf('{', metaStart);
   let depth = 0;
   let inString = null;
   let escape = false;
@@ -68,9 +87,26 @@ function extractBody(source) {
     }
   }
   if (end < 0) throw new Error('meta braces unbalanced');
-  const after = source.slice(end + 1);
-  const newlineIdx = after.indexOf('\n');
-  return after.slice(newlineIdx >= 0 ? newlineIdx + 1 : 0).trim();
+
+  // Body: everything after the meta export. Static imports were already
+  // captured into `imports`; here we strip them from the body so the
+  // `new Function` body is plain code. We then prepend the dynamic
+  // equivalents (resolved at runtime by the caller).
+  const metaEnd = end + 1;
+  let body = source.slice(metaEnd);
+  body = body.replace(importRegex, '').trim();
+
+  // Rewrite static imports to dynamic imports so they are valid inside
+  // `new Function`. The caller passes the resolved bindings as runtime
+  // parameters (already pre-resolved by `resolveImports`); these `const`
+  // lines remain in the body for when the workflow script is run via a
+  // real `import()` (e.g. the production runtime or the capture test).
+  const dynamicImportLines = imports.map(({ names, source: importSource }) => {
+    const namesList = names.join(', ');
+    return `const { ${namesList} } = await import(${JSON.stringify(importSource)});`;
+  });
+
+  return { imports, body };
 }
 
 function makeRuntime(args) {
@@ -122,6 +158,15 @@ function makeRuntime(args) {
         verification: ['stub verification'],
       };
     }
+    if (label === 'repository' || label === 'documentation' || label === 'architecture' || label === 'completeness-critic') {
+      return {
+        claims: [{ claim: 'stub claim', source: 'stub/source', confidence: 'medium' }],
+        gaps: ['stub gap'],
+      };
+    }
+    if (label === 'synthesis') {
+      return { brief: 'stub synthesis brief', summary: 'stub summary' };
+    }
     return { stub: true, label, prompt };
   }
 
@@ -146,15 +191,38 @@ function makeRuntime(args) {
   return { calls, agent, parallel, pipeline, phase, log, args };
 }
 
+/**
+ * Resolve all static `import` statements to their actual bindings.
+ * Returns a map of `{ localName: importedValue }`. Imports resolve
+ * relative to `workflowsDir`, NOT to the test runner, because the
+ * import paths in the workflow source are written relative to
+ * `config/workflows/`.
+ */
+async function resolveImports(imports) {
+  const resolved = {};
+  const baseUrl = pathToFileURL(workflowsDir + '/').href;
+  for (const { names, source } of imports) {
+    const url = new URL(source, baseUrl).href;
+    const mod = await import(url);
+    for (const name of names) resolved[name] = mod[name];
+  }
+  return resolved;
+}
+
 async function runWorkflow(file, args) {
   const source = loadSource(file);
-  const body = extractBody(source);
+  const { imports, body } = extractBody(source);
+  const bindings = await resolveImports(imports);
   const runtime = makeRuntime(args);
   const fn = new Function(
     'args', 'agent', 'pipeline', 'parallel', 'phase', 'log',
+    ...Object.keys(bindings),
     `return (async () => { ${body} })();`,
   );
-  const result = await fn(runtime.args, runtime.agent, runtime.pipeline, runtime.parallel, runtime.phase, runtime.log);
+  const result = await fn(
+    runtime.args, runtime.agent, runtime.pipeline, runtime.parallel, runtime.phase, runtime.log,
+    ...Object.values(bindings),
+  );
   return { result, calls: runtime.calls };
 }
 
@@ -166,7 +234,8 @@ for (const script of SCRIPTS) {
     assert.ok(meta.description.length > 0, 'description must be non-empty');
     assert.equal(typeof meta.whenToUse, 'string');
     assert.ok(Array.isArray(meta.phases));
-    assert.ok(meta.phases.length >= 3, 'phases must list >=3 stages');
+    const minPhases = script.minPhases ?? 3;
+    assert.ok(meta.phases.length >= minPhases, `phases must list >=${minPhases} stages (saw ${meta.phases.length})`);
     for (const phase of meta.phases) {
       assert.equal(typeof phase.title, 'string');
       assert.equal(typeof phase.detail, 'string');
@@ -236,6 +305,7 @@ test('all workflows: phase() calls fire in declared order', async () => {
   for (const script of SCRIPTS) {
     const { calls } = await runWorkflow(script.file, script.args);
     const phases = calls.filter((c) => c.primitive === 'phase').map((c) => c.name);
-    assert.ok(phases.length >= 3, `${script.name}: expected >=3 phase() calls, saw ${phases.length}`);
+    const minPhases = script.minPhases ?? 3;
+    assert.ok(phases.length >= minPhases, `${script.name}: expected >=${minPhases} phase() calls, saw ${phases.length}`);
   }
 });
