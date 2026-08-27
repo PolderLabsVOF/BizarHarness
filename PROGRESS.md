@@ -5,6 +5,29 @@
 ## Complete — F-188 Central dispatch-model selector (IMP-013)
 
 **Date:** 2026-08-27
+**Merged at:** `d3134c7` (merge of `wt/todd-imp013-dispatch-selector`).
+**Branch:** `wt/todd-imp013-dispatch-selector` (4 commits: `a4906c0` refactor + index/failover threading, `ce94578` 19+7+2 tests + drift guard, `6a21b12` ledger close, `f8dd674` SHA backfill).
+**Merged at:** `d3134c7`.
+**WIP holder:** `@mike` — F-188 lands with `wip: 1` per the ledger invariant; IMP-014 (workflow/team routing integration) is the next dispatch.
+
+**Master verification:**
+- `npm run test:node` — **595/595 passing** across 48 suites.
+- `npx vitest run --root packages/sdk` — **362/362 passing** across 27 test files (includes 28 new F-188 cases: 19 selector + 7 integration + 2 drift).
+- `npx tsc --noEmit` — exit 0, clean types.
+- F-188 drift guard verified by probe: injecting `evaluateRoleRequirements({})` into `codemod-intent.ts` fails CI with the exact "Central selector bypass detected" message; reverting restores green.
+
+**Files:**
+- `packages/sdk/src/router/select-dispatch-model.ts` (NEW, 520 lines) — pure selector.
+- `packages/sdk/src/router/index.ts` — re-exports + `decideAgentWith` runs the F-188 selector at step 4 when `role + selectedProfiles` are both supplied; legacy precedence chain preserved and mints a UUID for parity.
+- `packages/sdk/src/router/failover.ts` — `PickFailoverInput.primaryDecisionId` + `FailoverVerdict.routingDecisionId` round-trip the F-188 decision ID.
+- `packages/sdk/src/router/failover-mirror.mjs` — JS mirror stays byte-identical.
+- `packages/sdk/tests/select-dispatch-model.test.mjs` (NEW, 19 cases) — verbatim ladder pins.
+- `packages/sdk/tests/select-dispatch-model-integration.test.mjs` (NEW, 7 cases) — `decideAgentWith` end-to-end.
+- `packages/sdk/tests/select-dispatch-model-drift.test.mjs` (NEW, 2 cases) — bypass detection.
+
+**Ledger:** F-188 added (passing, source `a4906c0`, merge `d3134c7`, wip=1 @mike). vcr: passing=67, activated=68, ratio=0.985.
+
+**Date:** 2026-08-27
 **Branch:** `wt/todd-imp013-dispatch-selector`
 **SHAs:** `a4906c0` (feat: select-dispatch-model.ts + index/failover threading + mirror), `ce94578` (test: 19 + 7 + 2 cases + drift guard), with this ledger commit.
 **WIP holder:** none (F-176 continues to hold `wip: 1` per ledger invariant).
