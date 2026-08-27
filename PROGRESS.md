@@ -2,6 +2,32 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-187 Canonical tier taxonomy (IMP-015)
+
+**Date:** 2026-08-27
+**Merged at:** `8689190` (merge commit); follow-up SHA backfill at `fbc487e`.
+**Branch:** `worktree-agent-af22e0d2791d76452` (3 commits: `a945e8b` refactor, `9fcf4a1` drift guard, `bbad0f0` ledger).
+**WIP holder:** none (F-176 continues to hold `wip: 1`; F-187 lands as `passing` because the refactor + drift test + ledger are complete).
+
+**Objective:** Close IMP-015 from `IMPROVEMENTS.md` line 868 — "Canonical
+tier taxonomy | No `flash/mid/expensive` vs six-tier mismatch remains."
+Land the migration from the legacy 3-tier `ModelTier` (`flash` / `mid` /
+`expensive`) in `model-router.ts` to the canonical 6-tier `BizarTier`
+(`premium` / `high` / `mid-design` / `default` / `mid` / `budget`)
+exported by `agent-model-registry.ts`, plus a drift guard that fails
+CI on the first reintroduction of the legacy vocabulary.
+
+**Merged verification on master:**
+- `npm run test:node` — **595/595 passing** across 48 suites.
+- `npx vitest run packages/sdk/tests/tier-taxonomy-drift.test.mjs packages/sdk/tests/model-router.test.mjs packages/sdk/tests/router-orchestrator.test.mjs` — **382/382 passing** across 34 SDK test files (covers the IMP-015 acceptance trio plus the broader SDK surface).
+- `npx tsc --noEmit` — exit 0, clean types.
+
+**Drift policy:** any reintroduction of the legacy `ModelTier` alias,
+`flash` / `expensive` literals, or any other 3-tier-vocabulary surface
+into `packages/sdk/src/` MUST land in the same commit as the matching
+edit to `BizarTier` (or its successor taxonomy) and the matching
+assertion update in `tier-taxonomy-drift.test.mjs`.
+
 ## Complete — F-186 AUTONOMY_CONTRACT.md + consistency test (IMP-001)
 
 **Date:** 2026-08-27
