@@ -1,7 +1,8 @@
 # BizarHarness Autonomy and Self-Improvement Audit
 
 **Audit date:** 2026-08-27  
-**Audited revision:** `bc3dffceb3f6c44c9b08ce72dfbdaa4da7dc4708` (`master`)  
+**Initial audited revision:** `bc3dffceb3f6c44c9b08ce72dfbdaa4da7dc4708` (`master`)  
+**Model-selection follow-up:** 2026-08-27  
 **Target:** a fully autonomous, self-improving development harness that completes useful engineering work with minimal human interaction  
 **Non-negotiable design constraint:** agents retain full local tool permissions and run non-interactively. Improvements in this document must not restore routine permission prompts or reduce the local development tool surface.
 
@@ -503,3 +504,390 @@ The recommended direction is:
 6. monitor outcomes and roll back automatically.
 
 When those mechanisms are implemented and validated with representative benchmarks and fault injection, BizarHarness can credibly claim to be a fully autonomous, self-improving development harness with little human interaction.
+
+
+---
+
+## Model Selection Audit
+
+**Audit date:** 2026-08-27  
+**Revision inspected:** `274c7f59e437e2728f803d2371c0afab0ef73583` and its model-routing sources  
+**Required behavior:** Mike must select the best suitable model from the operator's configured model pool for every subagent and team-member dispatch. Selection must be automatic, task-specific, observable, outcome-driven, and consistent across direct Agent calls and native workflows.
+
+### Verdict
+
+**The required behavior is documented but is not reliably implemented end to end.**
+
+Direct dispatches made manually by Mike can include a model chosen according to the instructions in `office-manager.md`. However, the primary native workflows—`bizar-research.js`, `bizar-implement.js`, and `bizar-debug.js`—invoke `agent(prompt, options)` without a selected model, requested tier, named agent role, routing decision ID, or model-selection context. Those calls therefore have no executable connection to Mike's documented per-dispatch model-selection decision and can inherit the active session model.
+
+The model-routing implementation is split across incompatible components:
+
+1. `config/claude/model-router.json` defines six tiers: `budget`, `mid`, `default`, `mid-design`, `high`, and `premium`.
+2. `office-manager.md` asks Mike to classify each task and manually choose from `userSelected.models` and `tierHints`.
+3. `packages/sdk/src/router/model-router.ts` independently learns among three different tiers: `flash`, `mid`, and `expensive`.
+4. `packages/sdk/src/router/agent-model-registry.ts` resolves static tier candidates intersected with an optional availability list, but does not implement the documented user-selected/tier-hint choice.
+5. The workflow runtime calls do not consume either router's decision.
+6. `agent-model-guard.mjs` is advisory and returns `permissionDecision: "allow"`; despite strings saying “blocked,” it neither selects a better model nor blocks an invalid one.
+
+Consequently, Bizar currently has model-selection policy, configuration, and isolated routing utilities, but no single authoritative execution path that guarantees the best configured model reaches every dispatched worker.
+
+### What works
+
+- The operator can maintain an explicit allow-pool in `userSelected.models`.
+- `tierHints` can attach intended tiers to model IDs.
+- Agent definitions are model-agnostic, which is necessary for task-specific selection.
+- Role defaults and task-complexity guidance exist.
+- The SDK can load the registry, resolve static candidates, fingerprint assignment snapshots, and fall back to session inheritance.
+- The three-tier bandit persists learning state.
+- Tests cover configuration parsing, static candidate intersection, snapshot integrity, picker persistence, and router algorithms.
+- Avoiding blind alias/provider retry loops is a good reliability property.
+
+These foundations should be retained, but unified.
+
+### P0 — Native workflows bypass task-specific model selection
+
+Every audited `agent(...)` call in the native workflow scripts omits `model` and `tier`. Mike launches the workflow, but does not make each nested dispatch itself. Therefore the statement “Mike selects the cheapest sufficient model before each dispatch” is not enforceable for the main execution path.
+
+Team members have the same problem: team/workflow fan-out defines tasks and phases but does not carry a resolved model assignment into each member spawn.
+
+**Required improvement**
+
+Make model routing a mandatory runtime primitive, not a prompt convention. The workflow engine's `agent()` wrapper should perform:
+
+```ts
+const decision = await selectDispatchModel({
+  task: prompt,
+  role: options.role,
+  phase: options.phase,
+  risk: options.risk,
+  capabilities: options.capabilities,
+  budget: workflowBudget,
+  runId,
+});
+
+return agent(prompt, {
+  ...options,
+  model: decision.modelId ?? undefined,
+  routingDecisionId: decision.id,
+});
+```
+
+Workflow authors should declare semantic requirements, not raw model IDs:
+
+```js
+agent(prompt, {
+  role: 'research-analyst',
+  phase: 'Research',
+  capabilities: ['long-context', 'tool-use', 'technical-research'],
+  risk: 'medium',
+});
+```
+
+The central wrapper then selects and injects the model. Direct Agent calls and team-member spawns must use the same wrapper.
+
+**Acceptance gate**
+
+An E2E test with at least two configured models must prove that:
+
+- a mechanical edit receives the best qualifying budget model;
+- architectural/security work receives the strongest qualified model;
+- UI work receives a design-capable model;
+- every nested workflow and team dispatch contains the expected `model`;
+- the decision is recorded before dispatch;
+- no workflow silently inherits merely because its author omitted `model`.
+
+### P0 — Two incompatible tier taxonomies exist
+
+The adaptive `ModelRouter` emits `flash | mid | expensive`, while the canonical registry uses six tiers. There is no authoritative mapping from `flash` to `budget`, from `expensive` to `high` or `premium`, or from any three-tier output to `mid-design`. A recommendation such as `[TASK_MODEL_RECOMMENDATION] expensive` cannot deterministically select a model from the six-tier user configuration.
+
+**Required improvement**
+
+Delete the duplicate taxonomy or make it an internal abstraction with a tested, explicit mapping. Prefer one canonical type everywhere:
+
+```ts
+type ModelTier =
+  | 'budget'
+  | 'mid'
+  | 'default'
+  | 'mid-design'
+  | 'high'
+  | 'premium';
+```
+
+The configuration schema, CLI picker, SDK resolver, workflow runtime, telemetry, snapshots, tests, and documentation must import or generate this same definition.
+
+If adaptive learning remains, it should rank concrete eligible models within the canonical capability/risk constraints, not invent a parallel tier vocabulary.
+
+### P0 — The registry resolver does not implement the user-selected policy
+
+`resolveTierModel()` chooses the first static `tiers[tier].models` entry found in `availableModelIds`. It does not use `userSelected.models` or model-to-tier `tierHints` to build the eligible pool. A user-selected model that is not also present in the repository's static tier lists can be accepted by the picker and advisory guard yet never be selected by the SDK resolver.
+
+The fallback described in `office-manager.md` is also ambiguous. It says to choose the cheapest model when no exact tier matches, while its concrete example says an unconfigured tier should inherit the session. These yield different behavior.
+
+**Required improvement**
+
+Implement one pure selector with an explicit contract:
+
+```ts
+selectDispatchModel(input: {
+  task: TaskFeatures;
+  role?: AgentRole;
+  phase?: WorkflowPhase;
+  selectedModels: ModelProfile[];
+  activeSessionModel?: string;
+  budget: BudgetState;
+  health: ProviderHealth;
+  history: OutcomeHistory;
+}): ModelDecision
+```
+
+Eligibility must start with `userSelected.models`. Static tier lists may provide defaults and capability metadata, but must never exclude an operator-selected model solely because its ID is absent from the shipped list.
+
+Define fallback order precisely:
+
+1. exact capability and minimum-quality match from the selected pool;
+2. next stronger selected model when the exact tier is absent;
+3. strongest healthy selected model when task risk is high;
+4. cheapest healthy selected model when task risk is low;
+5. active session inheritance only when the selected pool is empty or no selected model is dispatchable.
+
+Never downgrade security, architecture, adversarial verification, or repeated-failure work merely because a cheaper exact tier is absent.
+
+### P0 — “Best model” is not represented by the current data model
+
+A single tier hint cannot express model strengths. Models differ in coding, planning, visual judgment, long context, tool use, latency, reliability, and price. The current suffix/family heuristic can misclassify unfamiliar or newly released models, and a hand-entered tier does not establish which model is best for a specific task.
+
+**Required improvement**
+
+Replace tier-only hints with validated model profiles:
+
+```json
+{
+  "id": "provider/model",
+  "enabled": true,
+  "capabilities": {
+    "coding": 0.92,
+    "architecture": 0.88,
+    "security": 0.83,
+    "research": 0.80,
+    "visual": 0.30,
+    "longContext": true,
+    "toolUse": 0.91
+  },
+  "limits": {
+    "contextTokens": 200000,
+    "maxOutputTokens": 32000
+  },
+  "economics": {
+    "inputPerMillion": 0,
+    "outputPerMillion": 0,
+    "latencyClass": "medium"
+  },
+  "source": "operator|benchmark|provider",
+  "confidence": 0.85
+}
+```
+
+The “best” model should mean the highest expected probability of meeting the task's definition of done, subject to hard capability, health, context-window, and budget constraints. Cost should break ties or constrain selection; it should not dominate correctness for high-risk work.
+
+A suitable initial score is:
+
+```text
+utility =
+  predicted_success
+  - lambda_cost * normalized_cost
+  - lambda_latency * normalized_latency
+  - lambda_failure * provider_failure_risk
+```
+
+Apply hard floors before scoring. For example, a security review may require `security >= 0.8`; a 150k-token repository task must require a sufficient context strategy; a visual task must require visual/design capability.
+
+### P1 — Adaptive learning is not connected to actual model dispatch outcomes
+
+The Thompson router records only a Boolean success per coarse tier. It does not learn per concrete model, task class, role, phase, provider, repository language, context size, cost, latency, or failure type. No audited workflow call records a model decision and later feeds its verified outcome back into this router.
+
+The Q-learning component selects agents, not models. Its `recordOutcome(agent, success)` updates every state bucket for the selected agent rather than only the bucket associated with the completed task, contaminating unrelated task classes. Its cache key is only a 64-bucket hash, so distinct tasks collide and reuse decisions.
+
+**Required improvement**
+
+- Record outcome against the exact decision ID and concrete model.
+- Update only the task/context state that produced the decision.
+- Use verified result signals: tests, review severity, retry count, wall time, tokens, cost, and rollback—not assistant self-report.
+- Maintain separate posteriors by model and meaningful task class.
+- Use contextual-bandit exploration only for low/medium-risk tasks.
+- Disable exploration for security-critical, irreversible, repeated-failure, and evaluator roles.
+- Run new routing policies in shadow mode before they control dispatch.
+- Decay stale model evidence after model/provider revisions.
+- Quarantine a model automatically after repeated transport or correctness failures.
+
+### P1 — Availability and health handling are incomplete
+
+User-selected models bypass live discovery by design. That is acceptable for configuration, but it does not prove that a model is currently reachable. With `maxDispatchModelAttempts: 1` and no controlled failover, a transiently unavailable selected model can fail a worker even when another selected model is suitable.
+
+Avoiding arbitrary alias cycling is correct; deterministic failover among explicitly selected models is different and should be supported.
+
+**Required improvement**
+
+- Probe/cache model health before workflow fan-out.
+- Distinguish invalid model, authentication failure, rate limit, timeout, context overflow, provider outage, and model-quality failure.
+- Permit one deterministic failover to the next ranked model in `userSelected.models` for transport/availability failures only.
+- Never retry the same failed request through uncontrolled aliases.
+- Preserve the original and fallback decisions in telemetry.
+- Recalculate remaining workflow budget before fallback.
+- Use circuit breakers to avoid dispatching ten parallel members to a known-unhealthy model.
+
+### P1 — The advisory model guard contradicts its documentation
+
+`agent-model-guard.mjs` returns `permissionDecision: "allow"` for out-of-pool or unavailable models while its messages say “blocked.” `office-manager.md` also says the guard “blocks any other model override.” It does not.
+
+Full permissions should remain, but model-policy integrity should not depend on permission prompts or advisory text.
+
+**Required improvement**
+
+Enforce selection structurally in the dispatch wrapper:
+
+- the wrapper accepts semantic requirements;
+- only the wrapper emits the final model ID;
+- raw workflow model overrides are ignored or normalized unless explicitly marked as an operator override;
+- selection failures are recorded and inherit according to the canonical fallback contract;
+- the hook remains advisory and accurately says so.
+
+This preserves full permissions while making the normal orchestration path correct by construction.
+
+### P1 — Assignment snapshots are not sufficient
+
+`createRunAssignmentSnapshot()` can fingerprint role-to-model decisions, but current snapshots are agent-name keyed. Multiple members with the same role but different tasks collapse into one entry, and snapshots do not include the task features, workflow phase, selected-pool digest, capability profile, budget state, health state, or scoring breakdown.
+
+**Required improvement**
+
+Record one immutable `ModelDecision` per dispatch:
+
+- decision ID, run ID, workflow ID, task ID, parent agent, role, and phase;
+- normalized task-feature vector and risk classification;
+- candidate pool and reasons for exclusions;
+- selected model and fallback ranking;
+- profile/config/version digests;
+- expected quality, cost, latency, and utility;
+- actual provider/model returned;
+- token, cost, latency, retry, and outcome evidence;
+- whether selection came from policy, learning, operator override, or session inheritance.
+
+This record should feed both the global evidence bundle and the learning system.
+
+### P1 — Tests prove components, not the required behavior
+
+The existing tests demonstrate registry parsing, model-list handling, static tier resolution, bandit behavior, and workflow phase/fan-out structure. The workflow test stub records only `label` and `phase`; it does not assert `role`, `tier`, `model`, or routing decision IDs. There is no E2E proof that Mike or a native workflow sends the selected model to a real subagent or team member.
+
+**Required improvement**
+
+Add a model-selection test matrix covering:
+
+| Scenario | Expected result |
+| --- | --- |
+| Empty selected pool | Inherit active session model and record reason. |
+| One selected model | Use it for all compatible dispatches. |
+| Budget + premium models | Mechanical task uses budget; architecture uses premium. |
+| UI-capable + coding-capable models | UI lane uses visual model; backend lane uses coding model. |
+| Exact tier absent | Deterministic stronger/safer fallback, not arbitrary inheritance. |
+| Model unhealthy | One ranked failover within selected pool. |
+| Context too large | Exclude insufficient model before dispatch. |
+| Repeated task failure | Escalate quality tier on the next bounded attempt. |
+| Parallel workflow | Every member gets an independent decision. |
+| Agent team | Every teammate spawn carries its selected model. |
+| Invalid raw override | Wrapper normalizes it and records the event. |
+| Router restart | Learned state and decision provenance survive. |
+| High-risk task | Exploration disabled. |
+| Candidate model regression | Model is quarantined and prior policy restored. |
+
+The E2E harness must capture the actual Agent tool payload or provider request and assert the resolved model ID—not merely inspect a recommendation tag.
+
+### Recommended unified selection flow
+
+```text
+User-selected model pool
+        |
+Model profiles + live health + prices
+        |
+Task feature extraction
+(role, phase, risk, capabilities, context, budget)
+        |
+Hard eligibility filters
+        |
+Outcome-informed ranking
+        |
+Per-dispatch ModelDecision
+        |
+Agent / workflow / team spawn with model ID
+        |
+Verified outcome + cost + latency
+        |
+Router learning, health update, and audit evidence
+```
+
+### Model-selection implementation roadmap
+
+#### MS Phase 0 — Repair the execution path
+
+1. Introduce the central `selectDispatchModel()` API.
+2. Use the six-tier canonical vocabulary everywhere.
+3. Make the workflow `agent()` wrapper and team spawn wrapper call it automatically.
+4. Add role, phase, capability, and risk metadata to every workflow dispatch.
+5. Record a per-dispatch `ModelDecision`.
+6. Add E2E payload assertions.
+
+**Exit criterion:** every direct, workflow, and team dispatch is proven to carry the expected model.
+
+#### MS Phase 1 — Model profiles and deterministic ranking
+
+1. Extend the picker to collect or infer model profiles.
+2. Validate context, tool-use, modality, and provider constraints.
+3. Implement quality-first multi-objective ranking.
+4. Define exact stronger/safer and session-inheritance fallbacks.
+5. Add health-aware deterministic failover.
+6. Expose `bizar models explain <task>`.
+
+**Exit criterion:** the same inputs yield an explainable, deterministic ranked candidate list.
+
+#### MS Phase 2 — Outcome-driven adaptation
+
+1. Link verified outcomes to exact model decisions.
+2. Learn per concrete model and task class.
+3. Add confidence intervals and minimum sample counts.
+4. Shadow-test learned ranking changes.
+5. Canary routing-policy changes.
+6. Automatically quarantine regressions and restore the known-good policy.
+
+**Exit criterion:** historical verified outcomes measurably improve model choice without increasing failure or cost beyond configured limits.
+
+### Additional backlog
+
+| ID | Priority | Deliverable | Acceptance test |
+| --- | --- | --- | --- |
+| IMP-013 | P0 | Central dispatch-model selector | All dispatch surfaces import one selector. |
+| IMP-014 | P0 | Workflow/team routing integration | Captured nested Agent payloads contain expected models. |
+| IMP-015 | P0 | Canonical tier taxonomy | No `flash/mid/expensive` vs six-tier mismatch remains. |
+| IMP-016 | P0 | User-selected-aware resolver | Arbitrary selected IDs with valid profiles are selectable. |
+| IMP-017 | P1 | Model capability profiles | Eligibility filters reject incapable/context-limited models. |
+| IMP-018 | P1 | Per-dispatch model evidence | Decision and verified outcome are linked by immutable ID. |
+| IMP-019 | P1 | Health-aware selected-pool failover | Provider outage causes one deterministic ranked failover. |
+| IMP-020 | P1 | Contextual outcome learner | Updates affect only the relevant model/task state. |
+| IMP-021 | P1 | Routing shadow/canary mode | Harmful learned policy cannot become global immediately. |
+| IMP-022 | P1 | Model-selection E2E matrix | Direct, workflow, and team selection cases pass. |
+
+### Model-selection success metrics
+
+- 100% of subagent and team-member dispatches have a recorded model decision.
+- 100% of non-inherited dispatches use a model from the operator-selected pool.
+- 100% agreement between recorded decision and actual provider model.
+- Zero silent fallback or provider substitution.
+- Zero high-risk dispatches using exploration.
+- At least 95% correct task-to-model classification on the frozen routing corpus.
+- A measurable quality-per-cost improvement over always inheriting the session model.
+- No statistically significant quality regression versus always using the strongest selected model.
+- Deterministic replay for identical config, health snapshot, budget, task features, and router-policy version.
+
+### Final model-selection assessment
+
+The architecture has most of the pieces needed for intelligent selection, but the pieces currently operate beside one another. The immediate requirement is to connect model choice to the actual workflow and team dispatch payload. Until that E2E path exists, model recommendations and tier-learning results are advisory metadata rather than reliable orchestration behavior.
+
+The intended end state is not a fixed model per agent. It is one centralized, outcome-informed selector that chooses the best eligible operator-selected model for each concrete subtask, automatically applies that choice to every dispatch surface, learns from independently verified outcomes, and can explain every decision.
