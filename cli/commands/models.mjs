@@ -81,6 +81,143 @@ export function resolveRouterPath(cwd) {
 
 // ── Discovery ────────────────────────────────────────────────────────────────
 
+export const MODELS_DEV_CATALOG_URL = 'https://models.dev/models.json';
+
+/**
+ * Fetch provider-agnostic capability metadata from Models.dev. This is
+ * best-effort enrichment: gateway discovery remains authoritative for which
+ * model IDs are dispatchable.
+ */
+export async function fetchModelsDevCatalog({
+  fetchFn,
+  timeoutMs = 5000,
+  url = MODELS_DEV_CATALOG_URL,
+} = {}) {
+  const doFetch = fetchFn || globalThis.fetch;
+  if (typeof doFetch !== 'function') throw new Error('no fetch implementation available in this runtime');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await doFetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Models.dev returned ${res.status} ${res.statusText}`);
+    const body = await res.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new Error('Models.dev returned an invalid catalogue');
+    }
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function flattenModelsDevCatalog(catalog) {
+  const entries = new Map();
+  const add = (id, value) => {
+    if (typeof id !== 'string' || !id.trim() || !value || typeof value !== 'object' || Array.isArray(value)) return;
+    entries.set(id.trim().toLowerCase(), { id: id.trim(), ...value });
+  };
+  for (const [key, value] of Object.entries(catalog || {})) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const looksLikeModel = 'name' in value || 'family' in value || 'tool_call' in value
+      || 'reasoning' in value || 'limit' in value || 'modalities' in value;
+    if (looksLikeModel) add(key, value);
+    if (value.models && typeof value.models === 'object' && !Array.isArray(value.models)) {
+      for (const [modelId, model] of Object.entries(value.models)) {
+        add(modelId.includes('/') ? modelId : `${key}/${modelId}`, model);
+      }
+    }
+  }
+  return entries;
+}
+
+function normalizedModelIdentity(id) {
+  const raw = String(id || '').trim().toLowerCase();
+  const slash = raw.indexOf('/');
+  const provider = slash >= 0 ? raw.slice(0, slash) : '';
+  const model = slash >= 0 ? raw.slice(slash + 1) : raw;
+  const normalizedProvider = provider.replace(/^claude-/, '').replace(/^(cx|oc)$/, '');
+  return {
+    full: raw,
+    provider: normalizedProvider,
+    model: model.replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, ''),
+  };
+}
+
+function toCapabilityProfile(gatewayId, match, matchType, confidence) {
+  const limit = match.limit && typeof match.limit === 'object' ? match.limit : {};
+  const modalities = match.modalities && typeof match.modalities === 'object' ? match.modalities : {};
+  return {
+    gatewayId,
+    baseModel: match.id,
+    name: typeof match.name === 'string' ? match.name : match.id,
+    family: typeof match.family === 'string' ? match.family : null,
+    capabilities: {
+      attachment: match.attachment === true,
+      reasoning: match.reasoning === true,
+      toolCall: match.tool_call === true,
+      structuredOutput: match.structured_output === true,
+      temperature: match.temperature !== false,
+      inputModalities: Array.isArray(modalities.input) ? modalities.input : ['text'],
+      outputModalities: Array.isArray(modalities.output) ? modalities.output : ['text'],
+    },
+    limits: {
+      contextTokens: Number.isFinite(limit.context) ? limit.context : null,
+      inputTokens: Number.isFinite(limit.input) ? limit.input : null,
+      outputTokens: Number.isFinite(limit.output) ? limit.output : null,
+    },
+    releaseDate: typeof match.release_date === 'string' ? match.release_date : null,
+    lastUpdated: typeof match.last_updated === 'string' ? match.last_updated : null,
+    metadata: {
+      source: 'models.dev',
+      sourceUrl: MODELS_DEV_CATALOG_URL,
+      retrievedAt: new Date().toISOString(),
+      matchType,
+      confidence,
+    },
+  };
+}
+
+/**
+ * Enrich gateway-discovered models with Models.dev profiles. Exact IDs win.
+ * A normalized/suffix match is accepted only when unique; ambiguous models
+ * remain unmatched rather than receiving guessed capabilities.
+ */
+export function enrichModelsWithCapabilities(candidates, catalog) {
+  const entries = flattenModelsDevCatalog(catalog);
+  const all = [...entries.values()];
+  return (Array.isArray(candidates) ? candidates : []).map((candidate) => {
+    const gatewayId = candidate.id;
+    const exact = entries.get(String(gatewayId).toLowerCase());
+    if (exact) {
+      return { ...candidate, profile: toCapabilityProfile(gatewayId, exact, 'exact-id', 0.9) };
+    }
+    const wanted = normalizedModelIdentity(gatewayId);
+    const matches = all.filter((entry) => {
+      const found = normalizedModelIdentity(entry.id);
+      if (!wanted.model || found.model !== wanted.model) return false;
+      return !wanted.provider || !found.provider || found.provider === wanted.provider;
+    });
+    if (matches.length === 1) {
+      return { ...candidate, profile: toCapabilityProfile(gatewayId, matches[0], 'unique-normalized-id', 0.7) };
+    }
+    return { ...candidate, profile: null };
+  });
+}
+
+function capabilityLabel(profile) {
+  if (!profile) return 'metadata unavailable';
+  const caps = [];
+  if (profile.capabilities.reasoning) caps.push('reasoning');
+  if (profile.capabilities.toolCall) caps.push('tools');
+  if (profile.capabilities.structuredOutput) caps.push('structured');
+  if (profile.capabilities.inputModalities.some((m) => m !== 'text')) caps.push('multimodal');
+  if (profile.limits.contextTokens) caps.push(`${Math.round(profile.limits.contextTokens / 1000)}k ctx`);
+  return caps.length > 0 ? caps.join(', ') : 'basic text';
+}
+
 /**
  * Fetch `/models` from the gateway.
  *
@@ -217,7 +354,7 @@ export function loadRouter(routerPath) {
  * @param {{ routerPath: string, models: string[], tierHints?: Record<string,string>, source?: string }} opts
  * @returns {{ models: string[], lastUpdated: string, source: string, tierHints: Record<string,string> }}
  */
-export function applyModels({ routerPath, models, tierHints = {}, source = 'live-pick' }) {
+export function applyModels({ routerPath, models, tierHints = {}, profiles = {}, source = 'live-pick' }) {
   const list = Array.isArray(models) ? models.filter((m) => typeof m === 'string' && m.trim()) : [];
   const hints = { ...(tierHints || {}) };
   for (const id of list) if (!hints[id]) hints[id] = defaultTierHint(id);
@@ -226,6 +363,7 @@ export function applyModels({ routerPath, models, tierHints = {}, source = 'live
     lastUpdated: new Date().toISOString(),
     source,
     tierHints: hints,
+    profiles: Object.fromEntries(list.filter((id) => profiles[id]).map((id) => [id, profiles[id]])),
   };
   const router = existsSync(routerPath)
     ? JSON.parse(readFileSync(routerPath, 'utf8'))
@@ -287,7 +425,7 @@ export async function pickModels({ candidates, current = [], stdin, stdout, prom
 
   const lines = makeLineReader(in$);
   for (;;) {
-    renderPicker(out$, ordered, selected, prompt);
+    renderPicker(out$, ordered, selected, prompt, candidates);
     const line = await readPrompt(lines, out$, in$.isTTY === true, '> ');
     if (line === null) break; // EOF on non-TTY
     const cmd = String(line || '').trim();
@@ -414,7 +552,7 @@ async function readPrompt(lineReader, out$, isTTY, prefix) {
   return r.value;
 }
 
-function renderPicker(out, ordered, selected, prompt) {
+function renderPicker(out, ordered, selected, prompt, candidates = []) {
   out.write('\n' + chalk.bold(`-- ${prompt} --`) + '\n');
   const width = String(ordered.length).length;
   for (let i = 0; i < ordered.length; i++) {
@@ -530,12 +668,31 @@ export async function run(name, args, isHelpRequest) {
   // `wantList || isDeprecatedAlias` branch and prints candidate IDs.
 
   let candidates;
+  let modelsDev = { status: 'not-attempted', matched: 0, total: 0 };
   try {
     // The deprecated `bizar model` alias preserves the legacy
     // "retry-without-auth on 401" behavior so existing scripts keep working.
     // The new `bizar models` surface fails fast on 401 with an actionable
     // error message (the user explicitly picks models — no silent retry).
     candidates = await listModels({ endpoint, authToken, retryWithoutAuth: isDeprecatedAlias });
+    try {
+      const catalogue = await fetchModelsDevCatalog({});
+      candidates = enrichModelsWithCapabilities(candidates, catalogue);
+      modelsDev = {
+        status: 'ok',
+        matched: candidates.filter((candidate) => candidate.profile).length,
+        total: candidates.length,
+        source: MODELS_DEV_CATALOG_URL,
+      };
+    } catch (metadataError) {
+      modelsDev = {
+        status: 'unavailable',
+        matched: 0,
+        total: candidates.length,
+        source: MODELS_DEV_CATALOG_URL,
+        error: metadataError instanceof Error ? metadataError.message : String(metadataError),
+      };
+    }
   } catch (err) {
     if (err.name === 'AbortError' || String(err.message).includes('aborted')) {
       console.error(chalk.red(`  x Request timed out after 3000ms - ${endpoint}/models`));
@@ -547,7 +704,7 @@ export async function run(name, args, isHelpRequest) {
 
   if (candidates.length === 0) {
     if (wantJson) {
-      process.stdout.write(JSON.stringify({ endpoint, endpointSource, candidates: [], total: 0 }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ endpoint, endpointSource, candidates: [], total: 0, modelsDev }, null, 2) + '\n');
     } else {
       console.error(chalk.red(`  x No models reported by ${endpoint}`));
     }
@@ -556,7 +713,7 @@ export async function run(name, args, isHelpRequest) {
 
   if (wantList || isDeprecatedAlias) {
     if (wantJson) {
-      process.stdout.write(JSON.stringify({ endpoint, endpointSource, candidates, total: candidates.length }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ endpoint, endpointSource, candidates, total: candidates.length, modelsDev }, null, 2) + '\n');
     } else {
       for (const c of candidates) process.stdout.write(c.id + '\n');
     }
@@ -574,6 +731,7 @@ export async function run(name, args, isHelpRequest) {
         candidates,
         total: candidates.length,
         picker: 'requires-tty',
+        modelsDev,
       }, null, 2) + '\n');
     } else {
       console.error(chalk.yellow('  ! Non-interactive shell detected. Re-run without a TTY and use --list / --set instead.'));
@@ -595,12 +753,18 @@ export async function run(name, args, isHelpRequest) {
     return true;
   }
   const tierHints = {};
-  for (const id of picked) tierHints[id] = defaultTierHint(id);
-  const block = applyModels({ routerPath, models: picked, tierHints, source: 'live-pick' });
+  const profiles = {};
+  for (const id of picked) {
+    tierHints[id] = defaultTierHint(id);
+    const profile = candidates.find((candidate) => candidate.id === id)?.profile;
+    if (profile) profiles[id] = profile;
+  }
+  const block = applyModels({ routerPath, models: picked, tierHints, profiles, source: 'live-pick' });
   if (wantJson) {
     process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource }, null, 2) + '\n');
   } else {
     console.log(chalk.green(`\n  v Saved ${block.models.length} model(s) to ${routerPath}:`));
+    console.log(chalk.dim(`    Models.dev profiles: ${Object.keys(block.profiles || {}).length}/${block.models.length}`));
     for (const id of block.models) {
       const tier = block.tierHints[id] || defaultTierHint(id);
       console.log(chalk.dim(`    ${id}  (${tier})`));
