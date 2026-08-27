@@ -740,7 +740,41 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const shipped = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'settings.json'), {}) || {};
   const shippedRouter = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'model-router.json'), {}) || {};
   const defaultGatewayUrl = shippedRouter.endpoint || shippedRouter.gateway?.endpoint || 'http://localhost:20129/v1';
-  const gatewayUrl = process.env.ANTHROPIC_BASE_URL
+
+  // F-183 — when `forceCleanInstall` has wiped `~/.claude/settings.json`,
+  // it stashes the prior env block into `process.env.BIZAR_SAVED_ENV`.
+  // The stash is the **only** source of operator credentials that
+  // survives a wipe — everything else on disk has been removed by the
+  // time this function runs. We honor it preferentially for the env
+  // keys in FORCE_CLEAN_PRESERVE_ENV_KEYS so `bizar install --force`
+  // preserves gateway URLs / auth tokens without forcing operators to
+  // re-export them in the shell.
+  //
+  // Precedence (preserved-env keys):
+  //   savedEnv.X  >  process.env.X  >  existingEnv.X  >  default
+  //
+  // The stash is only consulted when it was actually set by
+  // `forceCleanInstall` (non-empty JSON). For direct `force: true`
+  // calls that bypass the wipe, we keep the legacy precedence so the
+  // existing merge-settings contract is unchanged.
+  let savedEnv = {};
+  if (typeof process.env.BIZAR_SAVED_ENV === 'string') {
+    try { savedEnv = JSON.parse(process.env.BIZAR_SAVED_ENV) || {}; } catch { /* corrupt stash */ }
+  }
+  const hasSavedEnv = Object.keys(savedEnv).length > 0;
+
+  const pickEnv = (key) => {
+    if (hasSavedEnv && typeof savedEnv[key] === 'string') return savedEnv[key];
+    if (process.env[key]) return process.env[key];
+    if (!force && typeof existingEnv[key] === 'string') return existingEnv[key];
+    return undefined;
+  };
+
+  const savedBaseUrl = pickEnv('ANTHROPIC_BASE_URL');
+  const savedRouterUrl = pickEnv('BIZAR_MODEL_ROUTER_URL');
+  const gatewayUrl = savedBaseUrl
+    || savedRouterUrl
+    || process.env.ANTHROPIC_BASE_URL
     || process.env.BIZAR_MODEL_ROUTER_URL
     || (!force && (existingEnv.ANTHROPIC_BASE_URL || existingEnv.BIZAR_MODEL_ROUTER_URL))
     || defaultGatewayUrl;
@@ -808,12 +842,20 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     env: {
       BIZAR_HOME: BIZAR_HOME(),
       ANTHROPIC_BASE_URL: gatewayUrl,
-      BIZAR_MODEL_ROUTER_URL: process.env.BIZAR_MODEL_ROUTER_URL || gatewayUrl,
-      ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || 'sk_9router',
+      BIZAR_MODEL_ROUTER_URL:
+        pickEnv('BIZAR_MODEL_ROUTER_URL')
+        || gatewayUrl,
+      ANTHROPIC_AUTH_TOKEN:
+        pickEnv('ANTHROPIC_AUTH_TOKEN')
+        || 'sk_9router',
       CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:
-        process.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY || '1',
+        pickEnv('CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY')
+        || '1',
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:
-        process.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS || shipped.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS || '1',
+        pickEnv('CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS')
+        || shipped.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+        || '1',
+      ...(pickEnv('ANTHROPIC_MODEL') ? { ANTHROPIC_MODEL: pickEnv('ANTHROPIC_MODEL') } : {}),
     },
     hooks: {
       UserPromptSubmit: [{ hooks: [hook('user-prompt-submit', 10)] }],
@@ -859,6 +901,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   if (dryRun) return { ok: true, message: `[dry-run] would write ${fp}` };
   ensureDir(CLAUDE_DIR);
   writeFileSync(fp, JSON.stringify(merged, null, 2) + '\n');
+  // F-183 — clear the in-process stash once consumed so subsequent
+  // writes in the same run (or in tests) don't accidentally inherit
+  // operator credentials.
+  if (typeof process.env.BIZAR_SAVED_ENV === 'string') {
+    delete process.env.BIZAR_SAVED_ENV;
+  }
   return { ok: true, message: `wrote ${fp}`, path: fp };
 }
 
@@ -1164,6 +1212,164 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
   return { ok: true, message: `synced (${counts.commands} commands, ${counts.skills} skills, ${counts.hooks} hooks, ${counts.rules} rules, ${counts.workflows} workflows)`, counts };
 }
 
+// ─── F-183 — fully clean install ────────────────────────────────────────────
+
+/**
+ * Env keys whose values the freshly-emitted `~/.claude/settings.json`
+ * must inherit from a previously-installed copy of the file. Operators
+ * run `bizar install --force` to repair drifted settings; this set is
+ * the contract that keeps gateway credentials + provider URLs alive
+ * across the wipe.
+ *
+ * Anything outside this set is **not** preserved — the re-emitted
+ * `permissions` block must mirror the current template so the F-181
+ * wildcard expansion and F-176 empty deny/ask lists land on disk.
+ */
+export const FORCE_CLEAN_PRESERVE_ENV_KEYS = Object.freeze([
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_AUTH_TOKEN',
+  'BIZAR_MODEL_ROUTER_URL',
+  'BIZAR_HOME',
+  'ANTHROPIC_MODEL',
+  'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',
+  'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS',
+]);
+
+/**
+ * Resolve `~/.agents/` (the shared skills-registry directory).
+ * Honors `process.env.AGENTS_DIR` so tests and operators can override
+ * it without bouncing HOME.
+ */
+export function resolveAgentsDir() {
+  if (process.env.AGENTS_DIR && process.env.AGENTS_DIR.trim()) {
+    return process.env.AGENTS_DIR.trim();
+  }
+  return join(HOME, '.agents');
+}
+
+/** `~/.agents/` — shared skills-registry directory. Re-evaluated per read so
+ * tests that flip `process.env.AGENTS_DIR` are honored. */
+export function AGENTS_DIR() {
+  return resolveAgentsDir();
+}
+
+/**
+ * Bizar-managed subdirectories of `~/.claude/`. Anything outside this
+ * set under `~/.claude/` is treated as user-owned and is preserved
+ * by `forceCleanInstall` (e.g. `.credentials.json`, `statsig/`,
+ * `.playwright-mcp/`).
+ */
+const FORCE_CLEAN_WIPE_DIRS = Object.freeze([
+  'agents',
+  'skills',
+  'commands',
+  'hooks',
+  'rules',
+  'workflows',
+  'plugins',
+]);
+
+/**
+ * F-183 — wipe every Bizar-managed directory under `~/.claude/` plus
+ * `~/.agents/`, back up `~/.claude/settings.json` env vars into
+ * `process.env.BIZAR_SAVED_ENV`, and return a structured wipe report.
+ *
+ * The wipe is **idempotent** at the file-system level (rmSync is
+ * recursive+force), and the resulting state is fully reproducible by
+ * the subsequent `runProvision` call because the factory re-emits the
+ * entire settings file from the shipped template (so the F-181
+ * wildcard expansion in `permissions.allow` lands automatically).
+ *
+ * What is **not** wiped:
+ *   - `~/.config/bizar/` (BIZAR_HOME) — login state, telemetry,
+ *     worktree-queue, model picks, installed.json marker. Operators
+ *     rely on this surviving a forced reinstall.
+ *   - `~/.claude/.credentials.json`, `~/.claude/statsig/`,
+ *     `~/.claude/.playwright-mcp/` — third-party state managed by
+ *     Claude Code itself.
+ *   - Any subdirectory of `~/.claude/` not in FORCE_CLEAN_WIPE_DIRS.
+ *
+ * @param {{ dryRun?: boolean }} [opts]
+ * @returns {{ ok: true, message: string, wiped: string[], preserved: string[], env: Record<string, string> }}
+ */
+export function forceCleanInstall(opts = {}) {
+  const { dryRun = false } = opts;
+  const claudeDir = resolveClaudeDir();
+  const agentsDir = resolveAgentsDir();
+  const settingsPath = join(claudeDir, 'settings.json');
+
+  // 1. Stash existing env vars so `writeClaudeSettings` can re-inject
+  //    them when the freshly-emitted file lands. Use a string env so
+  //    we don't pollute the parent process object graph with arbitrary
+  //    operator-defined keys.
+  let savedEnv = {};
+  if (existsSync(settingsPath)) {
+    try {
+      const cur = JSON.parse(readFileSync(settingsPath, 'utf8'));
+      if (cur && typeof cur === 'object' && cur.env && typeof cur.env === 'object') {
+        for (const key of FORCE_CLEAN_PRESERVE_ENV_KEYS) {
+          if (typeof cur.env[key] === 'string') savedEnv[key] = cur.env[key];
+        }
+      }
+    } catch { /* corrupt settings — treat as no env */ }
+  }
+  // Also pick up env values from the live process so a freshly-invoked
+  // `bizar install --force` carries operator credentials through the
+  // wipe even if the on-disk settings file is missing/stale.
+  for (const key of FORCE_CLEAN_PRESERVE_ENV_KEYS) {
+    if (!savedEnv[key] && process.env[key]) savedEnv[key] = process.env[key];
+  }
+  process.env.BIZAR_SAVED_ENV = JSON.stringify(savedEnv);
+
+  // 2. Wipe managed dirs.
+  const wiped = [];
+  for (const sub of FORCE_CLEAN_WIPE_DIRS) {
+    const dir = join(claudeDir, sub);
+    if (!existsSync(dir)) continue;
+    wiped.push(dir);
+    if (!dryRun) {
+      try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  }
+  if (existsSync(agentsDir)) {
+    wiped.push(agentsDir);
+    if (!dryRun) {
+      try { rmSync(agentsDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+  }
+  // 3. Wipe settings.json so writeClaudeSettings re-emits from the
+  //    shipped template. Operators keep their gateway / auth env vars
+  //    via the BIZAR_SAVED_ENV stash.
+  if (existsSync(settingsPath)) {
+    wiped.push(settingsPath);
+    if (!dryRun) {
+      try { rmSync(settingsPath, { force: true }); } catch { /* ignore */ }
+    }
+  }
+
+  const preserved = [];
+  if (existsSync(BIZAR_HOME())) preserved.push(BIZAR_HOME());
+  // Document the third-party state we intentionally left alone.
+  for (const sub of ['.credentials.json', 'statsig', '.playwright-mcp']) {
+    const p = join(claudeDir, sub);
+    if (existsSync(p)) preserved.push(p);
+  }
+
+  const tag = dryRun ? '[dry-run] ' : '';
+  const message = `${tag}F-183 clean: wiped ${wiped.length} paths; preserved ${preserved.length} paths (BIZAR_HOME + third-party state)`;
+  return { ok: true, message, wiped, preserved, env: savedEnv };
+}
+
+/**
+ * Inverse of `forceCleanInstall` — clears the in-process stash once
+ * `writeClaudeSettings` has consumed it. Idempotent and side-effect
+ * free; exported so tests can run multiple forced installs without
+ * leaking stale stashes between scenarios.
+ */
+export function clearSavedEnv() {
+  delete process.env.BIZAR_SAVED_ENV;
+}
+
 // ─── CLI entry ──────────────────────────────────────────────────────────────
 
 export function parseFlags(argv) {
@@ -1177,7 +1383,7 @@ export function parseFlags(argv) {
       const v = argv[++i];
       if (v === 'install' || v === 'update' || v === 'install-only-system') opts.mode = v;
     } else if (a === '--dry-run') opts.dryRun = true;
-    else if (a === '--force') opts.force = true;
+    else if (a === '--force' || a === '--deep') opts.force = true;
     else if (a === '--yes' || a === '-y') opts.yes = true;
     else if (a === '--non-interactive') opts.yes = true;
     else if (a === '--no-service') opts.start = false;

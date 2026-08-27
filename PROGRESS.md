@@ -189,6 +189,91 @@ VCR ratio 0.984 (61/62). Live `~/.claude/settings.json` mirror is the
 final step of the v10.16.0 release pipeline (see `Complete — v10.16.0
 Release` block).
 
+## Passing — F-183 Make `bizar install --force` do a fully clean install
+
+**Status:** Implementation complete on branch `wt/todd-f183-force-clean`;
+awaiting `@steve` merge for v10.16.2 ledger + release.
+
+**Source commit:** on branch `wt/todd-f183-force-clean` (from master `6ed35a4`);
+this commit (`feat(install): make --force do a fully clean install (F-183)`)
+is the source of the F-183 behavior change. @steve updates the
+`commit` field in `feature_list.json` and `DECISIONS.md` to the merge
+SHA when `bizar worktree-merge --all` lands.
+
+**What landed:**
+- `cli/provision.mjs` — new exported `forceCleanInstall({ dryRun })`:
+  - resolves `CLAUDE_CONFIG_DIR` and `AGENTS_DIR` (env-overridable via
+    `resolveClaudeDir()` / `resolveAgentsDir()` so the lazy-resolve
+    contract from `BIZAR_HOME()` extends across all user dirs);
+  - reads existing `settings.json` env vars and stashes the
+    `FORCE_CLEAN_PRESERVE_ENV_KEYS` subset (`ANTHROPIC_BASE_URL`,
+    `ANTHROPIC_AUTH_TOKEN`, `BIZAR_MODEL_ROUTER_URL`, `BIZAR_HOME`,
+    `ANTHROPIC_MODEL`, `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`,
+    `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`) into
+    `process.env.BIZAR_SAVED_ENV` (also picks up values from live
+    `process.env` if the on-disk file is missing/stale);
+  - wipes `~/.claude/{agents,skills,commands,hooks,rules,workflows,plugins}`
+    and `~/.agents/`, then wipes `settings.json` so the factory
+    re-emits from the shipped template;
+  - preserves `~/.config/bizar/` (BIZAR_HOME), `~/.claude/.credentials.json`,
+    `~/.claude/statsig/`, `~/.claude/.playwright-mcp/`, and any
+    user-created subdir under `~/.claude/` outside the managed set;
+  - supports `dryRun: true` (reports candidate paths in `result.wiped`
+    without performing any `rmSync`).
+- `cli/provision.mjs` `writeClaudeSettings` — new stash-aware env merge:
+  when `BIZAR_SAVED_ENV` is set, `gatewayUrl` and the env block prefer
+  the stash (`savedEnv.X`) over `process.env.X` over `existingEnv.X`.
+  `merged.env` continues to spread `existing.env` underneath
+  `bizarSettings.env`, so non-preserved user keys still leak through.
+  `BIZAR_SAVED_ENV` is cleared after the write so subsequent calls in
+  the same run don't accidentally inherit operator credentials.
+- `cli/install/index.mjs` `runInstaller` — wires the F-183 flow:
+  - `force === true` ⇒ `clearSavedEnv()` then `forceCleanInstall({ dryRun })`,
+    prints the wipe summary, and **always** forwards `force: true` to
+    `runProvision` regardless of input flag (so the freshly-emitted
+    settings file picks up the template payload);
+  - after `runProvision`, runs `runDoctor({ silent: true })` and
+    surfaces the pass/fail count in `result.doctor`.
+- `cli/commands/install.mjs` — `--force` help text rewritten with the
+  new clean-install semantics (wipe scope, preserved scope, F-181
+  inheritance + operator env survival); `--deep` flag added as alias
+  for `--force` via `parseFlags`; post-install summary printed.
+- `cli/install/force-clean.test.mjs` — new test file with 9 scenarios
+  (wipe scope 8 paths; BIZAR_HOME preserved; third-party preserved;
+  stash round-trip; dryRun no-op; F-181 wildcards land AND operator
+  env survives via subprocess harness; sync counts ≥16 agents / ≥74
+  skills / ≥39 commands / ≥30 hooks / ≥7 rules via subprocess harness;
+  `--deep` flag alias; `FORCE_CLEAN_PRESERVE_ENV_KEYS` frozen list
+  with the 4 canonical keys).
+
+**Verification (2026-08-27):**
+- `node --test cli/install/force-clean.test.mjs` — **9/9 pass**
+- `node --test cli/install/index.test.mjs` — 4/4 pass
+- `node --test cli/provision.test.mjs` — **20/20 pass** (F-180
+  byte-for-byte factory invariant intact: factory still ships the
+  entire `shipped.permissions` object; F-181 wildcard expansion
+  reaches the live mirror automatically because the template is the
+  source of truth)
+- `node --test cli/install/__tests__/merge-settings.test.mjs` — 5/5
+  pass (existing `force: true` contract preserved — operator env from
+  `process.env` still wins over on-disk when no `BIZAR_SAVED_ENV`
+  stash is set; only the stash path triggers the saved-env preference)
+- `node --test cli/__tests__/settings-permissions.test.mjs` — 4/4 pass
+- `make check` — green
+- `make check-arch` — green
+- `make verify-removed-surfaces` — green
+
+**Known pre-existing failures unrelated to F-183:**
+- `make verify-repo-structure` — fails on `SDK_VERSION 10.15.0 != root
+  10.16.1`. This is a stale SDK package.json/version.ts vs root
+  package.json. @steve handles the version bump in the v10.16.2
+  release commit.
+- `make clean-check` — fails on `vitest: No such file or directory`
+  because `node_modules/.bin/vitest` is missing (npm install hasn't
+  been run in this worktree). Pre-existing environment issue.
+
+---
+
 ## Passing — F-182 Convert remaining hard-deny hooks to advisory (simplify / content-style / agent-model)
 
 **Status:** Accepted (close-out of the three remaining F-176 hard-deny hooks).
