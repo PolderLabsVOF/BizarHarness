@@ -2,7 +2,25 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — F-176 Full permissions + advisory hooks + always-fetch-docs
+## In Progress — IMP-016/IMP-019 Selected-pool resolver + health-aware failover
+
+**Objective:** Close the two adjacent backlog items the
+`3287792` / `274c7f5` audit named as the next required step after
+Models.dev enrichment: (a) a `userSelected`-aware resolver that ranks
+models by capability profile before falling back to the flat array, and
+(b) one deterministic ranked failover to the next eligible selected
+model on transport/availability failure (no alias cycling).
+
+**Surface area (planned):**
+- `packages/sdk/src/router/selected-resolver.ts` — pure ranking function: filter by hard floors (`minContextTokens`, capability match for role), score by capability × tier, return the ranked list.
+- `packages/sdk/src/router/health-probe.ts` — bounded gateway availability probe with 3s timeout and negative-cache (60s).
+- `packages/sdk/src/router/agent-model-registry.ts` — `selectRanked(model, role, ctx)` uses resolver + probe; returns the first eligible model and (if `--allow-failover`) the next ranked fallback.
+- `cli/commands/models.mjs` — `bizar models --refresh` re-fetches Models.dev + probe and rewrites `userSelected.profiles.health`.
+- `config/claude/hooks/agent-model-guard.mjs` — accept the resolved model in tier override; allow one bounded failover per dispatch.
+- Tests: resolver, probe, registry, hook, CLI smoke.
+- `PROGRESS.md`, `feature_list.json`, `DECISIONS.md`, `IMPROVEMENTS.md` updates.
+
+## Complete — F-166 User-controlled model picker (`bizar models`)
 
 **Objective:** Commit `cf09bf6` deliberately dropped
 `.claude-plugin/plugin.json` but four scripts and tests still referenced it,
@@ -80,9 +98,9 @@ references, and add a regression guard so the deletion cannot regress.
 
 **Refs:** cf09bf6 (deletion); F-170 (this entry).
 
-**WIP=1 invariant:** F-170 holds `wip: 1`. F-166's prior `wip: 1` was
-removed; F-166 stays `state: in_progress` (the model-picker work is not
-yet done) but is no longer the headline WIP.
+**WIP=1 invariant:** F-170 holds `wip: 1`. F-166 closed 2026-08-27 at
+`bbc5e92`; the picker ships with Models.dev enrichment and full test
+coverage. New WIP chosen below.
 
 ## In Progress — F-182 Convert remaining hard-deny hooks to advisory (simplify / content-style / agent-model)
 
@@ -391,9 +409,11 @@ and whenever uncertainty appears during work.
   `package-manager`, `SCOPE_OWNED`, `secret`, `Force-pushing`,
   `Rebasing`) keep regression coverage on the new wording.
 
-**WIP=1 invariant:** F-176 holds `wip: 1`. F-166's prior `wip: 1` was
-removed; F-166 stays `state: in_progress` (the model-picker work is
-not yet done) but is no longer the headline WIP.
+**WIP=1 invariant:** F-176 holds `wip: 1`. F-166 closed 2026-08-27 at
+`bbc5e92` (Models.dev enrichment + picker fix + test coverage landed);
+F-170 transitioned to passing earlier on the same day. The next WIP
+candidate is the IMP-016/IMP-019 closure (user-selected-aware resolver
++ health-aware failover).
 
 **Note:** F-170 (plugin refs cleanup) was merged before F-176. F-170 was
 the interim WIP holder; F-176 took wip=1 at merge time. F-170 transitions
@@ -1577,7 +1597,11 @@ compiles and the hook authorizes edits normally.
 `@steve commits once human approves` line is historical and no longer
 applies; F-180 supersedes the F-169 ledger narrative with the
 factory-invariance tests added in commit B.
-## In progress — F-166 User-controlled model picker (`bizar models`)
+## Complete — F-166 User-controlled model picker (`bizar models`)
+
+**Date:** 2026-08-27
+**Closing commit:** `bbc5e92` (audit ledger entry; implementation work shipped in `d3335b2`, `5e83cde`, `a858f53`).
+**WIP holder:** F-176 (continues to hold `wip: 1`).
 
 **Objective:** Give the user explicit control over which models the Bizar
 orchestrator (@mike) may dispatch to. Live gateway discovery is no longer the
@@ -1597,6 +1621,22 @@ gate; the user picker is.
 - `sonnet | gpt-4 | default | m3` → default
 - `nano | mini | haiku (older) | flash | lite | tiny` → budget
 - otherwise → mid
+
+**Models.dev enrichment (commits d3335b2 / 5e83cde / a858f53):**
+- `cli/commands/models.mjs` — `fetchModelsDevCatalog(doFetch)` reaches `https://models.dev/api.json`, parses nested provider/model records into `{ id, name, capabilities, limits, source }` profiles, and is non-fatal on any error (catalog becomes empty, candidates still surface from the gateway).
+- `enrichModelsWithCapabilities(candidates, catalog)` annotates each gateway candidate with the matching Models.dev profile (case-insensitive substring + baseModel exact match; first hit wins; ambiguity is logged via `chalk.dim` and accepted as the first).
+- `applyModels({ routerPath, models, tierHints, profiles, source })` persists `userSelected.profiles[id] = { name, capabilities, limits, source }` and stamps `lastUpdated` atomically.
+- `run({ json })` surfaces `endpoint`, `endpointSource`, the fetched Models.dev catalogue size, and per-picked `(id, tier, profile)` tuple in machine output so OpenKan / `bizar models explain <task>` can render why a model is on the list.
+
+**Verification (2026-08-27):**
+- `node --test cli/__tests__/models-picker.test.mjs` — 29/29 pass (fetching, failure handling, matching, ambiguity, extraction, selected-only persistence, profiles round-trip).
+- `node --test cli/__tests__/models-cli.test.mjs` — 1/1 pass (`bizar models --list` 401 error surfaces actionably).
+- `node --test config/claude/hooks/__tests__/agent-model-guard.test.mjs` — 8/8 pass (inherited session, configured live tier, userSelected bypass, out-of-pool rejection).
+- `npx vitest run packages/sdk/tests/agent-model-registry.test.mjs` — 81/81 pass across 13 files.
+- `make check` — TypeScript clean.
+- `make test` — 577/577 pass across 48 suites.
+
+**Next backlog (tracked in `IMPROVEMENTS.md`):** IMP-016 (selected-pool resolver) + IMP-019 (health-aware failover).
 ## Complete — F-145 Loosen Bizar Hook Rules
 
 **Objective:** Stop wasting agent time on redundant or overly strict

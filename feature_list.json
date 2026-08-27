@@ -780,10 +780,12 @@
       "id": "F-166",
       "title": "User-controlled model picker (`bizar models`) and orchestrator selection rule",
       "description": "Ship a `bizar models` CLI that lists gateway candidates, runs an interactive multi-select picker, and persists the chosen IDs under `config/claude/model-router.json#userSelected`. The orchestrator (@mike) dispatches subagents using ONLY these IDs (plus the active session model); auto-discovery is no longer authoritative. The Agent-model-guard accepts userSelected models without live-discovery validation. The MCP `bizar_model_list` tool surfaces only the user-selected list.",
-      "state": "in_progress",
-      "passed": null,
-      "commit": "pending",
+      "state": "passing",
+      "passed": "2026-08-27",
+      "commit": "bbc5e92",
       "category": "harness",
+      "layer": "harness",
+      "created": "2026-08-26",
       "scope": [
         "cli/commands/models.mjs",
         "cli/commands/model.mjs",
@@ -801,7 +803,7 @@
         "PROGRESS.md",
         "feature_list.json"
       ],
-      "evidence": "Pending make check + make test; see PROGRESS.md 'In progress' block for the surface area."
+      "evidence": "2026-08-27 close-out: Models.dev enrichment landed in d3335b2 (fetchModelsDevCatalog + enrichModelsWithCapabilities + applyModels profiles persistence), 5e83cde (fetched metadata surfaces in picker labels and --json output), a858f53 (tests cover fetching, failure handling, matching, ambiguity, extraction, selected-only persistence). Final evidence at bbc5e92: make check green (TypeScript), make test green (577/577 across 48 suites). Agent-model-guard 8/8 covers userSelected bypass, inheritance, and rejection of out-of-pool overrides."
     },
     {
       "id": "F-167",
