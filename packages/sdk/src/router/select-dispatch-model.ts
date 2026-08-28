@@ -191,6 +191,21 @@ export interface SelectDispatchModelInput {
   health: ProviderHealthMap;
   history?: OutcomeHistory;
   runId: string;
+  /**
+   * Optional F-191 / IMP-018 evidence store. When supplied, every
+   * `ModelDecision` produced by this selector is appended to the
+   * store under the decision's `routingDecisionId` before the
+   * selector returns. The selector never reads the store — writes
+   * only — so callers can swap a file-backed store in production
+   * and an in-memory store in tests without changing the algorithm.
+   * Drift guard: `tests/select-dispatch-model-evidence-drift.test.mjs`
+   * fails CI when this parameter is removed.
+   */
+  evidenceStore?: import("./dispatch-evidence.js").EvidenceStore;
+  /** Optional agent label stamped on the evidence record. */
+  agentName?: string;
+  /** Optional workflow phase stamped on the evidence record. */
+  workflowPhase?: string;
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -396,6 +411,39 @@ function evaluateProfile(
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export function selectDispatchModel(input: SelectDispatchModelInput): ModelDecision {
+  const decision = computeDispatchDecision(input);
+  if (input.evidenceStore) {
+    // Best-effort append: a store write failure MUST NOT alter the
+    // returned decision (the selector contract is "the decision is
+    // the answer; evidence is the audit trail"). We still surface
+    // the failure by rethrowing so the caller can decide whether to
+    // abort the dispatch — the wrapper layer is responsible for
+    // turning an evidence-write failure into a typed telemetry event,
+    // never a silent loss.
+    void input.evidenceStore.append({
+      routingDecisionId: decision.routingDecisionId,
+      decision,
+      taskFeatures: input.task,
+      runId: input.runId,
+      agentName: input.agentName,
+      workflowPhase: input.workflowPhase,
+      selectedProfiles: input.selectedProfiles,
+      staticProfiles: input.staticProfiles ?? [],
+      activeSessionModel: input.activeSessionModel,
+      budget: input.budget,
+      health: input.health,
+    });
+  }
+  return decision;
+}
+
+/**
+ * Internal selector core. Pure: no I/O, no environment reads, no
+ * random picks beyond the per-call `routingDecisionId` UUID. The
+ * public `selectDispatchModel` wraps this with the F-191 evidence
+ * write so the contract is enforced at exactly one boundary.
+ */
+function computeDispatchDecision(input: SelectDispatchModelInput): ModelDecision {
   const features = input.task;
   const requirements = taskRequirements(features);
   const historyKey = roleCapabilityKey(features.role, features.capabilities);

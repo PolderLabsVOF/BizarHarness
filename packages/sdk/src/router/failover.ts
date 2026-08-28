@@ -29,6 +29,28 @@ import {
   type RankedUserSelectedEntry,
   type RoleRequirements,
 } from "./agent-model-registry.js";
+import {
+  type EvidenceStore,
+} from "./dispatch-evidence.js";
+import type {
+  ModelDecision,
+  TaskFeatures,
+  ModelCandidate,
+  BudgetState,
+  ProviderHealthMap,
+} from "./select-dispatch-model.js";
+import type { BizarTier } from "./agent-model-registry.js";
+
+function deriveTierForId(id: string): BizarTier {
+  const lower = String(id ?? "").toLowerCase();
+  if (/opus|premium/.test(lower)) return "premium";
+  if (/sonnet|high/.test(lower)) return "high";
+  if (/haiku|mid-design|design/.test(lower)) return "mid-design";
+  if (/mini|small/.test(lower)) return "default";
+  if (/flash|mid/.test(lower)) return "mid";
+  if (/nano|cheap|budget/.test(lower)) return "budget";
+  return "default";
+}
 
 /**
  * Closed taxonomy of dispatch-time failure modes. The names are stable
@@ -123,6 +145,25 @@ export interface PickFailoverInput {
    * verdict uses `null` (legacy behaviour preserved).
    */
   primaryDecisionId?: string;
+  /**
+   * F-191 / IMP-018 evidence store. When supplied AND a failover
+   * candidate is found, a follow-up `DispatchEvidence` row is appended
+   * carrying the same `routingDecisionId` as the primary decision plus
+   * a failover description on the decision object. When omitted, the
+   * verdict is returned without an evidence write (legacy callers,
+   * tests, and the F-185 dry-run path).
+   */
+  evidenceStore?: EvidenceStore;
+  /** Required when `evidenceStore` is supplied; reused as the audit run id. */
+  runId?: string;
+  agentName?: string;
+  workflowPhase?: string;
+  taskFeatures?: TaskFeatures;
+  selectedProfiles?: readonly ModelCandidate[];
+  staticProfiles?: readonly ModelCandidate[];
+  activeSessionModel?: string;
+  budget?: BudgetState;
+  health?: ProviderHealthMap;
 }
 
 /**
@@ -154,7 +195,8 @@ export interface PickFailoverInput {
  * The function never throws; it returns a verdict so the dispatch
  * surface can `process.stdout.write(JSON.stringify(verdict))` and exit.
  */
-export function pickFailover({ registry, role, requirements, attemptedIds, failure, primaryDecisionId }: PickFailoverInput): FailoverVerdict {
+export function pickFailover(input: PickFailoverInput): FailoverVerdict {
+  const { registry, role, requirements, attemptedIds, failure, primaryDecisionId } = input;
   const attempted = new Set<string>(attemptedIds.filter((id): id is string => typeof id === "string"));
   const routingDecisionId = typeof primaryDecisionId === "string" && primaryDecisionId.length > 0 ? primaryDecisionId : null;
 
@@ -239,7 +281,7 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
     exhaustedAtTopLevel = true;
   }
 
-  return {
+  const verdict: FailoverVerdict = {
     primary,
     failover,
     attempts: attempted.size + (failover !== null ? 1 : 0),
@@ -247,6 +289,47 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
     chain,
     routingDecisionId,
   };
+
+  // F-191 / IMP-018: when a failover was actually picked AND the
+  // caller supplied an evidence store + the canonical inputs, append
+  // a follow-up `DispatchEvidence` row tied to the primary decision.
+  // The follow-up row carries the same `routingDecisionId` so the
+  // audit trail is grouped by dispatch; the decision's modelId is
+  // the failover candidate. The store distinguishes follow-ups from
+  // primary rows by sequence number, so duplicate-id semantics are
+  // preserved.
+  if (
+    verdict.failover !== null
+    && routingDecisionId !== null
+    && input.evidenceStore
+    && typeof input.runId === "string"
+    && input.taskFeatures
+  ) {
+    const failoverDecision: ModelDecision = {
+      modelId: verdict.failover.id,
+      tier: deriveTierForId(verdict.failover.id) as BizarTier,
+      confidence: 0.7,
+      ineligibleReasons: [],
+      routingDecisionId,
+      reason: `failover:${failure}`,
+      fallbackChain: chain.map((entry) => entry.id).filter((id) => Boolean(id)),
+    };
+    void input.evidenceStore.append({
+      routingDecisionId,
+      decision: failoverDecision,
+      taskFeatures: input.taskFeatures,
+      runId: input.runId,
+      agentName: input.agentName,
+      workflowPhase: input.workflowPhase,
+      selectedProfiles: [...(input.selectedProfiles ?? [])],
+      staticProfiles: [...(input.staticProfiles ?? [])],
+      activeSessionModel: input.activeSessionModel,
+      budget: input.budget ?? {},
+      health: input.health ?? {},
+    });
+  }
+
+  return verdict;
 }
 
 /**

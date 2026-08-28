@@ -2,6 +2,50 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-191 Per-dispatch model evidence (IMP-018)
+
+**Date:** 2026-08-27
+**Branch:** `wt/todd-imp018-evidence` (9 commits beyond master: `57e93b5` feat(sdk) append-only store + typed errors, `aa907a0` feat(sdk) thread EvidenceStore through selectDispatchModel + decideAgentWith, `4ed2b95` feat(sdk) EvidenceStore chain + failover follow-up rows, `84178db` feat(workflows) dispatch helper writes evidence + outcome, `bf5c7fc` feat(cli) bizar evidence audit CLI, `deb80b0` test(sdk) evidence store + idempotent attachOutcome mutex, `97f7a43` test(sdk) selectDispatchModel + pickFailover evidence wiring, `51eca99` test(cli) end-to-end CLI coverage, `61ca197` test(drift) evidenceStore signature + append-call guard).
+**WIP holder:** `@mike` — F-191 lands with `wip: 1` per the F-176 ledger invariant.
+
+**Branch verification:**
+- `npx tsc --noEmit` — exit 0, clean types.
+- `npx vitest run --root packages/sdk` — 408/408 passing.
+- `node --test cli/__tests__/evidence.test.mjs` — passing.
+- `npm run test:node` — 660/661 (the 1 failure is the pre-existing `cli/install/prune.test.mjs:157` git-hooks mkdir collision, unrelated to this work).
+
+**Files:**
+- `packages/sdk/src/router/dispatch-evidence.ts` (NEW) — `EvidenceStore` interface, `InMemoryEvidenceStore`, `FileEvidenceStore`, `DispatchEvidence` row, `DispatchOutcome`, `DispatchEvidenceInputs` (sha-256 fingerprints), typed `DuplicateEvidenceError` / `OutcomeConflictError` / `EvidenceStoreError`. Append-only via `fs.open(path, 'a')` + `fsync`. Exactly-once `attachOutcome`; idempotent re-attach for identical canonical outcomes; conflict on divergent outcomes.
+- `packages/sdk/src/router/select-dispatch-model.ts` — optional `evidenceStore?: EvidenceStore` parameter on `selectDispatchModel`; writes the primary row when a model is selected.
+- `packages/sdk/src/router/failover.ts` — `pickFailover` accepts the store and writes `sequence: 1` follow-up rows tied to the original `routingDecisionId` with a `failoverFrom` field; conflicting failover appends surface `OutcomeConflictError`.
+- `packages/sdk/src/router/index.ts` — `decideAgentWith` threads the store.
+- `config/workflows/lib/dispatch.js` — records outcomes under `verifiedBy: 'review-bot'`.
+- `cli/bin.mjs` + `cli/commands/evidence.mjs` (NEW) — `bizar evidence {tail,show,verify,run,audit}` subcommands; `verify` walks the chain, `audit` surfaces missing/non-success rows.
+- Tests (NEW, ~25 cases): `dispatch-evidence.test.mjs` (6), `select-dispatch-model-evidence.test.mjs` (6), `dispatch-evidence-drift.test.mjs` (5), `cli/__tests__/evidence.test.mjs` (covers tail/show/verify/audit/run).
+
+**IMP-018 acceptance gate:** "Decision and verified outcome are linked by immutable ID" — verified:
+- Every `selectDispatchModel` invocation with a `evidenceStore` writes a row carrying the `routingDecisionId` and the decision snapshot.
+- Every `pickFailover` invocation writes a follow-up row with `sequence: 1` and the original `routingDecisionId` (FAILOVER CHAIN).
+- `attachOutcome` is exactly-once for divergent outcomes; identical canonical outcomes are idempotent.
+- Drift guard fails CI when `evidenceStore` or any append-call is removed from `selectDispatchModel` or `pickFailover` (verified by removing `evidenceStore?.record(` from a sandbox copy).
+
+**Ledger:** F-191 added (passing, source `61ca197`, wip=1 @mike). vcr: passing=70, activated=71, ratio=0.986.
+
+## In Flight — IMP-020 / IMP-022 (parallel Todd worktrees, 2026-08-27)
+
+**Two Todd branches currently running in parallel after F-191 merged. Mike holds IMP-021 (shadow/canary) intentionally because it would collide with IMP-020 on `model-router.ts`.**
+
+| Branch | IMP | F-ticket | Todd agent | File scope |
+| --- | --- | --- | --- | --- |
+| `wt/todd-imp020-contextual-learner` | IMP-020 | F-192 | `a8634c48e3025f2f6` | NEW `packages/sdk/src/router/outcome-learner.ts` + wires into `select-dispatch-model.ts`, `model-router.ts`, `failover.ts` |
+| `wt/todd-imp022-e2e-matrix` | IMP-022 | F-193 | `af7a653118ac2a784` | NEW `packages/sdk/tests/e2e/**` fixtures + direct/workflow/team/matrix test files + drift guard |
+
+**Collision analysis (Mike):** IMP-020 adds a NEW `outcome-learner.ts` and touches `select-dispatch-model.ts` (optional `outcomeLearner` parameter — additive), `model-router.ts` (new `recordContextualOutcome` wrapper), `failover.ts` (carrier field on outcome signal). IMP-022 is test-only; imports `select-dispatch-model.ts` + `config/workflows/lib/dispatch.js` but does not modify them. Single shared touch-point is `select-dispatch-model.ts` (F-188 central selector); IMP-022 tests can read both signatures (with and without optional `outcomeLearner`).
+
+**Merge order:** 022 → 020 (test-only first, then production-code with optional additive parameter).
+
+**Held back:** IMP-021 (shadow/canary) intentionally NOT dispatched because it would collide with IMP-020 on `model-router.ts`.
+
 ## Complete — F-190 Model capability profiles (IMP-017)
 
 **Date:** 2026-08-27

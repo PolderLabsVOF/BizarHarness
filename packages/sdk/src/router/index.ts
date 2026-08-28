@@ -57,6 +57,7 @@ import {
   AGENT_ACTIONS,
   type AgentRouteDecision,
 } from "./q-learning-router.js";
+import type { EvidenceStore } from "./dispatch-evidence.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -95,6 +96,18 @@ export interface RouteInput {
   history?: import("./select-dispatch-model.js").OutcomeHistory;
   /** Required when the F-188 selector is exercised; reused as the audit run id. */
   runId?: string;
+  /**
+   * F-191 / IMP-018 evidence store. Forwarded to the F-188 selector so
+   * every `ModelDecision` it produces is appended to the audit trail
+   * before the call returns. When omitted (legacy callers, tests that
+   * do not need persistence), the selector still computes the
+   * decision; the audit trail is simply not written.
+   */
+  evidenceStore?: EvidenceStore;
+  /** Optional agent label stamped on the evidence record. */
+  agentName?: string;
+  /** Optional workflow phase stamped on the evidence record. */
+  workflowPhase?: string;
 }
 
 export interface RouteDecisionOutput {
@@ -296,6 +309,9 @@ export function decideAgentWith(
       health: input.health ?? {},
       history: input.history,
       runId,
+      evidenceStore: input.evidenceStore,
+      agentName: input.agentName,
+      workflowPhase: input.workflowPhase,
     });
     surfacedTags.push(tierTag({ tier: decision.tier, confidence: decision.confidence }));
     return {
@@ -376,6 +392,37 @@ export type {
   WorkflowPhase,
   CapabilityToken,
 } from "./select-dispatch-model.js";
+
+// F-191 / IMP-018 append-only dispatch evidence store. The store is the
+// durable audit trail between the F-188 `ModelDecision` and the
+// post-dispatch outcome. `selectDispatchModel` and `pickFailover` accept
+// an optional `evidenceStore?: EvidenceStore`; when supplied, every
+// decision is appended under the decision's `routingDecisionId` before
+// the call returns. Drift guard
+// (`scripts/__tests__/dispatch-evidence-drift.test.mjs`) fails CI on
+// the first selector / failover signature that drops the parameter.
+export {
+  createFileEvidenceStore,
+  createInMemoryEvidenceStore,
+  canonicalize,
+  sha256,
+  hashProfiles,
+  hashBudget,
+  hashHealth,
+  computeInputs,
+  EvidenceStoreError,
+  DuplicateEvidenceError,
+  OutcomeConflictError,
+  EvidenceNotFoundError,
+} from "./dispatch-evidence.js";
+export type {
+  DispatchEvidence,
+  DispatchEvidenceInputs,
+  DispatchOutcome,
+  DispatchOutcomeStatus,
+  EvidenceStore,
+  EvidenceStoreAppendInput,
+} from "./dispatch-evidence.js";
 
 export {
   ModelRouter,
