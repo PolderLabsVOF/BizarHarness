@@ -1195,7 +1195,7 @@
       "verification": "npx vitest run --root packages/sdk; node --test scripts/__tests__/outcome-learner-drift.test.mjs; npx tsc --noEmit; npm run test:node.",
       "state": "passing",
       "passed": "2026-08-28",
-      "commit": "<merge-sha>",
+      "commit": "5ab75ceafb03a67452b458a3464061c3205409c5",
       "wip_holder": "@mike",
       "wip": 1,
       "category": "routing",
