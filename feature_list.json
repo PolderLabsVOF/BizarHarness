@@ -1186,11 +1186,42 @@
       ],
       "created": "2026-08-27",
       "evidence": "Branch wt/todd-imp018-evidence (9 commits). 57e93b5 feat(sdk) F-191 append-only DispatchEvidence store + typed errors (new packages/sdk/src/router/dispatch-evidence.ts with append-only fsync writes, EvidenceStore interface, InMemoryEvidenceStore + FileEvidenceStore implementations, typed DuplicateEvidenceError / OutcomeConflictError / EvidenceStoreError, sha256 input hashing via canonicalize(READ_ORDER), schemaVersion stamping, exactly-once attachOutcome semantics; 6 dispatch-evidence.test.mjs cases pin exactly-once, integrity verification, conflict surface, and bug-free append). aa907a0 feat(sdk) F-191 thread EvidenceStore through selectDispatchModel + decideAgentWith (optional evidenceStore parameter; on miss the dispatch keeps model still selected and writes a follow-up audit row). 4ed2b95 feat(sdk) F-191 EvidenceStore chain + failover follow-up rows (pickFailover writes a sequence-1 follow-up row tied to the same routingDecisionId; conflicting failover appends surface OutcomeConflictError). 84178db feat(workflows) F-191 dispatch helper writes evidence + outcome (config/workflows/lib/dispatch.js records both the primary dispatch and any failure outcome with verifiedBy='review-bot'). bf5c7fc feat(cli) F-191 bizar evidence audit CLI (cli/commands/evidence.mjs with tail/show/verify/run/audit subcommands). deb80b0 test(sdk) F-191 evidence store + idempotent attachOutcome mutex (8 cases pin idempotency, conflict rejection, fsync ordering, integrity verification across persist+reload). 97f7a43 test(sdk) F-191 selectDispatchModel + pickFailover evidence wiring (6 cases pin the chain). 51eca99 test(cli) F-191 bizar evidence end-to-end coverage (cli/__tests__/evidence.test.mjs; the tests use process.execPath against cli/bin.mjs so they fix the new tests forced into the store). 61ca197 test(drift) F-191 evidenceStore signature + append-call guard (5 cases: import paths, append-call surface, dual use, drift probe that fails CI when evidenceStore is removed from either selectDispatchModel or pickFailover). Verification on the branch: npx tsc --noEmit exit 0; vitest 408/408; node --test 660/661 (1 pre-existing cli/install/prune.test.mjs:157 git-hooks mkdir failure unrelated to this work). VCR bumped from 69/70 to 70/71."
+    },
+    {
+      "id": "F-192",
+      "title": "Contextual outcome learner — per-bucket bandit with quarantine + decay (IMP-020)",
+      "description": "Close IMP-020 from IMPROVEMENTS.md — 'Contextual bandit outcome learner' replacing the legacy 6-tier Thompson-sampling prior with per-(modelId, tier, role, phase, capability, riskLevel, provider, contextSizeBucket) Beta posteriors. Land packages/sdk/src/router/outcome-learner.ts with ContextKey, OutcomeSignal (verifiedBy discriminated, assistant self-report rejected), Posterior (α/β + successes/failures + meanReward + lastUpdated), OutcomeLearnerState, OutcomeLearner interface, OutcomeLearnerError typed errors, createInMemoryOutcomeLearner, createFileOutcomeLearner (synchronous JSON snapshot, restore merges by lastUpdated), and newRoutingDecisionId(). record() validates UUID + verifiedBy, increments only the matching ContextKey bucket, auto-quarantines a modelId after 3 strikes within 24h for transport/auth/rate-limit/model-quality failures (timeout+context-overflow are NOT strikes), decays via decayHalfLifeDays toward floor 1. ranking() sorts candidates by posterior meanReward with deterministic tier-strength tiebreak; NEVER_DOWNGRADE_ROLES pin to strongest healthy (no exploration); low-evidence (α+β<5) low/medium-risk roles explore 10%. Wire: selectDispatchModel accepts optional outcomeLearner, filters quarantined models, re-orders remainder via learner.ranking(role, ctxCandidates); decideAgentWith threads the learner; model-router.ts gains recordContextualOutcome(signal, learner) that validates routingDecisionId is a UUID and refuses assistant-self-report. pickFailover FailoverVerdict gains failoverFrom: string[]; failover-mirror.mjs mirrors the field. Drift guard scripts/__tests__/outcome-learner-drift.test.mjs (5 cases) fails CI when outcomeLearner is removed from selectDispatchModel, when failoverFrom disappears, or when production code imports a test stub.",
+      "behavior": "npx vitest run --root packages/sdk passes (existing cases + 16 new outcome-learner.test.mjs + 6 select-dispatch-model-learner.test.mjs cases); node --test scripts/__tests__/outcome-learner-drift.test.mjs 5/5 passes; npx tsc --noEmit exit 0; npm run test:node green except the pre-existing cli/install/prune.test.mjs:157 git-hooks mkdir failure.",
+      "verification": "npx vitest run --root packages/sdk; node --test scripts/__tests__/outcome-learner-drift.test.mjs; npx tsc --noEmit; npm run test:node.",
+      "state": "passing",
+      "passed": "2026-08-28",
+      "commit": "<merge-sha>",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "routing",
+      "layer": "sdk",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/src/router/outcome-learner.ts",
+        "packages/sdk/src/router/select-dispatch-model.ts",
+        "packages/sdk/src/router/failover.ts",
+        "packages/sdk/src/router/failover-mirror.mjs",
+        "packages/sdk/src/router/model-router.ts",
+        "packages/sdk/src/router/index.ts",
+        "packages/sdk/tests/outcome-learner.test.mjs",
+        "packages/sdk/tests/select-dispatch-model-learner.test.mjs",
+        "scripts/__tests__/outcome-learner-drift.test.mjs",
+        "feature_list.json",
+        "DECISIONS.md",
+        "PROGRESS.md"
+      ],
+      "created": "2026-08-28",
+      "evidence": "Branch wt/todd-imp020-contextual-learner (4 commits). <learner> feat(sdk) F-192 contextual outcome learner + Beta posterior module (new packages/sdk/src/router/outcome-learner.ts with ContextKey/OutcomeSignal/Posterior/OutcomeLearnerState/OutcomeLearner interfaces, createInMemoryOutcomeLearner + createFileOutcomeLearner + newRoutingDecisionId, Beta α/β updates, deterministic bucket key canonicalization, quarantine-after-3-strikes-within-24h for transport/auth/rate-limit/model-quality, half-life decay toward floor 1, NEVER_DOWNGRADE_ROLES pin, 10% exploration on low-evidence low/medium-risk; 16 outcome-learner.test.mjs cases pin success/failure/mixed posteriors, ranking determinism, quarantine, decay, restore merge-by-lastUpdated, assistant-self-report rejection). <wire> feat(sdk) F-192 thread OutcomeLearner through selectDispatchModel + pickFailover + model-router (optional outcomeLearner parameter; modelToContextKey inner helper; eligible.splice(0, eligible.length, ...) re-rank block with quarantine filter + learner.ranking() + tier-strength tiebreak; recordContextualOutcome wrapper with UUID validation + assistant-self-report rejection; failover FailoverVerdict gains failoverFrom: string[]; index.ts re-exports OutcomeLearner types; 6 select-dispatch-model-learner.test.mjs cases drive selectDispatchModel end-to-end with a real InMemoryOutcomeLearner). <mirror> feat(sdk) F-192 failover-mirror.mjs byte-equivalent update (failoverFrom list at every return path; maintains F-185 divergence invariant). <drift> test(scripts) F-192 outcome-learner drift guard (5 cases: learner module export surface, outcomeLearner? parameter on selectDispatchModel, OutcomeLearner surfaced in router/index.ts with decideAgentWith threading, FailoverVerdict failoverFrom:string[] present, no production source imports a learner test stub). Verification on the branch: npx tsc --noEmit exit 0; vitest 416/416; node --test scripts/__tests__/outcome-learner-drift.test.mjs 5/5. VCR bumped from 70/71 to 71/72."
     }
   ],
   "vcr": {
-    "passing": 70,
-    "activated": 71,
-    "ratio": 0.9859154929577465
+    "passing": 71,
+    "activated": 72,
+    "ratio": 0.9861111111111112
   }
 }

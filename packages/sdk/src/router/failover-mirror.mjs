@@ -206,6 +206,12 @@ export const TRANSPORT_OR_AVAILABILITY = new Set([
 export function pickFailover({ registry, role, requirements, attemptedIds, failure, primaryDecisionId }) {
   const attempted = new Set((attemptedIds || []).filter((id) => typeof id === "string"));
   const routingDecisionId = typeof primaryDecisionId === "string" && primaryDecisionId.length > 0 ? primaryDecisionId : null;
+  // IMP-020 / F-192: ordered list of attempted-and-failed IDs. The
+  // learner updates only the FINAL model's posterior; the IMP-018
+  // evidence store records per-attempt outcomes against this list. We
+  // always populate it with the primary's id when the primary was
+  // already attempted, and with subsequent attempted failover IDs.
+  const failoverFrom = [];
 
   if (!TRANSPORT_OR_AVAILABILITY.has(failure)) {
     return {
@@ -215,12 +221,13 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
       exhaustReason: failure,
       chain: [{ id: "", eligible: false, capabilityScore: 0, attempted: false, outcome: "skipped-non-transport-reason" }],
       routingDecisionId,
+      failoverFrom,
     };
   }
 
   const { eligible, ranked } = rankUserSelectedForRole(registry, role, requirements);
   if (ranked.length === 0) {
-    return { primary: null, failover: null, attempts: 0, exhaustReason: failure, chain: [], routingDecisionId };
+    return { primary: null, failover: null, attempts: 0, exhaustReason: failure, chain: [], routingDecisionId, failoverFrom };
   }
 
   const head = ranked[0];
@@ -231,6 +238,11 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
     attempted: attempted.has(head.id),
     outcome: "primary",
   }];
+  // IMP-020: if the primary was already attempted, it counts as a
+  // failed-and-skipped ID in the `failoverFrom` list.
+  if (attempted.has(head.id)) {
+    failoverFrom.push(head.id);
+  }
   const primary = { id: head.id, reason: failure };
 
   let failover = null;
@@ -239,6 +251,7 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
   for (const entry of eligible) {
     if (entry.id === head.id) continue;
     if (attempted.has(entry.id)) {
+      failoverFrom.push(entry.id);
       chain.push({
         id: entry.id,
         eligible: entry.eligible,
@@ -277,6 +290,7 @@ export function pickFailover({ registry, role, requirements, attemptedIds, failu
     exhaustReason: exhaustedAtTopLevel ? failure : null,
     chain,
     routingDecisionId,
+    failoverFrom,
   };
 }
 

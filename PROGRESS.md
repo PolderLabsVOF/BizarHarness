@@ -31,20 +31,38 @@
 
 **Ledger:** F-191 added (passing, source `61ca197`, wip=1 @mike). vcr: passing=70, activated=71, ratio=0.986.
 
-## In Flight — IMP-020 / IMP-022 (parallel Todd worktrees, 2026-08-27)
+## Complete — F-192 Contextual outcome learner (IMP-020)
 
-**Two Todd branches currently running in parallel after F-191 merged. Mike holds IMP-021 (shadow/canary) intentionally because it would collide with IMP-020 on `model-router.ts`.**
+**Date:** 2026-08-28
+**Branch:** `wt/todd-imp020-contextual-learner` (4 commits beyond master: `<learner>` feat(sdk) F-192 contextual outcome learner + Beta posterior module, `<wire>` feat(sdk) F-192 thread OutcomeLearner through selectDispatchModel + pickFailover + model-router, `<mirror>` feat(sdk) F-192 failover-mirror.mjs byte-equivalent update, `<drift>` test(scripts) F-192 outcome-learner drift guard).
+**WIP holder:** `@mike` — F-192 lands with `wip: 1` per the F-176 ledger invariant.
+
+**Master verification (post-merge):** see commit footer for SHA; gates run on the merged tree.
+
+**Files:**
+- `packages/sdk/src/router/outcome-learner.ts` (NEW) — `ContextKey` / `OutcomeSignal` / `Posterior` / `OutcomeLearnerState` / `OutcomeLearner` / `OutcomeLearnerError` + `OutcomeLearnerErrorCode` types. `createInMemoryOutcomeLearner()`, `createFileOutcomeLearner(path)` (synchronous JSON snapshot, `restore()` merges by `lastUpdated`), `newRoutingDecisionId()`. Beta α/β updates keyed by canonicalised bucket key; `record()` validates UUID + `verifiedBy` (assistant self-report rejected), auto-quarantines a modelId after 3 strikes within 24h for `{transport, auth, rate-limit, model-quality}` failures (timeout + context-overflow do NOT count), decays via `decayHalfLifeDays` toward floor 1 without erasing rows. `ranking()` sorts candidates by posterior `meanReward` with deterministic tier-strength tiebreak; `NEVER_DOWNGRADE_ROLES` pin to strongest healthy (no exploration); low/medium-risk low-evidence roles explore 10%.
+- `packages/sdk/src/router/select-dispatch-model.ts` — optional `outcomeLearner?: OutcomeLearner` parameter on `selectDispatchModel`; `contextSizeBucketFor()` helper + inner `modelToContextKey()` builder; learner re-rank block in eligible computation (quarantine filter + `learner.ranking()` + tier-strength tiebreak via `eligible.splice(0, eligible.length, ...reRanked)`).
+- `packages/sdk/src/router/failover.ts` — `FailoverVerdict` gains `failoverFrom: string[]` populated from `attempted.has(head.id)` and subsequent attempted entries.
+- `packages/sdk/src/router/failover-mirror.mjs` — matching `failoverFrom` list at every return path (maintains F-185 byte-equivalence).
+- `packages/sdk/src/router/model-router.ts` — `recordContextualOutcome(signal, learner)` wrapper validates `signal.routingDecisionId` is a UUID and refuses `verifiedBy: 'assistant-self-report'`.
+- `packages/sdk/src/router/index.ts` — re-exports `OutcomeLearner` types + `recordContextualOutcome`; `decideAgentWith` accepts the learner.
+- Tests (NEW, ~27 cases): `packages/sdk/tests/outcome-learner.test.mjs` (16 cases — success/failure/mixed posteriors, ranking determinism, `NEVER_DOWNGRADE_ROLES` pin, 10% exploration rate, quarantine, decay, restore merge-by-lastUpdated, assistant-self-report rejection), `packages/sdk/tests/select-dispatch-model-learner.test.mjs` (6 cases — drives `selectDispatchModel` end-to-end with a real `InMemoryOutcomeLearner`), `scripts/__tests__/outcome-learner-drift.test.mjs` (5 cases — fails CI when `outcomeLearner` removed from selector, when `failoverFrom` disappears, or when production sources import a learner test stub).
+
+**IMP-020 acceptance gate:** "Updates affect only the relevant model/task state" — verified: `record()` increments only the matching `ContextKey` bucket; `ranking()` re-orders the eligible pool without dropping members; `NEVER_DOWNGRADE_ROLES` pin to strongest healthy regardless of posterior; quarantine isolates a modelId without erasing its posterior.
+
+**Ledger:** F-192 added (passing, wip=1 @mike). vcr: passing=71, activated=72, ratio=0.986.
+
+## In Flight — IMP-022 E2E matrix (test-only, 2026-08-28)
+
+**IMP-022 salvage from the `af7a653118ac2a784` Todd worktree that died mid-flight under the 429 rate limit. Test-only work — no production code risk.**
 
 | Branch | IMP | F-ticket | Todd agent | File scope |
 | --- | --- | --- | --- | --- |
-| `wt/todd-imp020-contextual-learner` | IMP-020 | F-192 | `a8634c48e3025f2f6` | NEW `packages/sdk/src/router/outcome-learner.ts` + wires into `select-dispatch-model.ts`, `model-router.ts`, `failover.ts` |
 | `wt/todd-imp022-e2e-matrix` | IMP-022 | F-193 | `af7a653118ac2a784` | NEW `packages/sdk/tests/e2e/**` fixtures + direct/workflow/team/matrix test files + drift guard |
 
-**Collision analysis (Mike):** IMP-020 adds a NEW `outcome-learner.ts` and touches `select-dispatch-model.ts` (optional `outcomeLearner` parameter — additive), `model-router.ts` (new `recordContextualOutcome` wrapper), `failover.ts` (carrier field on outcome signal). IMP-022 is test-only; imports `select-dispatch-model.ts` + `config/workflows/lib/dispatch.js` but does not modify them. Single shared touch-point is `select-dispatch-model.ts` (F-188 central selector); IMP-022 tests can read both signatures (with and without optional `outcomeLearner`).
+**Plan:** review uncommitted fixtures, fix any bugs, close ledger (F-193), merge. After F-192 lands the learner is available so the E2E matrix can assert it.
 
-**Merge order:** 022 → 020 (test-only first, then production-code with optional additive parameter).
-
-**Held back:** IMP-021 (shadow/canary) intentionally NOT dispatched because it would collide with IMP-020 on `model-router.ts`.
+**Held back:** IMP-021 (shadow/canary) intentionally NOT dispatched because it would collide with IMP-020 on `model-router.ts`. Now that F-192 is merged, IMP-021 becomes safe to dispatch next.
 
 ## Complete — F-190 Model capability profiles (IMP-017)
 

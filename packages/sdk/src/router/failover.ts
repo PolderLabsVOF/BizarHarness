@@ -126,8 +126,24 @@ export interface FailoverVerdict {
    * from `PickFailoverInput.primaryDecisionId` so the audit trail ties
    * the failover back to the originating selector decision. `null` when
    * the caller did not supply a pre-decided ID (legacy behaviour).
+   *
+   * IMP-020 / F-192: the learner updates only the FINAL model's posterior
+   * (the one that produced the observed outcome). The `failoverFrom`
+   * list carries the IDs that were attempted and failed so the IMP-018
+   * evidence store can correlate the per-attempt evidence without the
+   * learner cross-contaminating the failed IDs' posteriors.
    */
   routingDecisionId: string | null;
+  /**
+   * IMP-020 / F-192: ordered list of model IDs that were attempted and
+   * failed before the final model was reached. The first entry is the
+   * primary; subsequent entries are the failed failover candidates that
+   * preceded the final decision. Empty when no failover occurred. This
+   * list travels with the audit trail so the IMP-018 evidence store
+   * records each per-attempt outcome separately while the learner
+   * updates only the FINAL model.
+   */
+  failoverFrom: string[];
 }
 
 export interface PickFailoverInput {
@@ -199,6 +215,13 @@ export function pickFailover(input: PickFailoverInput): FailoverVerdict {
   const { registry, role, requirements, attemptedIds, failure, primaryDecisionId } = input;
   const attempted = new Set<string>(attemptedIds.filter((id): id is string => typeof id === "string"));
   const routingDecisionId = typeof primaryDecisionId === "string" && primaryDecisionId.length > 0 ? primaryDecisionId : null;
+  // IMP-020 / F-192: ordered list of attempted-and-failed IDs. The
+  // learner updates only the FINAL model's posterior; the IMP-018
+  // evidence store records per-attempt outcomes against this list. We
+  // always populate it with the primary's id when the primary existed,
+  // and additionally with attempted failover IDs the walker saw on the
+  // way to picking the failover candidate.
+  const failoverFrom: string[] = [];
 
   if (!TRANSPORT_OR_AVAILABILITY.has(failure)) {
     return {
@@ -208,12 +231,13 @@ export function pickFailover(input: PickFailoverInput): FailoverVerdict {
       exhaustReason: failure,
       chain: [{ id: "", eligible: false, capabilityScore: 0, attempted: false, outcome: "skipped-non-transport-reason" }],
       routingDecisionId,
+      failoverFrom,
     };
   }
 
   const { eligible, ranked } = rankUserSelectedForRole(registry, role, requirements);
   if (ranked.length === 0) {
-    return { primary: null, failover: null, attempts: 0, exhaustReason: failure, chain: [], routingDecisionId };
+    return { primary: null, failover: null, attempts: 0, exhaustReason: failure, chain: [], routingDecisionId, failoverFrom };
   }
 
   // The orchestrator's first dispatch is the ranked[0] entry. Record it
@@ -229,6 +253,13 @@ export function pickFailover(input: PickFailoverInput): FailoverVerdict {
       outcome: "primary",
     },
   ];
+  // IMP-020 / F-192: if the primary was already attempted, it counts
+  // as a failed-and-skipped ID in the `failoverFrom` list (the caller
+  // is mid-failover). If the primary has NOT been attempted yet, the
+  // list remains empty until the dispatch wrapper reports the outcome.
+  if (attempted.has(head.id)) {
+    failoverFrom.push(head.id);
+  }
   const primary: FailoverVerdict["primary"] = { id: head.id, reason: failure };
 
   // Walk the eligible list past the primary, looking for the first
@@ -242,6 +273,7 @@ export function pickFailover(input: PickFailoverInput): FailoverVerdict {
   for (const entry of eligible) {
     if (entry.id === head.id) continue;
     if (attempted.has(entry.id)) {
+      failoverFrom.push(entry.id);
       chain.push({
         id: entry.id,
         eligible: entry.eligible,
@@ -288,6 +320,7 @@ export function pickFailover(input: PickFailoverInput): FailoverVerdict {
     exhaustReason: exhaustedAtTopLevel ? failure : null,
     chain,
     routingDecisionId,
+    failoverFrom,
   };
 
   // F-191 / IMP-018: when a failover was actually picked AND the
