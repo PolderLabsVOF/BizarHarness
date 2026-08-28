@@ -297,6 +297,7 @@ test('resolveEndpoint: env wins over settings.json and router.json', () => {
       cwd: dir,
       env: { BIZAR_MODEL_ROUTER_URL: 'https://env.example/v1', ANTHROPIC_AUTH_TOKEN: 'etok' },
       settingsJsonPath: settingsPath,
+      routerPath,
     });
     assert.equal(r.endpoint, 'https://env.example/v1');
     assert.equal(r.authToken, 'etok');
@@ -310,12 +311,12 @@ test('resolveEndpoint: settings.json wins over router.json when env missing', ()
   const dir = tmpDir();
   try {
     const settingsPath = join(dir, 'settings.json');
+    const routerPath = join(dir, 'model-router.json');
     writeFileSync(settingsPath, JSON.stringify({
       env: { BIZAR_MODEL_ROUTER_URL: 'https://settings.example/v1' },
     }));
-    mkdirSync(join(dir, 'config', 'claude'), { recursive: true });
-    writeFileSync(join(dir, 'config', 'claude', 'model-router.json'), JSON.stringify({ endpoint: 'https://router.example/v1' }));
-    const r = resolveEndpoint({ cwd: dir, env: {}, settingsJsonPath: settingsPath });
+    writeFileSync(routerPath, JSON.stringify({ endpoint: 'https://router.example/v1' }));
+    const r = resolveEndpoint({ cwd: dir, env: {}, settingsJsonPath: settingsPath, routerPath });
     assert.equal(r.endpoint, 'https://settings.example/v1');
     assert.equal(r.source, 'settings.json');
   } finally {
@@ -326,10 +327,12 @@ test('resolveEndpoint: settings.json wins over router.json when env missing', ()
 test('resolveEndpoint: router.json wins over default', () => {
   const dir = tmpDir();
   try {
-    // resolveEndpoint reads `config/claude/model-router.json` relative to cwd.
-    mkdirSync(join(dir, 'config', 'claude'), { recursive: true });
-    writeFileSync(join(dir, 'config', 'claude', 'model-router.json'), JSON.stringify({ endpoint: 'https://router.example/v1' }));
-    const r = resolveEndpoint({ cwd: dir, env: {}, settingsJsonPath: join(dir, 'nope.json') });
+    // Tests pass an explicit `routerPath` so they don't have to write into
+    // the real BIZAR_HOME. The runtime resolver anchors the default on
+    // BIZAR_HOME — see `resolveRouterPath`.
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({ endpoint: 'https://router.example/v1' }));
+    const r = resolveEndpoint({ cwd: dir, env: {}, settingsJsonPath: join(dir, 'nope.json'), routerPath });
     assert.equal(r.endpoint, 'https://router.example/v1');
     assert.equal(r.source, 'model-router.json');
   } finally {
@@ -339,7 +342,7 @@ test('resolveEndpoint: router.json wins over default', () => {
 
 test('resolveEndpoint: falls back to localhost default', () => {
   const dir = tmpDir();
-  const r = resolveEndpoint({ cwd: dir, env: {}, settingsJsonPath: join(dir, 'nope.json') });
+  const r = resolveEndpoint({ cwd: dir, env: {}, settingsJsonPath: join(dir, 'nope.json'), routerPath: join(dir, 'nope-router.json') });
   assert.equal(r.endpoint, 'http://localhost:20128/v1');
   assert.equal(r.source, 'default');
 });

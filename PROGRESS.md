@@ -2,6 +2,150 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — Hotfix: `bizar models` persists router under `BIZAR_HOME`, not cwd
+
+**Date:** 2026-08-28
+**Branch:** `wt/todd-models-global-dir` (worktree isolated; merges via
+`bizar worktree-merge`).
+**WIP holder:** `@mike` — `wip: 1` remains on F-191 in
+`feature_list.json`. **Version not bumped** — this is a hotfix on
+`master` that ships before the 10.18.0 mega-release.
+
+**User-reported issue (verbatim):**
+
+> User ran `bizar models`, and the model router file
+> (`config/claude/model-router.json` or its mirror) was saved to the
+> CURRENT WORKING DIRECTORY instead of the global `BIZAR_HOME`
+> directory (`~/.config/bizar/`). Things like this should always be
+> configured globally so they can be used everywhere.
+
+**Root cause:**
+1. `cli/commands/models.mjs:resolveRouterPath` (the function the
+   picker, `--set`, `--refresh`, and the MCP `bizar_model_list` server
+   all funnel through) defaulted to
+   `resolve(cwd, 'config', 'claude', 'model-router.json')`. Because the
+   caller passes `process.cwd()`, every write landed in the directory
+   the operator happened to be in when they ran the command — not the
+   global state directory.
+2. `packages/sdk/src/router/agent-model-registry.ts:defaultConfigPath`
+   had the symmetric bug at read time: it anchored the runtime read on
+   `cwd` too, so the SDK (and any other consumer that fell through to
+   the default) would either miss the file the CLI just wrote or read
+   a per-cwd shim instead of the operator's actual selection.
+3. The CLI and SDK were using `cwd` as the default anchor in exactly
+   the same way, which made the bug feel "consistent" until you
+   noticed the file landing in the wrong place.
+
+**Fix — operator-controlled state lives under `BIZAR_HOME`:**
+- `cli/commands/models.mjs#resolveRouterPath` — default now anchors on
+  `join(BIZAR_HOME(), 'config', 'claude', 'model-router.json')` instead
+  of `cwd`. Precedence: `BIZAR_MODEL_ROUTER_CONFIG` (absolute) >
+  `BIZAR_MODEL_ROUTER_CONFIG` (relative, resolved against cwd) >
+  `$BIZAR_HOME/config/claude/model-router.json`. The `cwd` parameter
+  is retained only so a relative `BIZAR_MODEL_ROUTER_CONFIG` override
+  still resolves sensibly; it is NOT the default anchor.
+- `cli/commands/models.mjs#resolveEndpoint` — accepts a new explicit
+  `routerPath` option so unit tests can point at a tmp file without
+  ever touching the operator's real `BIZAR_HOME`. Runtime callers leave
+  it unset and get the BIZAR_HOME default.
+- `packages/sdk/src/router/agent-model-registry.ts#defaultConfigPath`
+  — same fix: anchors on a local `bizarHome()` resolver that mirrors
+  `cli/provision.mjs#computeBizarHome` (env `BIZAR_HOME` →
+  `XDG_CONFIG_HOME/bizar` → `~/.config/bizar`). The SDK now reads from
+  the same global location the CLI writes to.
+- New docstring on `resolveRouterPath` documents the precedence order
+  and cross-references `FORCE_CLEAN_PRESERVE_ENV_KEYS` (operator data
+  lives under `BIZAR_HOME`, survives `bizar install --force`).
+- Existing subprocess tests that pre-staged a router file under
+  `cwd/config/claude/model-router.json` are updated to redirect via
+  `BIZAR_MODEL_ROUTER_CONFIG` so the operator's real `BIZAR_HOME` is
+  never touched by a test run.
+
+**Files:**
+- `cli/commands/models.mjs`:
+  - Imported `BIZAR_HOME` from `../provision.mjs`.
+  - `resolveRouterPath`: default anchor switched from `cwd` to
+    `BIZAR_HOME()`; added docstring documenting precedence and the
+    rationale (operator data, survives `--force`).
+  - `resolveEndpoint`: accepts new `routerPath` option; reads use the
+    explicit path when supplied, otherwise `resolveRouterPath`.
+  - `run`: passes `cwd` to `resolveEndpoint` for clarity (no behavior
+    change at the default).
+- `packages/sdk/src/router/agent-model-registry.ts`:
+  - New `bizarHome()` resolver mirroring `cli/provision.mjs`.
+  - `defaultConfigPath`: anchored on `bizarHome()`, no longer on cwd.
+- `cli/__tests__/models-persists-under-bizar-home.test.mjs` (NEW,
+  3 cases):
+  - `bizar models --set` from a tmp cwd persists the router file under
+    `BIZAR_HOME`, not under the cwd (asserts both presence under
+    `BIZAR_HOME` and absence under `cwd/config/claude/`).
+  - Re-running from a different cwd preserves the same global file —
+    no per-cwd sharding.
+  - `BIZAR_MODEL_ROUTER_CONFIG` absolute override still wins and
+    suppresses the BIZAR_HOME default write.
+- `cli/__tests__/models-cli.test.mjs`: every subprocess test that
+  wrote or read a router file under `cwd/config/claude/` now points
+  the subprocess at a tmp file via `BIZAR_MODEL_ROUTER_CONFIG`. Adds
+  an explicit assertion that no file leaks into `cwd/config/claude/`
+  after `--set`.
+- `cli/__tests__/models-picker.test.mjs`: three `resolveEndpoint`
+  tests now pass an explicit `routerPath` so the read target is a
+  hermetic tmp file, not the operator's real BIZAR_HOME.
+- `cli/__tests__/models-refresh.test.mjs`: refresh subprocess test
+  redirects through `BIZAR_MODEL_ROUTER_CONFIG`; `writeRouter` writes
+  a single tmp file (no longer creates an unused `config/claude/`
+  subtree); `mkdirSync` import removed.
+- `packages/sdk/dist/router/agent-model-registry.js` (generated by
+  `npm run build:sdk`).
+
+**Verification (post-edit, pre-commit):**
+- `node --test cli/__tests__/models-persists-under-bizar-home.test.mjs`
+  — **3/3 pass**.
+- `node --test cli/__tests__/models-cli.test.mjs
+   cli/__tests__/models-picker.test.mjs
+   cli/__tests__/models-picker-tty.test.mjs
+   cli/__tests__/models-refresh.test.mjs
+   cli/__tests__/models-mirror-shipped.test.mjs
+   cli/__tests__/models-persists-under-bizar-home.test.mjs`
+  — **68/68 pass** (35 baseline + 3 new + 30 from refresh/tty/mirror).
+- `node scripts/run-node-tests.mjs` — **698/699 pass** across the
+  whole CLI suite. The single failure
+  (`cli/install/prune.test.mjs:157`) is the pre-existing ENOTDIR on
+  `.git/hooks` that fails on clean `master` too — unrelated to this
+  fix.
+- `npm run test:sdk` (vitest) — **481/481 pass** across 38 files.
+- `npm run typecheck` (tsc --noEmit) — exit 0, clean types.
+- `npm run build:sdk` — clean (mirror + tsc, no errors).
+- `make check` — pass.
+- `make check-arch` — pass.
+- `make verify-removed-surfaces` — pass.
+- `make verify-repo-structure` — pass.
+
+**Decisions / trade-offs:**
+- `BIZAR_MODEL_ROUTER_CONFIG` is preserved as the explicit escape
+  hatch for tests, scripts, and operators who want a project-local
+  router file. It is honored at both the CLI write site and the SDK
+  read site. Absolute paths bypass both `cwd` and `BIZAR_HOME`.
+- `resolveEndpoint` gained a `routerPath` option rather than reading
+  from the cwd-relative `config/claude/model-router.json` location.
+  This keeps tests hermetic without re-introducing the cwd-leak
+  pattern.
+- The orchestrator (`@mike`) reads from `~/.claude/model-router.json`
+  per the existing `office-manager.md` contract. The CLI now writes
+  to `~/.config/bizar/config/claude/model-router.json`. The two paths
+  diverge intentionally — install-time defaults stay in `CLAUDE_DIR`
+  (managed by `bizar install`), operator runtime selections live in
+  `BIZAR_HOME` (preserved across `--force`). Wiring the runtime read
+  to BIZAR_HOME is a follow-up for `@mike` to decide; this hotfix
+  only resolves the user-reported cwd leak.
+- WIP=1 invariant preserved (the F-191 holder stays in
+  `feature_list.json`; this hotfix is on top of that work, not a
+  competing wip).
+
+**Blockers:** None. Commit remains human-approval-gated per the
+seven-category HITL list; push is pre-granted for this hotfix per
+the orchestrator's brief.
+
 ## Complete — 10.17.4 MiniMax-M3 1M context window plumbing + F-176 explicit-allowlist hardening
 
 **Date:** 2026-08-28

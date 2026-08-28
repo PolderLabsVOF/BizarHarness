@@ -17,7 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -52,14 +52,26 @@ function makeCwd() {
   return mkdtempSync(join(tmpdir(), 'bizar-models-cli-'));
 }
 
+/**
+ * The CLI persists the router file under BIZAR_HOME by default (operator-
+ * controlled state). For these tests we point each test at a tmp file via
+ * BIZAR_MODEL_ROUTER_CONFIG so the subprocess never touches the operator's
+ * real BIZAR_HOME. The dedicated BIZAR_HOME behaviour is exercised separately
+ * in `models-persists-under-bizar-home.test.mjs`.
+ */
+function tmpRouterPath(cwd) {
+  return join(cwd, 'model-router.json');
+}
+
 function writeBaseRouter(cwd) {
-  mkdirSync(join(cwd, 'config', 'claude'), { recursive: true });
-  writeFileSync(join(cwd, 'config', 'claude', 'model-router.json'), JSON.stringify({
+  const path = tmpRouterPath(cwd);
+  writeFileSync(path, JSON.stringify({
     version: '13.0.0',
     endpoint: 'http://stub/v1',
     tiers: { premium: { models: ['stub/p'], purpose: 'x', effort: 'high' } },
     policies: { selectionOwner: 'orchestrator', discoveryFailure: 'inherit-session', unavailableModel: 'inherit-session', retryModelAliases: false, maxDispatchModelAttempts: 1 },
   }, null, 2));
+  return path;
 }
 
 function runBizar(args, { cwd, env, timeoutMs = 15000 } = {}) {
@@ -114,12 +126,15 @@ test('bizar models --list prints IDs one per line, sorted', async () => {
   try {
     const cwd = makeCwd();
     try {
-      writeBaseRouter(cwd);
+      const routerPath = writeBaseRouter(cwd);
       const { code, stdout, stderr } = await runBizar(['models', '--list'], {
         cwd,
         env: {
           BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${port}`,
           ANTHROPIC_AUTH_TOKEN: 'tok',
+          // redirect the global write target into a tmp file so the
+          // test never touches the operator's real BIZAR_HOME.
+          BIZAR_MODEL_ROUTER_CONFIG: routerPath,
           // prevent the test from reading the user's home settings
           HOME: cwd,
         },
@@ -152,12 +167,13 @@ test('bizar models --list --json emits machine-readable JSON', async () => {
   try {
     const cwd = makeCwd();
     try {
-      writeBaseRouter(cwd);
+      const routerPath = writeBaseRouter(cwd);
       const { code, stdout } = await runBizar(['models', '--list', '--json'], {
         cwd,
         env: {
           BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${port}`,
           ANTHROPIC_AUTH_TOKEN: 'tok',
+          BIZAR_MODEL_ROUTER_CONFIG: routerPath,
           HOME: cwd,
         },
       });
@@ -186,12 +202,13 @@ test('bizar models --list surfaces actionable 401 error and exits 1', async () =
   try {
     const cwd = makeCwd();
     try {
-      writeBaseRouter(cwd);
+      const routerPath = writeBaseRouter(cwd);
       const { code, stderr } = await runBizar(['models', '--list'], {
         cwd,
         env: {
           BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${port}`,
           ANTHROPIC_AUTH_TOKEN: 'bad',
+          BIZAR_MODEL_ROUTER_CONFIG: routerPath,
           HOME: cwd,
         },
       });
@@ -208,10 +225,10 @@ test('bizar models --list surfaces actionable 401 error and exits 1', async () =
 test('bizar models --set persists userSelected and --clear removes it', async () => {
   const cwd = makeCwd();
   try {
-    writeBaseRouter(cwd);
+    const routerPath = writeBaseRouter(cwd);
     const { code, stdout } = await runBizar(['models', '--set=a/1,b/2', '--json'], {
       cwd,
-      env: { HOME: cwd },
+      env: { HOME: cwd, BIZAR_MODEL_ROUTER_CONFIG: routerPath },
     });
     assert.equal(code, 0, `expected 0, got ${code}; stdout=${stdout}`);
     const parsed = JSON.parse(stdout);
@@ -220,24 +237,27 @@ test('bizar models --set persists userSelected and --clear removes it', async ()
     assert.equal(parsed.applied.tierHints['a/1'], 'mid');
     assert.equal(parsed.applied.tierHints['b/2'], 'mid');
 
-    // The router file now contains the userSelected block.
-    const router = JSON.parse(readFileSync(join(cwd, 'config', 'claude', 'model-router.json'), 'utf8'));
+    // The router file now contains the userSelected block. It lives at the
+    // redirected `BIZAR_MODEL_ROUTER_CONFIG` path, NOT under `cwd/config/`.
+    const router = JSON.parse(readFileSync(routerPath, 'utf8'));
     assert.deepEqual(router.userSelected.models, ['a/1', 'b/2']);
     assert.equal(router.userSelected.source, 'cli-set');
     // Other fields preserved.
     assert.equal(router.version, '13.0.0');
     assert.equal(router.tiers.premium.models[0], 'stub/p');
+    // And nothing was accidentally written into cwd/config/.
+    assert.equal(existsSync(join(cwd, 'config', 'claude', 'model-router.json')), false, 'cwd/config/ must remain untouched');
 
     // --clear removes the block.
     const cleared = await runBizar(['models', '--clear', '--json'], {
       cwd,
-      env: { HOME: cwd },
+      env: { HOME: cwd, BIZAR_MODEL_ROUTER_CONFIG: routerPath },
     });
     assert.equal(cleared.code, 0);
     const clearedParsed = JSON.parse(cleared.stdout);
     assert.equal(clearedParsed.cleared, true);
     assert.deepEqual(clearedParsed.previous, ['a/1', 'b/2']);
-    const after = JSON.parse(readFileSync(join(cwd, 'config', 'claude', 'model-router.json'), 'utf8'));
+    const after = JSON.parse(readFileSync(routerPath, 'utf8'));
     assert.equal(after.userSelected, undefined, 'userSelected removed');
     assert.equal(after.tiers.premium.models[0], 'stub/p', 'other fields still preserved');
   } finally {
@@ -248,10 +268,10 @@ test('bizar models --set persists userSelected and --clear removes it', async ()
 test('bizar models --set with empty list exits 2', async () => {
   const cwd = makeCwd();
   try {
-    writeBaseRouter(cwd);
+    const routerPath = writeBaseRouter(cwd);
     const { code, stderr } = await runBizar(['models', '--set=', '--json'], {
       cwd,
-      env: { HOME: cwd },
+      env: { HOME: cwd, BIZAR_MODEL_ROUTER_CONFIG: routerPath },
     });
     assert.equal(code, 2);
     assert.match(stderr, /--set requires at least one model id/);
@@ -272,12 +292,13 @@ test('bizar model (deprecated alias) routes to legacy module and preserves JSON 
   try {
     const cwd = makeCwd();
     try {
-      writeBaseRouter(cwd);
+      const routerPath = writeBaseRouter(cwd);
       const { code, stdout, stderr } = await runBizar(['model', 'list', '--json'], {
         cwd,
         env: {
           BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${port}`,
           ANTHROPIC_AUTH_TOKEN: 'tok',
+          BIZAR_MODEL_ROUTER_CONFIG: routerPath,
           HOME: cwd,
         },
       });
