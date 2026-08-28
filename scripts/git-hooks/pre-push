@@ -27,8 +27,14 @@ while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
     refs/tags/*) continue ;;
   esac
   if [ -z "$REMOTE_SHA" ] || [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
-    # New branch — scan all commits on the local side
-    RANGE="$LOCAL_SHA"
+    # New branch — scan only the delta from the parent of LOCAL_SHA, not the
+    # full reachable history (which `git log <sha>` would otherwise walk).
+    PARENT_SHA=$(git rev-parse "$LOCAL_SHA^" 2>/dev/null || echo "")
+    if [ -n "$PARENT_SHA" ]; then
+      RANGE="$PARENT_SHA..$LOCAL_SHA"
+    else
+      RANGE="$LOCAL_SHA"
+    fi
   else
     RANGE="$REMOTE_SHA..$LOCAL_SHA"
   fi
