@@ -1,5 +1,72 @@
 # Changelog
 
+## [10.16.2] - 2026-08-28
+
+- **F-191 (IMP-018) — Per-dispatch model evidence store.** Append-only
+  `DispatchEvidence` ledger (`packages/sdk/src/router/dispatch-evidence.ts`)
+  with `fsync()` durability, SHA-256 input-fingerprint integrity, exactly-once
+  `attachOutcome`, and idempotent re-attach for identical canonical outcomes.
+  Threaded through `selectDispatchModel` (primary dispatch) and `pickFailover`
+  (sequence-1 follow-up row carrying the original `routingDecisionId` +
+  `failoverFrom`) so every dispatch and every failover writes one row chained
+  by monotonic `sequence`. Shipped the CLI `bizar evidence
+  {tail,show,verify,run,audit}` subcommands. Drift guard
+  `scripts/__tests__/dispatch-evidence-drift.test.mjs` (8 cases) fails CI if
+  `evidenceStore` or any append-call is removed. Merge: `6904e52`.
+- **F-192 (IMP-020) — Contextual-bandit outcome learner.**
+  `packages/sdk/src/router/outcome-learner.ts` learns per
+  `(modelId, tier, role, phase, capability, riskLevel, provider,
+  contextSizeBucket)` Beta posteriors — replacing the legacy 6-tier
+  Thompson-sampling prior and the cross-bucket Q-learning contamination.
+  Module exports `ContextKey` / `OutcomeSignal` (verifiedBy discriminated;
+  assistant self-report rejected) / `Posterior` (α/β + successes/failures +
+  meanReward + lastUpdated) / `OutcomeLearnerState` / `OutcomeLearner` /
+  `OutcomeLearnerError`, plus `createInMemoryOutcomeLearner`,
+  `createFileOutcomeLearner` (synchronous JSON snapshot, `restore` merges
+  by `lastUpdated`), and `newRoutingDecisionId()`. `record()` validates
+  UUID + `verifiedBy`, increments only the matching bucket, auto-quarantines
+  a `modelId` after 3 strikes in 24h for `{transport, auth, rate-limit,
+  model-quality}` failures (timeout + context-overflow do NOT count), and
+  decays via `decayHalfLifeDays` toward floor 1. `ranking()` sorts by
+  posterior meanReward with deterministic tier-strength tiebreak;
+  `NEVER_DOWNGRADE_ROLES` pin to strongest healthy (no exploration);
+  low-evidence (α+β<5) low/medium-risk roles explore 10%. `selectDispatchModel`
+  accepts optional `outcomeLearner?: OutcomeLearner`, filters quarantined
+  models, and re-orders the remainder via `learner.ranking()`. `pickFailover`
+  `FailoverVerdict` gains `failoverFrom: string[]`. `model-router.ts` exposes
+  `recordContextualOutcome(signal, learner)` with UUID validation + recent-pick
+  verification. Drift guard
+  `scripts/__tests__/outcome-learner-drift.test.mjs` (5 cases). Merge: `5ab75ce`.
+- **F-193 (IMP-022) — Model-selection E2E matrix.** Test-only surface
+  (`packages/sdk/tests/e2e/`) covering direct Agent-tool dispatch, workflow
+  dispatch across all six shipped workflows (`bizar-debug`, `bizar-implement`,
+  `bizar-research`, `ultracode`, `ultracode-research`, `ultracode-review`),
+  team-spawn with per-member `routingDecisionId` uniqueness, and a full
+  decision matrix. Wires a real `selectDispatchModel` + `dispatchAgent`
+  through four deterministic stubs (agent-tool / provider agree-substitute-
+  fail-auth modes / team-spawn / F-191-shaped evidence-store-stub) plus a
+  `dispatch-context.mjs` factory harness. Drift guard
+  `scripts/__tests__/autonomy-contract-e2e.test.mjs` (5 cases — strips
+  comments + strings, scans `packages/sdk/src/` for fixture imports, asserts
+  drift probe fires when a fixture is injected). Runner
+  `scripts/run-e2e-matrix.mjs`. Merge: `6bb6e09`.
+- `recentDecisions` field removed from `ModelRouter` (was a leftover from
+  the F-192 design iteration; the canonical recent-pick correlation lives
+  on the `recordContextualOutcome(signal, learner, recentPicks?)` parameter
+  — no instance state required).
+- Versions synchronized at **10.16.2** across root `package.json`,
+  `packages/sdk/package.json`, and `packages/sdk/src/version.ts`.
+  `packages/sdk/dist/` rebuilt with F-191/F-192/F-193 surface:
+  `dispatch-evidence.{js,d.ts}`, `outcome-learner.{js,d.ts}`, updated
+  `select-dispatch-model.js`, `failover.js`, `index.js`,
+  `model-router.js`, `failover-mirror.mjs`. New exports from
+  `@polderlabs/bizar-sdk`: `createFileEvidenceStore`,
+  `createInMemoryEvidenceStore`, `EvidenceStoreError`, `DuplicateEvidenceError`,
+  `OutcomeConflictError`, `EvidenceNotFoundError`, `createInMemoryOutcomeLearner`,
+  `createFileOutcomeLearner`, `newRoutingDecisionId`, `OutcomeLearnerError`,
+  `NEVER_DOWNGRADE_ROLES`, `recordContextualOutcome`,
+  `ContextualOutcomeReceipt`, `RecentPickRecord`.
+
 ## [10.14.0] - 2026-08-03
 
 - F-163: Repoint the agent registry at the new 9router gateway IDs:

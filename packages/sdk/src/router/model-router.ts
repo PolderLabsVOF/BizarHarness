@@ -79,16 +79,6 @@ const REWARDS: Record<BizarTier, number> = {
 export class ModelRouter {
   private priors: Record<BizarTier, BetaPrior>;
   private rngState: number;
-  /**
-   * IMP-020 / F-192: ring buffer of recent `pickTier()` decisions. The
-   * `recordContextualOutcome` wrapper verifies the incoming signal's
-   * `modelId` matches one of these within the last 5 minutes before
-   * updating the contextual learner. Drift guard rationale: a signal
-   * with a stale or fabricated `modelId` must NOT silently update
-   * any posterior — that would re-introduce the IMP-020 gap the new
-   * learner exists to close.
-   */
-  private readonly recentDecisions: Array<{ tier: BizarTier; modelId?: string; at: number }> = [];
 
   constructor(opts?: { priors?: Partial<Record<BizarTier, BetaPrior>>; seed?: number }) {
     const overrides = opts?.priors ?? {};
