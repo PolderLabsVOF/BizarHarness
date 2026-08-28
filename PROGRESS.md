@@ -2,6 +2,101 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.17.2 TTY keypress picker for `bizar models`
+
+**Date:** 2026-08-28
+**Branch:** `master` (in-place; no worktree — UX-only change under the
+F-191 wip holder per the F-176 ledger invariant).
+**WIP holder:** `@mike` — `wip: 1` remains on F-191 in `feature_list.json`.
+
+**Objective delivered:** `bizar models` (TTY branch) now renders an
+arrow-key / space / enter checklist instead of the line-mode loop.
+The line-mode picker is preserved unchanged for piped input, CI, and
+the four existing `models-picker.test.mjs` cases.
+
+**Behaviour:**
+- `↑` / `↓` (or `k` / `j`) move the cursor; both wrap at the edges.
+- `space` (or `x`) toggles the row under the cursor.
+- `a` selects every row in original order; `n` clears the selection.
+- `enter` / `q` / `esc` confirm and return the chosen ids in
+  most-recent-selection order.
+- `?` toggles a help footer.
+- Long candidate lists scroll inside a 20-row viewport; rows outside
+  the window render as `⋮ N more above` / `⋮ N more below`.
+- Raw mode failure (e.g. redirected TTY) falls back to the line-mode
+  picker so the user never sees a silent no-op.
+- ANSI in-place redraws (`\x1b[<n>A`) keep scrollback clean; the cursor
+  is hidden (`\x1b[?25l`) on entry and restored (`\x1b[?25h`) on exit
+  (including the SIGINT path).
+
+**Files:**
+- `cli/commands/models.mjs`:
+  - Added `node:readline` import.
+  - `pickModels` is now a thin dispatcher: TTY + raw-mode → new
+    `pickModelsInteractive`; otherwise → existing `pickModelsLineMode`
+    (preserves the line-mode test surface verbatim).
+  - New `pickModelsInteractive` owns the keypress loop, viewport
+    scrolling, in-place ANSI redraws, cursor visibility, and the
+    SIGINT-cleanup `try/finally`.
+  - New `pickModelsLineMode` carries the previous line-mode body; same
+    selection-order invariant (`lastOrder.push(id)` / `lastOrder.filter`).
+  - `fitRow` caps visible id length to `Math.max(40, columns - 32)`
+    so rows never overflow the terminal width.
+  - Help text (`showHelp`) updated to advertise the keypress UX while
+    noting the line-mode fallback for piped input.
+- `cli/__tests__/models-picker-tty.test.mjs` (NEW, 16 cases):
+  - `MockKeyStdin` EventEmitter; `MockOutput` Writable with `.columns`
+    metadata.
+  - Covers: enter / q / esc confirm, arrow-down + space toggle,
+    down→up wrap, j / k vim keys, `a` select-all, `n` clear, `?` help
+    footer, 30-row viewport bounding, both indicator rows after
+    scroll, arrow-up at row 0 wraps, arrow-down at last row wraps,
+    raw escape sequences via `data` are decoded by
+    `readline.emitKeypressEvents`, ctrl+c discards selection and
+    restores the cursor, setRawMode throwing falls back to line-mode.
+- `package.json` — `10.17.1` → `10.17.2`.
+- `packages/sdk/package.json` — `10.17.1` → `10.17.2`.
+- `packages/sdk/src/version.ts` — `SDK_VERSION` `10.17.1` → `10.17.2`.
+- `CHANGELOG.md` — `[10.17.2]` block above `[10.17.1]`.
+- `PROGRESS.md` — this block.
+
+**Verification (post-edit, pre-commit):**
+- `node --test cli/__tests__/models-picker-tty.test.mjs` — **16/16 pass**.
+- `node --test cli/__tests__/models-picker.test.mjs` — **34/34 pass**
+  (line-mode branch untouched).
+- `npm run typecheck` (tsc --noEmit) — exit 0, clean types.
+- `npm run build:sdk` — clean (mirror + tsc, no errors).
+- `npm run test:sdk` (vitest) — **481/481 pass** (38 files).
+- `npm run test:node` — **690/690 pass** across 48 suites (+16 vs
+  674 baseline; the new file contributes its cases).
+- `make verify-repo-structure` — clean.
+- `make verify-removed-surfaces` — clean.
+- `npm pack --dry-run` — `@polderlabs/bizar@10.17.2`, **341 files**
+  (unchanged — the new test file lives in `cli/__tests__/` which is
+  excluded from the tarball under `!cli/**/__tests__/**`), tarball
+  name `polderlabs-bizar-10.17.2.tgz`, includes the updated
+  `cli/commands/models.mjs`.
+
+**Decisions / trade-offs:**
+- Used `MockKeyStdin` EventEmitter for most tests (synchronous, fast,
+  deterministic) plus one test that feeds raw escape bytes via `data`
+  to cover the real `readline.emitKeypressEvents` parser path.
+- `pickModelsInteractive` mutates `lastOrder` only locally (the
+  parameter is rebound via `.filter`); the caller never reads the
+  original array, so the invariant is preserved without coupling.
+- Help footer (`?`) is rendered only when toggled, keeping the
+  default frame compact for typical 5-10 candidate lists.
+- SIGINT (`Ctrl+C`) clears the selection but does NOT bubble — the
+  picker exits cleanly so the surrounding `bizar models` flow can
+  decide whether to re-render the prompt or surface a "user
+  cancelled" message.
+- No new dependencies; `chalk`, `node:readline`, and the existing
+  helpers (`capabilityLabel`, `makeLineReader`, `renderPicker`,
+  `readPrompt`) cover the entire surface.
+
+**Blockers:** None. Commit + push remain human-approval actions and
+were not run yet — staged for the final-push teammate.
+
 ## Complete — F-191 Per-dispatch model evidence (IMP-018)
 
 **Date:** 2026-08-27

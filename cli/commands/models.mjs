@@ -21,6 +21,7 @@ import chalk from 'chalk';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import readline from 'node:readline';
 
 import {
   rankUserSelectedForRole as rankUserSelectedForRoleMirror,
@@ -732,12 +733,13 @@ export function explainSelection({ routerPath, role, requirements = {} } = {}) {
 /**
  * Interactive multi-select picker. Pure function over streams — testable.
  *
- * The picker prints candidates with current picks marked, accepts a space-
- * separated list of indices (or `all` / `none` / `toggle <i>`), and returns
- * the chosen IDs in the user's most-recent selection order.
- *
- * Non-TTY input (pipes, tests, CI) is supported via a simple async line
- * iterator; TTY input uses `rl.question` so the prompt stays interactive.
+ * Branching: when stdin is a TTY with raw-mode support, the picker drives a
+ * keypress-driven checklist (arrow keys / j-k / space / a / n / enter / q /
+ * esc / ?).  When stdin is not a TTY (pipes, CI, tests) the picker falls
+ * through to a line-mode loop that accepts a space-separated index list,
+ * `all`, `none`, `toggle <i>`, an empty line (confirm), or `q` (quit). Both
+ * branches return the chosen IDs in the user's most-recent selection order,
+ * so external callers and existing tests see a single `Promise<string[]>`.
  *
  * @param {{ candidates: Array<{ id: string }>, current?: string[], stdin?: NodeJS.ReadableStream, stdout?: NodeJS.WriteStream, prompt?: string }} opts
  * @returns {Promise<string[]>}
@@ -754,10 +756,36 @@ export async function pickModels({ candidates, current = [], stdin, stdout, prom
   const selected = new Set(current);
   let lastOrder = [...current];
 
-  const lines = makeLineReader(in$);
+  const useTty = in$.isTTY === true && typeof in$.setRawMode === 'function';
+  if (!useTty) {
+    return pickModelsLineMode({ ordered, candidates, selected, lastOrder, stdin: in$, stdout: out$, prompt });
+  }
+
+  // Try to enable raw mode. If that fails (rare — redirected TTY, broken
+  // pseudo-terminal), fall back to the line-mode picker so the user never
+  // sees a silent no-op.
+  let rawOk = true;
+  try {
+    in$.setRawMode(true);
+  } catch {
+    rawOk = false;
+  }
+  if (!rawOk) {
+    return pickModelsLineMode({ ordered, candidates, selected, lastOrder, stdin: in$, stdout: out$, prompt });
+  }
+
+  try {
+    return await pickModelsInteractive({ ordered, candidates, selected, lastOrder, stdin: in$, stdout: out$, prompt });
+  } finally {
+    try { in$.setRawMode(false); } catch { /* swallow — terminal may already be gone */ }
+  }
+}
+
+async function pickModelsLineMode({ ordered, candidates, selected, lastOrder, stdin, stdout, prompt }) {
+  const lines = makeLineReader(stdin);
   for (;;) {
-    renderPicker(out$, ordered, selected, prompt, candidates);
-    const line = await readPrompt(lines, out$, in$.isTTY === true, '> ');
+    renderPicker(stdout, ordered, selected, prompt, candidates);
+    const line = await readPrompt(lines, stdout, stdin.isTTY === true, '> ');
     if (line === null) break; // EOF on non-TTY
     const cmd = String(line || '').trim();
     if (cmd === '') break;
@@ -775,7 +803,7 @@ export async function pickModels({ candidates, current = [], stdin, stdout, prom
     if (cmd.startsWith('toggle ')) {
       const idx = Number(cmd.slice('toggle '.length).trim());
       if (!Number.isInteger(idx) || idx < 1 || idx > ordered.length) {
-        out$.write(chalk.red(`  x index out of range\n`));
+        stdout.write(chalk.red(`  x index out of range\n`));
         continue;
       }
       const id = ordered[idx - 1];
@@ -802,7 +830,7 @@ export async function pickModels({ candidates, current = [], stdin, stdout, prom
       }
       changed = true;
     }
-    if (!changed) out$.write(chalk.yellow(`  ! unrecognised input - try 'all', 'none', 'toggle <i>', or '1 3 5'\n`));
+    if (!changed) stdout.write(chalk.yellow(`  ! unrecognised input - try 'all', 'none', 'toggle <i>', or '1 3 5'\n`));
   }
   const seen = new Set();
   return lastOrder.filter((id) => {
@@ -811,6 +839,145 @@ export async function pickModels({ candidates, current = [], stdin, stdout, prom
     seen.add(id);
     return true;
   });
+}
+
+const VIEWPORT_SIZE = 20;
+const HIDE_CURSOR = '\x1b[?25l';
+const SHOW_CURSOR = '\x1b[?25h';
+const ERASE_SCREEN = '\x1b[2J\x1b[H';
+
+function cursorUp(n) {
+  return `\x1b[${n}A`;
+}
+
+function fitRow({ i, id, profile, width, isCursor, isSelected, columns }) {
+  const mark = isSelected ? chalk.green('[x]') : '[ ]';
+  const idx = String(i + 1).padStart(width, ' ');
+  const label = capabilityLabel(profile);
+  const budget = Math.max(40, (columns ?? 80) - 32);
+  const idText = id.length > budget ? `${id.slice(0, Math.max(1, budget - 1))}…` : id;
+  const cursorMark = isCursor ? chalk.inverse(' ▌ ') : '   ';
+  return `  ${cursorMark}${mark} ${chalk.dim(`${idx}.`)} ${idText}${chalk.dim(`  [${label}]`)}`;
+}
+
+async function pickModelsInteractive({ ordered, candidates, selected, lastOrder, stdin, stdout, prompt }) {
+  let cursor = 0;
+  let scrollTop = 0;
+  let lastRenderHeight = 0;
+  let showHelp = false;
+
+  readline.emitKeypressEvents(stdin);
+  if (typeof stdin.resume === 'function') stdin.resume();
+  stdout.write(`${ERASE_SCREEN}${HIDE_CURSOR}`);
+
+  const exitState = await new Promise((resolve) => {
+    const onKey = (str, key) => {
+      if (!key) return;
+      // Resolve confirmation
+      if (key.name === 'return' || str === 'q' || key.name === 'escape') {
+        return finish();
+      }
+      if (key.ctrl && key.name === 'c') {
+        // SIGINT: discard selection and break out, but do not bubble.
+        selected.clear();
+        lastOrder.length = 0;
+        return finish();
+      }
+      if (key.name === 'up' || str === 'k') {
+        cursor = (cursor - 1 + ordered.length) % ordered.length;
+      } else if (key.name === 'down' || str === 'j') {
+        cursor = (cursor + 1) % ordered.length;
+      } else if (key.name === 'space' || str === 'x') {
+        const id = ordered[cursor];
+        if (selected.has(id)) {
+          selected.delete(id);
+          lastOrder = lastOrder.filter((x) => x !== id);
+        } else {
+          selected.add(id);
+          lastOrder.push(id);
+        }
+      } else if (str === 'a') {
+        for (const id of ordered) selected.add(id);
+        lastOrder = [...ordered];
+      } else if (str === 'n') {
+        selected.clear();
+        lastOrder = [];
+      } else if (str === '?') {
+        showHelp = !showHelp;
+      } else {
+        return;
+      }
+      adjustScroll();
+      render();
+    };
+
+    const finish = () => {
+      stdin.removeListener('keypress', onKey);
+      if (typeof stdin.pause === 'function') stdin.pause();
+      resolve();
+    };
+
+    stdin.on('keypress', onKey);
+    render();
+  });
+
+  stdout.write(SHOW_CURSOR);
+
+  const seen = new Set();
+  return lastOrder.filter((id) => {
+    if (!selected.has(id)) return false;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  function adjustScroll() {
+    if (ordered.length <= VIEWPORT_SIZE) {
+      scrollTop = 0;
+      return;
+    }
+    if (cursor < scrollTop) scrollTop = cursor;
+    else if (cursor >= scrollTop + VIEWPORT_SIZE) scrollTop = cursor - VIEWPORT_SIZE + 1;
+    if (scrollTop < 0) scrollTop = 0;
+    if (scrollTop > Math.max(0, ordered.length - VIEWPORT_SIZE)) {
+      scrollTop = Math.max(0, ordered.length - VIEWPORT_SIZE);
+    }
+  }
+
+  function render() {
+    const width = String(ordered.length).length;
+    const columns = typeof stdout.columns === 'number' ? stdout.columns : 80;
+    const lines = [];
+    lines.push(`\x1b[K${chalk.bold(`-- ${prompt} --`)}`);
+    const start = scrollTop;
+    const end = Math.min(ordered.length, start + VIEWPORT_SIZE);
+    const above = start;
+    const below = ordered.length - end;
+    if (above > 0) lines.push(`\x1b[K${chalk.dim(`  ⋮ ${above} more above`)}`);
+    for (let i = start; i < end; i++) {
+      const profile = candidates.find((candidate) => candidate.id === ordered[i])?.profile;
+      const row = fitRow({
+        i,
+        id: ordered[i],
+        profile,
+        width,
+        isCursor: i === cursor,
+        isSelected: selected.has(ordered[i]),
+        columns,
+      });
+      lines.push(`\x1b[K${row}`);
+    }
+    if (below > 0) lines.push(`\x1b[K${chalk.dim(`  ⋮ ${below} more below`)}`);
+    lines.push(`\x1b[K${chalk.dim(`  ${selected.size}/${ordered.length} selected. ↑/↓ move · space toggle · a all · n none · enter confirm.`)}`);
+    if (showHelp) lines.push(`\x1b[K${chalk.dim(`  Extra: j/k · x toggle · q/esc confirm · ? help.`)}`);
+    lines.push(`\x1b[K`);
+
+    if (lastRenderHeight > 0) {
+      stdout.write(cursorUp(lastRenderHeight));
+    }
+    stdout.write(lines.join('\n'));
+    lastRenderHeight = lines.length;
+  }
 }
 
 /**
@@ -909,7 +1076,7 @@ function showHelp() {
   bizar models - User-controlled model picker
 
   Usage:
-    bizar models                    Interactive picker (lists + asks for selection)
+    bizar models                    Interactive picker (TTY: arrow keys / space / enter; pipe: line-mode)
     bizar models --list             Print candidate IDs, one per line
     bizar models --set a,b,c        Persist the comma-separated IDs to userSelected
     bizar models --clear            Remove userSelected; orchestrator falls back to session-only

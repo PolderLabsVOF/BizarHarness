@@ -1,5 +1,32 @@
 # Changelog
 
+## [10.17.2] - 2026-08-28
+
+- **Feature (`bizar models` keypress picker).** When stdin is a TTY, the
+  picker now renders an interactive arrow-key / space / enter checklist
+  instead of the line-mode loop. Bindings: `↑` / `↓` (or `k` / `j`) move
+  the cursor (with wrap-around), `space` (or `x`) toggles the row under
+  the cursor, `a` selects every row in original order, `n` clears the
+  selection, `enter` / `q` / `esc` confirm, `?` toggles a help footer.
+  Long lists scroll inside a 20-row viewport with `⋮ N more above` /
+  `⋮ N more below` indicators; the cursor stays inside the window as
+  the user navigates. Rendering is ANSI-only: `\x1b[?25l` hides the
+  cursor on entry, `\x1b[?25h` restores it on exit, `\x1b[<n>A` rewinds
+  the cursor for in-place redraws (no scrollback pollution). The
+  line-mode loop is preserved unchanged behind the non-TTY branch so
+  pipes, CI, and the existing four `models-picker.test.mjs` cases stay
+  green untouched. New `cli/__tests__/models-picker-tty.test.mjs`
+  (16 cases) drives the TTY branch in-process via a `MockKeyStdin`
+  EventEmitter that satisfies the subset of `process.stdin` the picker
+  touches (`isTTY`, `setRawMode`, `setEncoding`, `resume`, `pause`,
+  `on/off('keypress')`, `on/off('data')`); one test feeds raw escape
+  sequences via `data` to exercise `readline.emitKeypressEvents`
+  decoding for `↑` / `↓`. The test file ships in
+  `cli/__tests__/models-picker-tty.test.mjs` (excluded from the
+  published tarball under `!cli/**/__tests__/**`); tarball file
+  count: 341 (unchanged — the new behaviour ships inside the existing
+  `cli/commands/models.mjs`).
+
 ## [10.17.1] - 2026-08-28
 
 - **Fix (`bizar models` install-time `ERR_MODULE_NOT_FOUND`).** v10.17.0
