@@ -1153,11 +1153,44 @@
       ],
       "created": "2026-08-27",
       "evidence": "Branch wt/todd-imp017-capability-profiles (3 commits). 8481757: feat(sdk) F-190 discriminated ModelProfile schema + protocol-floor gate (new packages/sdk/src/router/model-profile.ts exporting ModelProfile / ModelProtocolCapabilities / ModelMeasuredCapabilities / ModelProfileProvenance / ModelServingMetadata / Modality / ProfileSource / ProfileMatchType plus helpers mergeProfile / isStale / needsRefresh / deriveExpiry / operatorExpiry / protocolMeets / measuredScore; renamed selector wrapper ModelProfile -> ModelCandidate in select-dispatch-model.ts and routed the discriminated profile through protocolMeets before the legacy evaluateRoleRequirements call; re-exported ModelProfile + helpers through router/index.ts; 15 model-profile.test.mjs + 8 select-dispatch-model-eligibility.test.mjs cases pin the IMP-017 acceptance gate). fda9821: feat(cli,sdk) F-190 refresh + serving + alias-map wiring (added getAliasMap / mergeWithServing to agent-model-registry.ts; added protocolMeetsMirror + extended rankUserSelectedForRoleMirror to surface reasons/measured/provenance in failover-mirror.mjs; added MODELS_DEV_PROVIDER_CATALOG_URL, fetchProviderCatalog, applyRefresh, loadAliasMap, and the bizar models --refresh subcommand in cli/commands/models.mjs; BIZAR_MODELS_DEV_URL env var for test stubbing; extended explainSelection with reasons / measured / provenance per entry; 5 models-refresh.test.mjs cases pin refresh correctness, operator-override survival, network-failure non-mutation, explain reasons for ineligible discriminated profiles, and catalog fetch against a stub HTTP server). 8400396: test(sdk) F-190 protocol-floor eligibility drift guard (5 cases pin the protocolMeets contract: import path, model-profile.ts reject-string surface, evaluateProfile consumption, every TaskFeatures requireX field honoured, drift probe that fails CI when the call is renamed). Verification on the branch: npx tsc --noEmit exit 0; vitest 390/390; node --test 645/646 (1 pre-existing cli/install/prune.test.mjs:157 git-hooks mkdir failure unrelated to this work). Drift guard verified by renaming protocolMeets( -> protocolMeetsRenamed( in a sandbox copy — 3 of 5 drift cases fail as expected. VCR bumped from 68/69 to 69/70."
+    },
+    {
+      "id": "F-191",
+      "title": "Per-dispatch model evidence — append-only store with sha256 integrity (IMP-018)",
+      "description": "Close IMP-018 from IMPROVEMENTS.md line 871 — 'Per-dispatch model evidence | Decision and verified outcome are linked by immutable ID.' Land the append-only DispatchEvidence store (sha256 input-fingerprint integrity, append-only via fsync, exactly-once outcome attach, idempotent re-attach for identical outcomes, typed conflicts), thread it through the central selector (F-188) and the failover walker (F-185) so every dispatch and every failover writes a row, ship the CLI bizar evidence {tail,show,verify,run,audit} commands, and add a drift guard that fails CI if the evidenceStore parameter or any append-call is removed from selectDispatchModel or pickFailover.",
+      "behavior": "npx vitest run --root packages/sdk passes (existing cases + 18 new select-dispatch-model-evidence, dispatch-evidence, drift, evidence CLI tests); node --test cli/__tests__/evidence.test.mjs passes; npx tsc --noEmit exit 0; npm run test:node green except the pre-existing cli/install/prune.test.mjs:157 git-hooks mkdir failure.",
+      "verification": "npx vitest run --root packages/sdk; node --test cli/__tests__/evidence.test.mjs; npx tsc --noEmit; npm run test:node.",
+      "state": "passing",
+      "passed": "2026-08-27",
+      "commit": "<merge-sha>",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "routing",
+      "layer": "sdk",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/src/router/dispatch-evidence.ts",
+        "packages/sdk/src/router/select-dispatch-model.ts",
+        "packages/sdk/src/router/failover.ts",
+        "packages/sdk/src/router/index.ts",
+        "config/workflows/lib/dispatch.js",
+        "cli/bin.mjs",
+        "cli/commands/evidence.mjs",
+        "packages/sdk/tests/dispatch-evidence.test.mjs",
+        "packages/sdk/tests/select-dispatch-model-evidence.test.mjs",
+        "scripts/__tests__/dispatch-evidence-drift.test.mjs",
+        "cli/__tests__/evidence.test.mjs",
+        "feature_list.json",
+        "DECISIONS.md",
+        "PROGRESS.md"
+      ],
+      "created": "2026-08-27",
+      "evidence": "Branch wt/todd-imp018-evidence (9 commits). 57e93b5 feat(sdk) F-191 append-only DispatchEvidence store + typed errors (new packages/sdk/src/router/dispatch-evidence.ts with append-only fsync writes, EvidenceStore interface, InMemoryEvidenceStore + FileEvidenceStore implementations, typed DuplicateEvidenceError / OutcomeConflictError / EvidenceStoreError, sha256 input hashing via canonicalize(READ_ORDER), schemaVersion stamping, exactly-once attachOutcome semantics; 6 dispatch-evidence.test.mjs cases pin exactly-once, integrity verification, conflict surface, and bug-free append). aa907a0 feat(sdk) F-191 thread EvidenceStore through selectDispatchModel + decideAgentWith (optional evidenceStore parameter; on miss the dispatch keeps model still selected and writes a follow-up audit row). 4ed2b95 feat(sdk) F-191 EvidenceStore chain + failover follow-up rows (pickFailover writes a sequence-1 follow-up row tied to the same routingDecisionId; conflicting failover appends surface OutcomeConflictError). 84178db feat(workflows) F-191 dispatch helper writes evidence + outcome (config/workflows/lib/dispatch.js records both the primary dispatch and any failure outcome with verifiedBy='review-bot'). bf5c7fc feat(cli) F-191 bizar evidence audit CLI (cli/commands/evidence.mjs with tail/show/verify/run/audit subcommands). deb80b0 test(sdk) F-191 evidence store + idempotent attachOutcome mutex (8 cases pin idempotency, conflict rejection, fsync ordering, integrity verification across persist+reload). 97f7a43 test(sdk) F-191 selectDispatchModel + pickFailover evidence wiring (6 cases pin the chain). 51eca99 test(cli) F-191 bizar evidence end-to-end coverage (cli/__tests__/evidence.test.mjs; the tests use process.execPath against cli/bin.mjs so they fix the new tests forced into the store). 61ca197 test(drift) F-191 evidenceStore signature + append-call guard (5 cases: import paths, append-call surface, dual use, drift probe that fails CI when evidenceStore is removed from either selectDispatchModel or pickFailover). Verification on the branch: npx tsc --noEmit exit 0; vitest 408/408; node --test 660/661 (1 pre-existing cli/install/prune.test.mjs:157 git-hooks mkdir failure unrelated to this work). VCR bumped from 69/70 to 70/71."
     }
   ],
   "vcr": {
-    "passing": 69,
-    "activated": 70,
-    "ratio": 0.9857142857142858
+    "passing": 70,
+    "activated": 71,
+    "ratio": 0.9859154929577465
   }
 }
