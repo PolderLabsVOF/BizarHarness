@@ -34,10 +34,16 @@
 ## Complete — F-192 Contextual outcome learner (IMP-020)
 
 **Date:** 2026-08-28
+**Merged at:** `5ab75ce` (merge of `wt/todd-imp020-contextual-learner`).
 **Branch:** `wt/todd-imp020-contextual-learner` (4 commits beyond master: `<learner>` feat(sdk) F-192 contextual outcome learner + Beta posterior module, `<wire>` feat(sdk) F-192 thread OutcomeLearner through selectDispatchModel + pickFailover + model-router, `<mirror>` feat(sdk) F-192 failover-mirror.mjs byte-equivalent update, `<drift>` test(scripts) F-192 outcome-learner drift guard).
 **WIP holder:** `@mike` — F-192 lands with `wip: 1` per the F-176 ledger invariant.
 
-**Master verification (post-merge):** see commit footer for SHA; gates run on the merged tree.
+**Master verification (post-merge):**
+- `npm run test:node` — **666/666 passing** across 48 suites (+5 vs 661 baseline; F-192 contributed the outcome-learner drift guard).
+- `npx vitest run --root packages/sdk` — **445/445 passing** across 34 test files (+26 vs 419 baseline).
+- `npx tsc --noEmit` — exit 0, clean types.
+- `node --test scripts/__tests__/outcome-learner-drift.test.mjs` — 5/5 passing.
+- `node --test scripts/__tests__/dispatch-evidence-drift.test.mjs` — 8/8 passing (re-export surface preserved across merge).
 
 **Files:**
 - `packages/sdk/src/router/outcome-learner.ts` (NEW) — `ContextKey` / `OutcomeSignal` / `Posterior` / `OutcomeLearnerState` / `OutcomeLearner` / `OutcomeLearnerError` + `OutcomeLearnerErrorCode` types. `createInMemoryOutcomeLearner()`, `createFileOutcomeLearner(path)` (synchronous JSON snapshot, `restore()` merges by `lastUpdated`), `newRoutingDecisionId()`. Beta α/β updates keyed by canonicalised bucket key; `record()` validates UUID + `verifiedBy` (assistant self-report rejected), auto-quarantines a modelId after 3 strikes within 24h for `{transport, auth, rate-limit, model-quality}` failures (timeout + context-overflow do NOT count), decays via `decayHalfLifeDays` toward floor 1 without erasing rows. `ranking()` sorts candidates by posterior `meanReward` with deterministic tier-strength tiebreak; `NEVER_DOWNGRADE_ROLES` pin to strongest healthy (no exploration); low/medium-risk low-evidence roles explore 10%.
