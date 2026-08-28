@@ -5,14 +5,14 @@
 ## Complete — F-191 Per-dispatch model evidence (IMP-018)
 
 **Date:** 2026-08-27
-**Branch:** `wt/todd-imp018-evidence` (9 commits beyond master: `57e93b5` feat(sdk) append-only store + typed errors, `aa907a0` feat(sdk) thread EvidenceStore through selectDispatchModel + decideAgentWith, `4ed2b95` feat(sdk) EvidenceStore chain + failover follow-up rows, `84178db` feat(workflows) dispatch helper writes evidence + outcome, `bf5c7fc` feat(cli) bizar evidence audit CLI, `deb80b0` test(sdk) evidence store + idempotent attachOutcome mutex, `97f7a43` test(sdk) selectDispatchModel + pickFailover evidence wiring, `51eca99` test(cli) end-to-end CLI coverage, `61ca197` test(drift) evidenceStore signature + append-call guard).
+**Merged at:** `6904e52` (merge of `wt/todd-imp018-evidence`).
+**Branch:** `wt/todd-imp018-evidence` (9 commits beyond master: `57e93b5` feat(sdk) append-only store + typed errors, `aa907a0` feat(sdk) thread EvidenceStore through selectDispatchModel + decideAgentWith, `4ed2b95` feat(sdk) EvidenceStore chain + failover follow-up rows, `84178db` feat(workflows) dispatch helper writes evidence + outcome, `bf5c7fc` feat(cli) bizar evidence audit CLI, `deb80b0` test(sdk) evidence store + idempotent attachOutcome mutex, `97f7a43` test(sdk) selectDispatchModel + pickFailover evidence wiring, `51eca99` test(cli) end-to-end CLI coverage, `61ca197` test(drift) evidenceStore signature + append-call guard, plus `e846a68` docs(ledger) F-191 close out).
 **WIP holder:** `@mike` — F-191 lands with `wip: 1` per the F-176 ledger invariant.
 
-**Branch verification:**
+**Master verification (post-merge):**
+- `npm run test:node` — **661/661 passing** across 48 suites (+15 vs 646 baseline; F-191 contributed `cli/__tests__/evidence.test.mjs` and friends).
+- `npx vitest run --root packages/sdk` — **419/419 passing** across 32 test files (+29 vs 390 baseline).
 - `npx tsc --noEmit` — exit 0, clean types.
-- `npx vitest run --root packages/sdk` — 408/408 passing.
-- `node --test cli/__tests__/evidence.test.mjs` — passing.
-- `npm run test:node` — 660/661 (the 1 failure is the pre-existing `cli/install/prune.test.mjs:157` git-hooks mkdir collision, unrelated to this work).
 
 **Files:**
 - `packages/sdk/src/router/dispatch-evidence.ts` (NEW) — `EvidenceStore` interface, `InMemoryEvidenceStore`, `FileEvidenceStore`, `DispatchEvidence` row, `DispatchOutcome`, `DispatchEvidenceInputs` (sha-256 fingerprints), typed `DuplicateEvidenceError` / `OutcomeConflictError` / `EvidenceStoreError`. Append-only via `fs.open(path, 'a')` + `fsync`. Exactly-once `attachOutcome`; idempotent re-attach for identical canonical outcomes; conflict on divergent outcomes.
