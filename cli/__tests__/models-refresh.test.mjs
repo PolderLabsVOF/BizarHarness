@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,8 +30,7 @@ function makeCwd() {
 }
 
 function writeRouter(cwd, userSelected) {
-  mkdirSync(join(cwd, 'config', 'claude'), { recursive: true });
-  const path = join(cwd, 'config', 'claude', 'model-router.json');
+  const path = join(cwd, 'model-router.json');
   writeFileSync(path, JSON.stringify({
     version: '13.0.0',
     endpoint: 'http://stub/v1',
@@ -166,7 +165,7 @@ test('bizar models --refresh: network failure leaves existing profiles intact, e
     const port = srv.address().port;
     const cwd = makeCwd();
     try {
-      writeRouter(cwd, {
+      const routerPath = writeRouter(cwd, {
         models: ['anthropic/claude-haiku'],
         tierHints: {},
         profiles: {
@@ -177,12 +176,13 @@ test('bizar models --refresh: network failure leaves existing profiles intact, e
           },
         },
       });
-      const original = readFileSync(join(cwd, 'config', 'claude', 'model-router.json'), 'utf8');
+      const original = readFileSync(routerPath, 'utf8');
       const child = spawn(process.execPath, [BIN, 'models', '--refresh'], {
         cwd,
         env: {
           ...process.env,
           BIZAR_SKIP_BUILD: '1',
+          BIZAR_MODEL_ROUTER_CONFIG: routerPath,
           BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${port}/v1`,
           BIZAR_MODELS_DEV_URL: `http://127.0.0.1:${port}/models.json`,
           ANTHROPIC_AUTH_TOKEN: 'tok',
@@ -196,7 +196,7 @@ test('bizar models --refresh: network failure leaves existing profiles intact, e
       assert.notEqual(code, 0, 'exit non-zero on network failure');
       assert.match(stderr, /refresh failed|Models\.dev|upstream/i);
       // Existing profile is untouched.
-      const after = readFileSync(join(cwd, 'config', 'claude', 'model-router.json'), 'utf8');
+      const after = readFileSync(routerPath, 'utf8');
       assert.equal(after, original);
     } finally {
       rmSync(cwd, { recursive: true, force: true });

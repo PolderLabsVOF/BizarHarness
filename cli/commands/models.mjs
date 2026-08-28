@@ -23,6 +23,8 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import readline from 'node:readline';
 
+import { BIZAR_HOME } from '../provision.mjs';
+
 import {
   rankUserSelectedForRole as rankUserSelectedForRoleMirror,
 } from '../../packages/sdk/dist/router/failover-mirror.mjs';
@@ -32,7 +34,7 @@ import {
 /**
  * Read env vars, then fall back to ~/.claude/settings.json, then to the
  * defaults baked into model-router.json#endpoint.
- * @param {{ cwd?: string, env?: NodeJS.ProcessEnv, settingsJsonPath?: string }} opts
+ * @param {{ cwd?: string, env?: NodeJS.ProcessEnv, settingsJsonPath?: string, routerPath?: string }} opts
  * @returns {{ endpoint: string, authToken: string|null, source: string }}
  */
 export function resolveEndpoint(opts = {}) {
@@ -55,7 +57,10 @@ export function resolveEndpoint(opts = {}) {
   const fromSettingsToken = settingsEnv.ANTHROPIC_AUTH_TOKEN || null;
 
   let fromRouterUrl = null;
-  const routerPath = resolveRouterPath(opts.cwd || process.cwd());
+  // Tests pass an explicit `routerPath` so they don't have to write into the
+  // real BIZAR_HOME. Runtime callers leave it unset and get the BIZAR_HOME
+  // default via `resolveRouterPath`.
+  const routerPath = opts.routerPath || resolveRouterPath(opts.cwd || process.cwd());
   if (existsSync(routerPath)) {
     try {
       const router = JSON.parse(readFileSync(routerPath, 'utf8'));
@@ -76,12 +81,33 @@ export function resolveEndpoint(opts = {}) {
   return { endpoint: url, authToken: token, source };
 }
 
-export function resolveRouterPath(cwd) {
+/**
+ * Resolve the on-disk path of `model-router.json`.
+ *
+ * Precedence:
+ *   1. `BIZAR_MODEL_ROUTER_CONFIG` (absolute path) — verbatim.
+ *   2. `BIZAR_MODEL_ROUTER_CONFIG` (relative path) — resolved against `cwd`.
+ *   3. `$BIZAR_HOME/config/claude/model-router.json` — the global default.
+ *
+ * The default lives under `BIZAR_HOME` (not `cwd`) because the router file
+ * holds operator-controlled state (the `userSelected` block, refresh
+ * provenance, endpoint override) that must survive cwd changes AND
+ * `bizar install --force` clean runs — see
+ * `cli/provision.mjs#FORCE_CLEAN_PRESERVE_ENV_KEYS`.
+ *
+ * `cwd` is retained as the resolution root for relative overrides so tests
+ * that pre-stage a router file in a tmp dir keep working; it is NOT used as
+ * the default anchor.
+ *
+ * @param {string} [cwd] - resolution root for relative `BIZAR_MODEL_ROUTER_CONFIG` overrides.
+ * @returns {string}
+ */
+export function resolveRouterPath(cwd = process.cwd()) {
   const fromEnv = process.env.BIZAR_MODEL_ROUTER_CONFIG;
   if (fromEnv && typeof fromEnv === 'string') {
     return isAbsolute(fromEnv) ? fromEnv : resolve(cwd, fromEnv);
   }
-  return resolve(cwd, 'config', 'claude', 'model-router.json');
+  return join(BIZAR_HOME(), 'config', 'claude', 'model-router.json');
 }
 
 /**
@@ -1126,8 +1152,12 @@ export async function run(name, args, isHelpRequest) {
   // ambiguous: the deprecated surface also takes --list. Accept either.
   const isDeprecatedAlias = name === 'model';
 
+  // The router file lives under BIZAR_HOME (operator-controlled state that
+  // must survive cwd changes and `bizar install --force`). See
+  // `resolveRouterPath` for the precedence rules; `cwd` is passed only so a
+  // relative `BIZAR_MODEL_ROUTER_CONFIG` override still resolves sensibly.
   const routerPath = resolveRouterPath(process.cwd());
-  const { endpoint, authToken, source: endpointSource } = resolveEndpoint({});
+  const { endpoint, authToken, source: endpointSource } = resolveEndpoint({ cwd: process.cwd() });
 
   // F-185: `bizar models explain <role>` — non-interactive ranking.
   // Handled BEFORE the picker fetch path so it never touches the gateway.

@@ -3,7 +3,23 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir as osHomedir } from "node:os";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
+
+/**
+ * `BIZAR_HOME` resolver — kept in sync with `cli/provision.mjs#BIZAR_HOME`
+ * and `cli/install/paths.mjs`. The router file is operator-controlled
+ * state that must survive cwd changes and `bizar install --force` clean
+ * runs, so the SDK reads it from `BIZAR_HOME` (the same path the CLI
+ * writes to via `cli/commands/models.mjs`).
+ */
+function bizarHome(): string {
+  if (process.env.BIZAR_HOME && process.env.BIZAR_HOME.trim()) {
+    return process.env.BIZAR_HOME;
+  }
+  const xdg = process.env.XDG_CONFIG_HOME;
+  const home = osHomedir();
+  return xdg && xdg.trim() ? join(xdg, "bizar") : join(home, ".config", "bizar");
+}
 
 export type BizarTier = "premium" | "high" | "mid-design" | "default" | "mid" | "budget";
 
@@ -201,8 +217,13 @@ function modelIds(value: unknown): string[] {
     : [];
 }
 
-function defaultConfigPath(cwd = process.cwd()): string {
-  return resolve(cwd, "config", "claude", "model-router.json");
+function defaultConfigPath(_cwd = process.cwd()): string {
+  // Anchor on BIZAR_HOME — the router file is operator-controlled state
+  // that must survive cwd changes and `bizar install --force` clean runs.
+  // The `_cwd` parameter is retained for the explicit `configPath` branch
+  // (relative `BIZAR_MODEL_ROUTER_CONFIG` overrides still resolve against
+  // it for tests that pre-stage the file in a tmp dir).
+  return join(bizarHome(), "config", "claude", "model-router.json");
 }
 
 export function loadModelRegistry(src: RegistrySource = {}): ModelRegistry {
