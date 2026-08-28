@@ -1162,7 +1162,7 @@
       "verification": "npx vitest run --root packages/sdk; node --test cli/__tests__/evidence.test.mjs; npx tsc --noEmit; npm run test:node.",
       "state": "passing",
       "passed": "2026-08-27",
-      "commit": "<merge-sha>",
+      "commit": "6904e52",
       "wip_holder": "@mike",
       "wip": 1,
       "category": "routing",
