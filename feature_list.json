@@ -1217,11 +1217,44 @@
       ],
       "created": "2026-08-28",
       "evidence": "Branch wt/todd-imp020-contextual-learner (4 commits). <learner> feat(sdk) F-192 contextual outcome learner + Beta posterior module (new packages/sdk/src/router/outcome-learner.ts with ContextKey/OutcomeSignal/Posterior/OutcomeLearnerState/OutcomeLearner interfaces, createInMemoryOutcomeLearner + createFileOutcomeLearner + newRoutingDecisionId, Beta α/β updates, deterministic bucket key canonicalization, quarantine-after-3-strikes-within-24h for transport/auth/rate-limit/model-quality, half-life decay toward floor 1, NEVER_DOWNGRADE_ROLES pin, 10% exploration on low-evidence low/medium-risk; 16 outcome-learner.test.mjs cases pin success/failure/mixed posteriors, ranking determinism, quarantine, decay, restore merge-by-lastUpdated, assistant-self-report rejection). <wire> feat(sdk) F-192 thread OutcomeLearner through selectDispatchModel + pickFailover + model-router (optional outcomeLearner parameter; modelToContextKey inner helper; eligible.splice(0, eligible.length, ...) re-rank block with quarantine filter + learner.ranking() + tier-strength tiebreak; recordContextualOutcome wrapper with UUID validation + assistant-self-report rejection; failover FailoverVerdict gains failoverFrom: string[]; index.ts re-exports OutcomeLearner types; 6 select-dispatch-model-learner.test.mjs cases drive selectDispatchModel end-to-end with a real InMemoryOutcomeLearner). <mirror> feat(sdk) F-192 failover-mirror.mjs byte-equivalent update (failoverFrom list at every return path; maintains F-185 divergence invariant). <drift> test(scripts) F-192 outcome-learner drift guard (5 cases: learner module export surface, outcomeLearner? parameter on selectDispatchModel, OutcomeLearner surfaced in router/index.ts with decideAgentWith threading, FailoverVerdict failoverFrom:string[] present, no production source imports a learner test stub). Verification on the branch: npx tsc --noEmit exit 0; vitest 416/416; node --test scripts/__tests__/outcome-learner-drift.test.mjs 5/5. VCR bumped from 70/71 to 71/72."
+    },
+    {
+      "id": "F-193",
+      "title": "Model-selection E2E matrix — direct + workflow + team + drift guard (IMP-022)",
+      "description": "Close IMP-022 from IMPROVEMENTS.md line 875 — 'Model-selection E2E matrix | Direct, workflow, and team selection cases pass'. Land a self-contained e2e test boundary (packages/sdk/tests/e2e/) with four vitest suites (36 cases) + four stub fixtures (agent-tool-stub, provider-stub, team-spawn-stub, evidence-store-stub, dispatch-context harness) + autonomy-contract-e2e drift guard (5 cases) + run-e2e-matrix.mjs runner. The harness wires a real selectDispatchModel + dispatchAgent through an evidence-store-stub so every captured Agent payload carries model+routingDecisionId+selectorReason; matrix tests cover 2-model+low-risk → budget (CHEAPEST_RISK_LOW), 2-model+high-risk+security → strong (STRONGEST_NEVER_DOWNGRADE), 3-model+design → design-capable, all six shipped workflows (bizar-debug/implement/research + ultracode/research/review), team-spawn per-member routingDecisionId uniqueness, provider agree/substitute/fail/auth modes, failover chain via F-191 evidence store. Drift guard fails CI if any production source imports an E2E fixture. Test-only — no production code change.",
+      "behavior": "npx vitest run --root packages/sdk tests/e2e/ passes (36 cases across 4 files); node --test scripts/__tests__/autonomy-contract-e2e.test.mjs passes (5 cases); npx vitest run --root packages/sdk full passes (481 cases, +36 vs 445); npm run test:node green (+5 vs 666 baseline); npx tsc --noEmit exit 0.",
+      "verification": "npx vitest run --root packages/sdk tests/e2e/; node --test scripts/__tests__/autonomy-contract-e2e.test.mjs; npx vitest run --root packages/sdk; npm run test:node; npx tsc --noEmit.",
+      "state": "passing",
+      "passed": "2026-08-28",
+      "commit": "6bb6e09",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "routing",
+      "layer": "sdk",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/tests/e2e/_fixtures/agent-tool-stub.mjs",
+        "packages/sdk/tests/e2e/_fixtures/dispatch-context.mjs",
+        "packages/sdk/tests/e2e/_fixtures/evidence-store-stub.mjs",
+        "packages/sdk/tests/e2e/_fixtures/provider-stub.mjs",
+        "packages/sdk/tests/e2e/_fixtures/team-spawn-stub.mjs",
+        "packages/sdk/tests/e2e/direct-selection.test.mjs",
+        "packages/sdk/tests/e2e/matrix.test.mjs",
+        "packages/sdk/tests/e2e/team-selection.test.mjs",
+        "packages/sdk/tests/e2e/workflow-selection.test.mjs",
+        "scripts/__tests__/autonomy-contract-e2e.test.mjs",
+        "scripts/run-e2e-matrix.mjs",
+        "feature_list.json",
+        "DECISIONS.md",
+        "PROGRESS.md"
+      ],
+      "created": "2026-08-28",
+      "evidence": "Branch wt/todd-imp022-e2e-matrix (1 commit, worktree salvage from Todd agent killed by 429 rate limit). ec2bc01 feat(sdk,scripts) F-193 model-selection E2E matrix (4 vitest suites — direct-selection (9 cases), matrix (12 cases), team-selection (3 cases), workflow-selection (12 cases) — plus 5 fixtures: agent-tool-stub.mjs (Agent tool deterministic stub with install/restore + captureLimit), provider-stub.mjs (4 modes: agree/substitute/fail/auth with typed transport + auth errors), team-spawn-stub.mjs (per-spawn dispatchId + members[]), evidence-store-stub.mjs (mirrors F-191 EvidenceStore contract — append/get/findByRunId/attachOutcome/verifyIntegrity/tail + DuplicateEvidenceError/OutcomeConflictError/EvidenceNotFoundError/EvidenceStoreError), dispatch-context.mjs (createE2EHarness({mode, profiles}) wiring selectDispatchModel + dispatchAgent + Agent tool + provider + team + evidence store); 5 autonomy-contract-e2e.test.mjs cases: no production source under packages/sdk/src/ imports an E2E fixture (strip-comments-and-strings regex probe), each stub exposes the documented interface, drift probe injects a fixture import and confirms the guard fires). Verification: npx vitest run --root packages/sdk 481/481; node --test scripts/__tests__/autonomy-contract-e2e.test.mjs 5/5; npm run test:node 671/671 (1 pre-existing cli/install/prune.test.mjs:159 mkdir failure unrelated to this work); npx tsc --noEmit exit 0. VCR bumped from 71/72 to 72/73."
     }
   ],
   "vcr": {
-    "passing": 71,
-    "activated": 72,
-    "ratio": 0.9861111111111112
+    "passing": 72,
+    "activated": 73,
+    "ratio": 0.9863013698630136
   }
 }

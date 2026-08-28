@@ -58,17 +58,37 @@
 
 **Ledger:** F-192 added (passing, wip=1 @mike). vcr: passing=71, activated=72, ratio=0.986.
 
-## In Flight — IMP-022 E2E matrix (test-only, 2026-08-28)
+## Complete — F-193 Model-selection E2E matrix (IMP-022)
 
-**IMP-022 salvage from the `af7a653118ac2a784` Todd worktree that died mid-flight under the 429 rate limit. Test-only work — no production code risk.**
+**Date:** 2026-08-28
+**Merged at:** `6bb6e09` (merge of `wt/todd-imp022-e2e-matrix`).
+**Branch:** `wt/todd-imp022-e2e-matrix` (1 commit: `ec2bc01` feat(sdk,scripts) F-193 IMP-022 model-selection E2E matrix).
+**WIP holder:** `@mike` — F-193 lands with `wip: 1` per the F-176 ledger invariant.
 
-| Branch | IMP | F-ticket | Todd agent | File scope |
-| --- | --- | --- | --- | --- |
-| `wt/todd-imp022-e2e-matrix` | IMP-022 | F-193 | `af7a653118ac2a784` | NEW `packages/sdk/tests/e2e/**` fixtures + direct/workflow/team/matrix test files + drift guard |
+**Master verification (post-merge):**
+- `npx vitest run --root packages/sdk` — **481/481 passing** across 38 test files (+36 vs 445 baseline; F-193 contributed `packages/sdk/tests/e2e/**`).
+- `node --test scripts/__tests__/autonomy-contract-e2e.test.mjs` — 5/5 passing.
+- `npm run test:node` — **671/671 passing** across 48 suites (+5 vs 666 baseline; F-193 contributed the e2e drift guard).
+- `npx tsc --noEmit` — exit 0, clean types.
 
-**Plan:** review uncommitted fixtures, fix any bugs, close ledger (F-193), merge. After F-192 lands the learner is available so the E2E matrix can assert it.
+**Files:**
+- `packages/sdk/tests/e2e/_fixtures/agent-tool-stub.mjs` (NEW) — `createAgentToolStub({ captureLimit? })` returns `{ captured, reset, invoke, install, restore, uninstalledResultFor }`; deterministic result honors payload's `model` so downstream provider stubs echo the same value.
+- `packages/sdk/tests/e2e/_fixtures/provider-stub.mjs` (NEW) — four modes: `agree` (echoes), `substitute` (`substitutionMap` rewrites), `fail` (throws typed `ProviderTransportError` with `code: 'transport'`), `auth` (throws typed `ProviderAuthError` with `code: 'auth'`).
+- `packages/sdk/tests/e2e/_fixtures/team-spawn-stub.mjs` (NEW) — `createTeamSpawnStub()` returns `{ members, spawn, join, reset }`; per-spawn `dispatchId` defaults to `payload.routingDecisionId`.
+- `packages/sdk/tests/e2e/_fixtures/evidence-store-stub.mjs` (NEW) — mirrors F-191 contract: `append/get/findByRunId/attachOutcome/verifyIntegrity/tail` + `DuplicateEvidenceError` / `OutcomeConflictError` / `EvidenceNotFoundError` / `EvidenceStoreError`.
+- `packages/sdk/tests/e2e/_fixtures/dispatch-context.mjs` (NEW) — `createE2EHarness({ mode?, profiles? })` returns `{ evidenceStore, agentTool, provider, team, ctx, profiles, decide, dispatch, dispatchViaWorkflow, spawnTeamMember, detectProviderMismatch, reset, REASON }` wiring `selectDispatchModel` + `dispatchAgent` through all four stubs.
+- `packages/sdk/tests/e2e/direct-selection.test.mjs` (NEW, 9 cases) — Agent-tool dispatch through the harness with success/transport/auth outcomes, evidence-row-exists-before-invocation assertion, high-risk 100-iteration deterministic check.
+- `packages/sdk/tests/e2e/workflow-selection.test.mjs` (NEW, 12 cases) — drives all six shipped workflows (`bizar-debug`, `bizar-implement`, `bizar-research`, `ultracode`, `ultracode-research`, `ultracode-review`) through the harness; every nested Agent payload carries `model`+`routingDecisionId`+`selectorReason`.
+- `packages/sdk/tests/e2e/team-selection.test.mjs` (NEW, 3 cases) — per-member `routingDecisionId` uniqueness; payload shape; evidence row appended per spawn.
+- `packages/sdk/tests/e2e/matrix.test.mjs` (NEW, 12 cases) — IMPROVEMENTS.md matrix rows: 2-model+low-risk → budget, 2-model+high-risk+security → strong, 3-model+design → design-capable, failure-substitute-transport-matrix, etc.
+- `scripts/__tests__/autonomy-contract-e2e.test.mjs` (NEW, 5 cases) — strips comments + strings, scans `packages/sdk/src/` for E2E fixture imports (F-022 contract); each stub exposes the documented interface; drift probe injects a fixture import and asserts the guard fires.
+- `scripts/run-e2e-matrix.mjs` (NEW) — runner that discovers and executes the e2e suite (consumed by future `make e2e-matrix` if operators want a standalone run).
 
-**Held back:** IMP-021 (shadow/canary) intentionally NOT dispatched because it would collide with IMP-020 on `model-router.ts`. Now that F-192 is merged, IMP-021 becomes safe to dispatch next.
+**IMP-022 acceptance gate:** "Direct, workflow, and team selection cases pass" — verified: 36/36 vitest cases pass; 5/5 drift guard pass; matrix covers all 12 IMPROVEMENTS.md rows; team-spawn proves per-member uniqueness; workflow-selection proves every nested Agent call carries the augmented payload.
+
+**Ledger:** F-193 added (passing, source `ec2bc01`, wip=1 @mike). vcr: passing=72, activated=73, ratio=0.986.
+
+**Next:** IMP-021 (shadow/canary) becomes safe to dispatch now that F-192 is merged (no `model-router.ts` collision).
 
 ## Complete — F-190 Model capability profiles (IMP-017)
 
