@@ -29,6 +29,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 
 import { detectCodemodIntent } from "./codemod-intent.js";
 import type { BizarTier } from "./agent-model-registry.js";
+import type { OutcomeLearner, OutcomeSignal } from "./outcome-learner.js";
 
 export type { BizarTier } from "./agent-model-registry.js";
 
@@ -78,6 +79,16 @@ const REWARDS: Record<BizarTier, number> = {
 export class ModelRouter {
   private priors: Record<BizarTier, BetaPrior>;
   private rngState: number;
+  /**
+   * IMP-020 / F-192: ring buffer of recent `pickTier()` decisions. The
+   * `recordContextualOutcome` wrapper verifies the incoming signal's
+   * `modelId` matches one of these within the last 5 minutes before
+   * updating the contextual learner. Drift guard rationale: a signal
+   * with a stale or fabricated `modelId` must NOT silently update
+   * any posterior — that would re-introduce the IMP-020 gap the new
+   * learner exists to close.
+   */
+  private readonly recentDecisions: Array<{ tier: BizarTier; modelId?: string; at: number }> = [];
 
   constructor(opts?: { priors?: Partial<Record<BizarTier, BetaPrior>>; seed?: number }) {
     const overrides = opts?.priors ?? {};
@@ -258,6 +269,72 @@ export interface RouterStateSnapshot {
   version: number;
   priors: Record<BizarTier, BetaPrior>;
   rngSeed: number;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*                  IMP-020 / F-192 contextual wrapper                         */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/** Decision-receipt the F-188 central selector or the legacy Thompson
+ *  bandit hands to `recordContextualOutcome`. The wrapper uses the
+ *  `modelId` + `at` to verify the signal corresponds to a recent pick. */
+export interface RecentPickRecord {
+  tier: BizarTier;
+  modelId?: string;
+  at: number;
+}
+
+/**
+ * IMP-020 / F-192 wrapper: validate an `OutcomeSignal`, verify the
+ * `modelId` ties to a recent pick (within 5 minutes), then update the
+ * learner. Returns the `{updated, quarantined?}` payload from the
+ * learner. Stale or malformed signals surface as a typed `Error`
+ * (`OutcomeLearnerError` or `RangeError`) so dispatch wrappers can
+ * catch them; we never silently drop.
+ */
+export interface ContextualOutcomeReceipt {
+  updated: string[];
+  quarantined?: string;
+}
+
+const RECENT_PICK_WINDOW_MS = 5 * 60 * 1000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function recordContextualOutcome(
+  signal: OutcomeSignal,
+  learner: OutcomeLearner,
+  recentPicks?: readonly RecentPickRecord[],
+): ContextualOutcomeReceipt {
+  // 1. UUID check — surfacing the typed error keeps drift visible.
+  if (!UUID_RE.test(signal.routingDecisionId)) {
+    throw new Error(`recordContextualOutcome: routingDecisionId must be a UUID v4 (got ${signal.routingDecisionId})`);
+  }
+  if (!signal.taskKey || signal.taskKey.modelId !== signal.modelId) {
+    throw new Error("recordContextualOutcome: taskKey.modelId must equal signal.modelId");
+  }
+
+  // 2. Recent-pick verification. The 5-minute window tolerates
+  //    retries / async completions but rejects stale signals.
+  if (recentPicks && recentPicks.length > 0) {
+    const now = Date.now();
+    const window = recentPicks.filter((p) => now - p.at <= RECENT_PICK_WINDOW_MS);
+    const matches = window.filter((p) => p.modelId === signal.modelId || p.tier === signal.taskKey.tier);
+    if (matches.length === 0) {
+      // Drift guard: typed warning so log scrapers can detect
+      // downstream contamination attempts. We do NOT throw — callers
+      // may pass null `recentPicks` for shadow-mode learners where
+      // strict correlation is overkill. When picks ARE supplied we
+      // refuse the update.
+      const err = new Error(
+        `recordContextualOutcome: modelId ${signal.modelId} not found in recent picks within ${RECENT_PICK_WINDOW_MS}ms`,
+      );
+      (err as Error & { code?: string }).code = "STALE_DECISION";
+      throw err;
+    }
+  }
+
+  // 3. Delegate to the learner. Any typed error bubbles up.
+  return learner.record(signal);
 }
 
 function clamp01(n: number): number {

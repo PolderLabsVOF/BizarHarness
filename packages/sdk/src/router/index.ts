@@ -95,6 +95,14 @@ export interface RouteInput {
   history?: import("./select-dispatch-model.js").OutcomeHistory;
   /** Required when the F-188 selector is exercised; reused as the audit run id. */
   runId?: string;
+  /**
+   * IMP-020 / F-192 contextual outcome learner. When supplied, the
+   * selector consumes `learner.ranking(role, candidates)` to order the
+   * eligibility ladder, filters out quarantined models, and respects
+   * NEVER_DOWNGRADE_ROLES. Threaded straight through to
+   * `selectDispatchModel` — see `./outcome-learner.ts`.
+   */
+  outcomeLearner?: import("./outcome-learner.js").OutcomeLearner;
 }
 
 export interface RouteDecisionOutput {
@@ -296,6 +304,7 @@ export function decideAgentWith(
       health: input.health ?? {},
       history: input.history,
       runId,
+      outcomeLearner: input.outcomeLearner,
     });
     surfacedTags.push(tierTag({ tier: decision.tier, confidence: decision.confidence }));
     return {
@@ -452,3 +461,33 @@ export {
   protocolMeets,
   measuredScore,
 } from "./model-profile.js";
+
+// F-192 / IMP-020 contextual outcome learner. The drift guard test
+// `scripts/__tests__/router-contextual-outcome-guard.test.mjs` fails CI
+// if `recordOutcome(success: boolean)` is reintroduced into the public
+// surface — see that test for the rationale and the explicit migration
+// shim whitelist.
+export {
+  createInMemoryOutcomeLearner,
+  createFileOutcomeLearner,
+  newRoutingDecisionId,
+  OutcomeLearnerError,
+  NEVER_DOWNGRADE_ROLES as OUTCOME_LEARNER_NEVER_DOWNGRADE_ROLES,
+  POLICY_VERSION as OUTCOME_LEARNER_POLICY_VERSION,
+  type ContextKey,
+  type OutcomeSignal,
+  type Posterior,
+  type OutcomeLearnerState,
+  type OutcomeLearner,
+  type RecordResult,
+  type OutcomeLearnerErrorCode,
+} from "./outcome-learner.js";
+
+// F-192 / IMP-020 contextual wrapper exported from the model router so
+// dispatch wrappers have a single import point for record +
+// recent-pick verification.
+export {
+  recordContextualOutcome,
+  type ContextualOutcomeReceipt,
+  type RecentPickRecord,
+} from "./model-router.js";

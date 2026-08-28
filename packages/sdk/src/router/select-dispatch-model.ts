@@ -63,6 +63,7 @@ import {
   type ModelProfile as DiscriminatedModelProfile,
   protocolMeets,
 } from "./model-profile.js";
+import type { OutcomeLearner } from "./outcome-learner.js";
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /*                          Public type surface                               */
@@ -106,6 +107,13 @@ export interface TaskFeatures {
   requireToolCall?: boolean;
   requireStructuredOutput?: boolean;
   requireImageInput?: boolean;
+  /**
+   * IMP-020 (F-192) optional repository / source language tag (e.g.,
+   * `ts`, `py`, `rust`). The contextual learner buckets posteriors by
+   * language so a model's strength in TypeScript does not bleed into its
+   * Python posterior.
+   */
+  languageTag?: string;
 }
 
 /**
@@ -191,6 +199,15 @@ export interface SelectDispatchModelInput {
   health: ProviderHealthMap;
   history?: OutcomeHistory;
   runId: string;
+  /**
+   * IMP-020 / F-192 contextual outcome learner. When supplied, the
+   * selector consumes `learner.ranking(role, candidates)` to order the
+   * eligibility ladder before applying the F-188 fallback rules.
+   * Quarantined models are filtered out before ranking. NEVER_DOWNGRADE_ROLES
+   * bypass the learner (always strongest healthy). See
+   * `./outcome-learner.ts`.
+   */
+  outcomeLearner?: OutcomeLearner;
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -391,6 +408,14 @@ function evaluateProfile(
   };
 }
 
+function contextSizeBucketFor(tokens: number | undefined): "small" | "medium" | "large" | "xlarge" | undefined {
+  if (typeof tokens !== "number" || !Number.isFinite(tokens)) return undefined;
+  if (tokens < 4_000) return "small";
+  if (tokens < 32_000) return "medium";
+  if (tokens < 128_000) return "large";
+  return "xlarge";
+}
+
 /* ────────────────────────────────────────────────────────────────────────── */
 /*                          Main selector                                     */
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -400,6 +425,45 @@ export function selectDispatchModel(input: SelectDispatchModelInput): ModelDecis
   const requirements = taskRequirements(features);
   const historyKey = roleCapabilityKey(features.role, features.capabilities);
   const routingDecisionId = randomUUID();
+
+  /**
+   * Build a `ContextKey` for the IMP-020 learner from a `RankedUserSelectedEntry`
+   * plus the dispatch `TaskFeatures`. The provider is derived from the
+   * candidate's `discriminatedProfile.provider` when present (F-190). The
+   * language tag and context-size bucket come from `TaskFeatures` so two
+   * dispatches against the same model+role+phase with different context
+   * sizes do NOT contaminate each other's posteriors.
+   */
+  const findCandidate = (id: string): ModelCandidate | undefined => {
+    for (const p of input.selectedProfiles) if (p.id === id) return p;
+    for (const p of input.staticProfiles ?? []) if (p.id === id) return p;
+    return undefined;
+  };
+  const modelToContextKey = (entry: RankedUserSelectedEntry): {
+    modelId: string;
+    tier: BizarTier;
+    role?: string;
+    phase?: string;
+    capability?: string;
+    riskLevel?: "low" | "medium" | "high";
+    provider?: string;
+    languageTag?: string;
+    contextSizeBucket?: "small" | "medium" | "large" | "xlarge";
+  } => {
+    const matched = findCandidate(entry.id);
+    const provider = matched?.discriminatedProfile?.provider;
+    return {
+      modelId: entry.id,
+      tier: entry.tier,
+      role: features.role,
+      phase: features.phase,
+      capability: (features.capabilities ?? [])[0],
+      riskLevel: features.risk,
+      provider,
+      languageTag: features.languageTag,
+      contextSizeBucket: contextSizeBucketFor(features.minContextTokens),
+    };
+  };
 
   const merged = mergeProfiles(input.selectedProfiles, input.staticProfiles);
   const rankedAll = merged.map((entry) => evaluateProfile(entry, requirements));
@@ -459,10 +523,47 @@ export function selectDispatchModel(input: SelectDispatchModelInput): ModelDecis
     };
   }
 
-  const eligible = ranked.filter((entry) => isHealthy(entry.id, input.health));
+  let eligible: RankedUserSelectedEntry[] = ranked.filter((entry) => isHealthy(entry.id, input.health));
   const unhealthySkipped = ranked.filter((entry) => !isHealthy(entry.id, input.health));
   for (const entry of unhealthySkipped) {
     fallbackChain.push(`${entry.id}:unhealthy`);
+  }
+
+  // IMP-020 / F-192: when the contextual learner is supplied, filter
+  // quarantined models out of the eligible pool and re-rank the
+  // remaining candidates by `learner.ranking(role, ...)`. The ranking
+  // returns the candidate order — we project that onto `eligible` by
+  // looking up the candidate's index in the ranking. Ties fall back
+  // to the existing tier-strength / capability-score / history-bias
+  // sort so the selector stays deterministic.
+  if (input.outcomeLearner) {
+    const preQuarantine = eligible;
+    const quarantinedSkipped = preQuarantine.filter((entry) => input.outcomeLearner!.isQuarantined(entry.id));
+    const afterQuarantine = preQuarantine.filter((entry) => !input.outcomeLearner!.isQuarantined(entry.id));
+    for (const entry of quarantinedSkipped) {
+      fallbackChain.push(`${entry.id}:quarantined`);
+    }
+    if (afterQuarantine.length !== eligible.length) {
+      eligible = afterQuarantine;
+    }
+    if (!isNeverDowngradeRole(features.role) && eligible.length > 1) {
+      const ctxCandidates = eligible.map((entry) => modelToContextKey(entry));
+      const ranked2 = input.outcomeLearner.ranking(features.role ?? "", ctxCandidates);
+      const orderIndex = new Map<string, number>();
+      ranked2.forEach((key, idx) => orderIndex.set(`${key.modelId}|${key.tier}`, idx));
+      eligible = [...eligible].sort((a, b) => {
+        const ai = orderIndex.get(`${a.id}|${a.tier}`);
+        const bi = orderIndex.get(`${b.id}|${b.tier}`);
+        const aIdx = ai ?? Number.MAX_SAFE_INTEGER;
+        const bIdx = bi ?? Number.MAX_SAFE_INTEGER;
+        if (aIdx !== bIdx) return aIdx - bIdx;
+        const aT = TIER_STRENGTH.indexOf(a.tier);
+        const bT = TIER_STRENGTH.indexOf(b.tier);
+        if (aT !== bT) return aT - bT;
+        if (a.capabilityScore !== b.capabilityScore) return b.capabilityScore - a.capabilityScore;
+        return 0;
+      });
+    }
   }
 
   const role = features.role;
