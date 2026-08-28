@@ -248,7 +248,7 @@ export function selectEventChain(eventKey, input = '') {
   if (eventKey === 'subagent-start') {
     return chain.filter((leaf) => {
       if (leaf === 'advisor-context') {
-        return /^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$/.test(agentType);
+        return /^(linda|carl)$/.test(agentType);
       }
       if (leaf === 'worktree-bootstrap') {
         return /^(brad|carl|pam|brenda|karen|todd|ria)$/.test(agentType);

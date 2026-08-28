@@ -2,6 +2,136 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.17.3 `advisor-context` reviewer-context bleed fix
+
+**Date:** 2026-08-28
+**Branch:** `master` (in-place; no worktree — UX-only / safety gate change).
+**WIP holder:** `@mike` — `wip: 1` remains on F-191 in `feature_list.json`.
+
+**Objective delivered:** The `SubagentStart` leaf
+`config/claude/hooks/advisor-context.mjs` no longer dumps unbounded
+parent-session transcript into every reviewer / debug specialist
+dispatch. Reported by a colleague who installed `@polderlabs/bizar@10.17.2`
+and saw a literal prior-session user prompt (the
+*"Memory fragments acknowledged — consolidated dump, Read-with-offset,
+grep . extraction, non-colliding tracks…"* string) surface in their
+active Claude Code context as part of a subagent's `<recent-conversation>`
+`additionalContext`.
+
+**Root cause:**
+1. The leaf read `transcript_path` from the parent session's JSONL
+   (Claude Code appends to `~/.claude/projects/.../<id>.jsonl` rather
+   than rotating per session), took the **last 60** user/assistant
+   records, and emitted up to **30kB** as `<recent-conversation>` —
+   including spinner/status records (`<total_tokens>` reminders,
+   `last-prompt` echoes), `<system-reminder>` blocks, and any
+   sidechain/meta records.
+2. The dispatcher fired the leaf for **every** dispatch of
+   `linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist`,
+   including fresh-task implementers and legacy alias agents that don't
+   need parent context.
+
+**Fix:**
+- New filters (`SKIP_TYPES`): drop `attachment`, `system`,
+  `last-prompt`, `ai-title`, `agent-name`, `stop_hook_summary`,
+  `queue-operation` records and any record with `isSidechain` or
+  `isMeta`.
+- New caps: `MAX_RECORDS = 8` (was 60), `PER_RECORD_CAP = 800` (was
+  3000), `TOTAL_CAP = 6_000` (was 30_000), `MIN_USEFUL_LENGTH = 100`.
+- Strip `<system-reminder>`, `<total_tokens>`, and CCR compaction
+  markers from text content; trim trailing whitespace.
+- Fall back to the existing *"parent transcript could not be
+  reconstructed. State any context needed before making a strong
+  claim."* message when the filtered dump is below the usefulness
+  threshold, or when `transcript_path` is missing.
+- Narrow `cli/commands/hook.mjs:248-258` agent matcher:
+  `^(linda|carl)$` (was `^(linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist)$`).
+  `@karen` (fresh-task implementer) and the legacy alias agents
+  (`@qa-reviewer`, `@principal-engineer`, `@debug-specialist`) get no
+  parent dump at all. `@linda` (read-only QA reviewer) and `@carl`
+  (debug specialist) still receive it.
+
+**Files:**
+- `config/claude/hooks/advisor-context.mjs` — full rewrite of the dump
+  loop; constants `MAX_RECORDS`, `PER_RECORD_CAP`, `TOTAL_CAP`,
+  `MIN_USEFUL_LENGTH` made explicit; output envelope unchanged so the
+  existing schema contract is preserved.
+- `cli/commands/hook.mjs:248-258` — narrowed `advisor-context` matcher
+  to `^(linda|carl)$` only.
+- `cli/__tests__/hook-portability.test.mjs` — updated `@karen`
+  assertion (no longer receives `advisor-context`); added `@linda`
+  and `@carl` assertions matching the new chain shape
+  (`@linda` gets `agent-grounding + advisor-context` only; reviewers
+  are read-only and don't bootstrap a worktree).
+- `config/claude/hooks/__tests__/workflow-guards.test.mjs` — fixed the
+  pre-existing `advisor hook injects bounded parent context` test
+  fixture: both records now store `message.content` as an array of
+  `{type: 'text', text: ...}` blocks (the shape Claude Code emits)
+  with each block text long enough to clear the 100-char usefulness
+  threshold.
+- `cli/__tests__/advisor-context.test.mjs` (NEW, 6 cases):
+  - Filters out `attachment` / `system` / `last-prompt` / `ai-title`
+    records.
+  - Hard 6kB cap on the recent body (asserts body stays under 7kB and
+    that the most-recent marker survives while the earliest is
+    truncated away).
+  - Takes only the last 8 substantive records (15 records → last 8
+    appear, records 0–6 are dropped).
+  - Skips `isSidechain` and `isMeta` records.
+  - Empty / non-substantive input falls back to the
+    *"could not be reconstructed"* message.
+  - Missing `transcript_path` exits 0 with the fallback message.
+- `package.json` — `10.17.2` → `10.17.3`.
+- `packages/sdk/package.json` — `10.17.2` → `10.17.3`.
+- `packages/sdk/src/version.ts` — `SDK_VERSION` `10.17.2` → `10.17.3`.
+- `CHANGELOG.md` — `[10.17.3]` block above `[10.17.2]`.
+- `PROGRESS.md` — this block.
+
+**Verification (post-edit, pre-commit):**
+- `node --test cli/__tests__/advisor-context.test.mjs` — **6/6 pass**.
+- `node --test cli/__tests__/hook-portability.test.mjs cli/__tests__/advisor-context.test.mjs`
+  — **13/13 pass** across 2 suites.
+- `node scripts/run-node-tests.mjs` — **696/696 pass** across 48
+  suites (+6 vs 690 baseline; the new file contributes its 6 cases).
+- `npm run test:sdk` (vitest) — **481/481 pass** across 38 files.
+- `npm run typecheck` (tsc --noEmit) — exit 0, clean types.
+- `npm run build:sdk` — clean (mirror + tsc, no errors).
+- `make verify-repo-structure` — clean.
+- `make verify-removed-surfaces` — clean.
+- `make check-arch` — clean.
+- `npm pack --dry-run` — `@polderlabs/bizar@10.17.3`, **341 files**
+  (unchanged — the new leaf test lives in `cli/__tests__/` which is
+  excluded from the tarball under `!cli/**/__tests__/**`); tarball
+  name `polderlabs-bizar-10.17.3.tgz`, includes the rewritten
+  `config/claude/hooks/advisor-context.mjs` and the narrowed
+  `cli/commands/hook.mjs`.
+- `make clean-check` — **1 pre-existing failure unrelated to this
+  change** (`F-186` feature ledger integrity check whose commit hash
+  is empty). On clean `master` before this work the same gate fails
+  with the same root cause. Documented; not blocking publish.
+
+**Decisions / trade-offs:**
+- Bare-string `message.content` (legacy shape) is still accepted by
+  `extractText` for backward compatibility, but Claude Code currently
+  emits the array-of-blocks shape — the test fixture uses the array
+  shape for realism.
+- The hard cap is enforced on the joined body **before** envelope
+  framing; the envelope adds ~30 bytes for the truncation marker and
+  ~140 bytes for the framing text, so the worst-case
+  `additionalContext` is ~6.2kB — well within the design intent of
+  "much smaller than 30kB."
+- The `@linda` agent does **not** receive `worktree-bootstrap` because
+  reviewers work in the parent's tree; the test assertion reflects
+  that.
+- The 100-char `MIN_USEFUL_LENGTH` threshold is intentional: a 30-char
+  single-turn dump is rarely useful for a reviewer, and falling back
+  to the explicit *"could not be reconstructed"* prompt is more
+  honest than emitting noise.
+
+**Blockers:** None. Commit + push remain human-approval actions and
+are not run yet — staged for the final-push teammate. `npm publish`
+is in the seven-category HITL list and requires explicit user go-ahead.
+
 ## Complete — 10.17.2 TTY keypress picker for `bizar models`
 
 **Date:** 2026-08-28

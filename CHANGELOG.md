@@ -1,5 +1,41 @@
 # Changelog
 
+## [10.17.3] - 2026-08-28
+
+- **Fix (`advisor-context` hook — reviewer context bleed).** The
+  SubagentStart leaf `advisor-context.mjs` previously dumped up to 30kB
+  of raw parent-session transcript into every dispatch of
+  `linda|karen|carl|qa-reviewer|principal-engineer|debug-specialist`,
+  including spinner/status records, `<system-reminder>` blocks,
+  `<total_tokens>` reminders, last-prompt echoes, sidechain records,
+  and prior-session content from the same JSONL (Claude Code appends to
+  `~/.claude/projects/.../<id>.jsonl` rather than rotating per session).
+  Fresh-task implementers (`@karen`) and the legacy alias agents
+  (`@qa-reviewer`, `@principal-engineer`, `@debug-specialist`) now get
+  no parent dump at all; only the two agents that genuinely need
+  context — `@linda` (read-only QA reviewer) and `@carl` (debug
+  specialist) — still receive it. The dump itself is bounded to the
+  last **8** substantive records (was 60), each clipped to **800**
+  chars (was 3000), with a hard **6kB** total cap (was 30kB). Records
+  with `isSidechain`, `isMeta`, or `type ∈ {attachment, system,
+  last-prompt, ai-title, agent-name, stop_hook_summary,
+  queue-operation}` are filtered out; `<system-reminder>`,
+  `<total_tokens>`, and CCR compaction markers are stripped from text
+  content. When the filtered dump is below `MIN_USEFUL_LENGTH = 100`
+  chars, the hook emits the existing
+  *"parent transcript could not be reconstructed. State any context
+  needed before making a strong claim."* fallback rather than a noisy
+  fragment. New regression coverage:
+  `cli/__tests__/advisor-context.test.mjs` (6 cases — filter types,
+  6kB cap, 8-record window, `isSidechain`/`isMeta` exclusion, empty-input
+  fallback, missing-transcript-path fallback). Updated
+  `cli/__tests__/hook-portability.test.mjs` event-chain matcher
+  assertions for `@linda` (now receives `agent-grounding +
+  advisor-context` only; reviewers are read-only and don't bootstrap a
+  worktree), `@karen` (now no longer receives `advisor-context`),
+  `@carl` (still receives the full chain including worktree bootstrap
+  because debug work happens in a worktree).
+
 ## [10.17.2] - 2026-08-28
 
 - **Feature (`bizar models` keypress picker).** When stdin is a TTY, the

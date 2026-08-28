@@ -429,16 +429,20 @@ test('advisor hook injects bounded parent context', () => {
   const root = mkdtempSync(join(tmpdir(), 'bizar-advisor-'));
   roots.push(root);
   const transcript = join(root, 'transcript.jsonl');
+  // Both records store `message.content` as an array of typed blocks (the
+  // shape Claude Code emits). Each block text is long enough to clear the
+  // hook's MIN_USEFUL_LENGTH threshold of 100 chars, so the dump is emitted
+  // rather than falling back to the "could not be reconstructed" message.
   writeFileSync(transcript, [
-    JSON.stringify({ type: 'user', message: { content: 'Find the root cause.' } }),
-    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'The failing test is exact.' }] } }),
+    JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'Find the root cause of the regression in the advisor-context leaf filter logic.' }] } }),
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'The failing test asserts that the bounded dump is bounded by TOTAL_CAP and excludes non-substantive records.' }] } }),
   ].join('\n'));
   const result = runHook('advisor-context.mjs', {
     hook_event_name: 'SubagentStart',
     transcript_path: transcript,
   });
   assert.match(result.hookSpecificOutput.additionalContext, /Find the root cause/);
-  assert.match(result.hookSpecificOutput.additionalContext, /failing test is exact/);
+  assert.match(result.hookSpecificOutput.additionalContext, /bounded dump is bounded/);
 });
 
 test('project settings wire portable guarded-autonomy hooks', () => {

@@ -86,7 +86,19 @@ test('event dispatcher preserves tool and agent matcher scopes', () => {
   assert.deepEqual(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Read' })), []);
   assert.deepEqual(selectEventChain('post-tool-use', JSON.stringify({ tool_name: 'Bash' })), ['auto-instinct']);
   assert.deepEqual(selectEventChain('subagent-start', JSON.stringify({ agent_type: 'greg' })), ['agent-grounding']);
+  // advisor-context only fires for reviewers/debug specialists (@linda, @carl).
+  // @karen is a fresh-task implementer and no longer receives the parent dump.
   assert.deepEqual(selectEventChain('subagent-start', JSON.stringify({ agent_type: 'karen' })), [
+    'agent-grounding', 'worktree-bootstrap',
+  ]);
+  // @linda is a reviewer (read-only audit), so she does NOT receive the
+  // worktree-bootstrap chain — reviewers work in the parent's tree.
+  assert.deepEqual(selectEventChain('subagent-start', JSON.stringify({ agent_type: 'linda' })), [
+    'agent-grounding', 'advisor-context',
+  ]);
+  // @carl is both a reviewer and a debug specialist, so she gets the full
+  // chain: parent context + an isolated worktree.
+  assert.deepEqual(selectEventChain('subagent-start', JSON.stringify({ agent_type: 'carl' })), [
     'agent-grounding', 'advisor-context', 'worktree-bootstrap',
   ]);
   assert.deepEqual(selectEventChain('subagent-stop', JSON.stringify({ agent_type: 'karen' })), [
