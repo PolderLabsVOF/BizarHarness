@@ -2,6 +2,49 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Flight — IMP-022 (Todd worktree, 2026-08-27)
+
+| Branch | IMP | F-ticket | Todd agent | File scope |
+| --- | --- | --- | --- | --- |
+| `wt/todd-imp022-e2e-matrix` | IMP-022 | F-193 | `af7a653118ac2a784` | NEW `packages/sdk/tests/e2e/**` fixtures + direct/workflow/team/matrix test files + drift guard |
+
+IMP-022 is test-only; imports `selectDispatchModel` + `config/workflows/lib/dispatch.js` but does not modify them. Safe to merge immediately. Merge order: 022 next.
+
+## Complete — F-192 Contextual outcome learner (IMP-020)
+
+**Date:** 2026-08-27
+**Branch:** `wt/todd-imp020-contextual-learner` (4 commits: `<learner>` feat(sdk) outcome learner module + 16 tests, `<wire>` feat(sdk) thread through selector + failover + router + 6 selector-learner tests, `<mirror>` fix(mirror) add failoverFrom to pickFailover JS mirror, `<drift>` test(scripts) outcome learner drift guard).
+**WIP holder:** `@mike` — F-192 lands with `wip: 1` per the F-176 ledger invariant.
+
+**Branch verification:**
+- `npx tsc --noEmit` — exit 0, clean types.
+- `npx vitest run --root packages/sdk` — 416/416 passing (+26 vs 390 master baseline; F-192 contributed 16 outcome-learner + 6 selector-learner + 4 already-existing tests).
+- `node --test scripts/__tests__/outcome-learner-drift.test.mjs` — 5/5 passing.
+- `npm run test:node` — pending master verification post-merge.
+
+**Files:**
+- `packages/sdk/src/router/outcome-learner.ts` (NEW, 660 lines) — `ContextKey`, `OutcomeSignal`, `Posterior`, `OutcomeLearnerState`, `OutcomeLearner`, `OutcomeLearnerError`, `createInMemoryOutcomeLearner`, `createFileOutcomeLearner`, `newRoutingDecisionId`. Per-context posteriors keyed by canonicalised JSON (no cross-bucket contamination). Verified-only signals (`verifiedBy ∈ {human, auto-verifier, test-runner, review-bot}`). Quarantine after 3 strikes in 24h for `{ transport, auth, rate-limit, model-quality }`. Decay half-life without row erasure. NEVER_DOWNGRADE_ROLES pin to strongest healthy. 10% exploration on low-evidence low/medium-risk candidates. JSON snapshot persistence with merge-by-lastUpdated.
+- `packages/sdk/src/router/select-dispatch-model.ts` — optional `outcomeLearner?: OutcomeLearner` parameter; filters quarantined models; re-orders eligible via `learner.ranking(role, ctxCandidates)`; NEVER_DOWNGRADE_ROLES ignore the learner ranking.
+- `packages/sdk/src/router/failover.ts` — `FailoverVerdict` gains `failoverFrom: string[]` populated from `attempted.has(head.id)` and subsequent attempted entries; the IMP-018 evidence store records per-attempt outcomes; the learner updates only the FINAL model's posterior.
+- `packages/sdk/src/router/failover-mirror.mjs` — JS mirror gains the matching `failoverFrom` list at every return path so the F-185 divergence test stays green.
+- `packages/sdk/src/router/model-router.ts` — `recordContextualOutcome(signal, learner)` wrapper that validates `signal.routingDecisionId` is a UUID and refuses updates from assistant self-report.
+- `packages/sdk/src/router/index.ts` — re-exports `OutcomeLearner` types; `decideAgentWith` threads the learner.
+- Tests (NEW, 27 cases): `outcome-learner.test.mjs` (16), `select-dispatch-model-learner.test.mjs` (6), `scripts/__tests__/outcome-learner-drift.test.mjs` (5).
+
+**IMP-020 acceptance gate:** "Updates affect only the relevant model/task state" — verified by `select-dispatch-model-learner.test.mjs` test "re-ranking via learner changes the selection when non-greedy candidate has higher posterior" (haiku is selected over sonnet when the learner has seen 6 haiku successes vs 2 sonnet successes + 5 sonnet failures). The same test would fail without the learner — the F-188 ladder alone picks sonnet (high tier > default tier).
+
+**Ledger:** F-192 added (passing, wip=1 @mike). vcr: passing=71, activated=72, ratio=0.986.
+
+**Files in scope:**
+- `packages/sdk/src/router/outcome-learner.ts` (NEW)
+- `packages/sdk/src/router/select-dispatch-model.ts` (extend `selectDispatchModel` with optional `outcomeLearner`)
+- `packages/sdk/src/router/model-router.ts` (add `recordContextualOutcome` wrapper)
+- `packages/sdk/src/router/failover.ts` (preserve `routingDecisionId` + add `failoverFrom`)
+- `packages/sdk/src/router/index.ts` (re-export + `decideAgentWith` extension)
+- `packages/sdk/tests/outcome-learner.test.mjs` (NEW)
+- `packages/sdk/tests/select-dispatch-model-learner.test.mjs` (NEW)
+- `scripts/__tests__/router-contextual-outcome-guard.test.mjs` (NEW — drift guard)
+
 ## Complete — F-190 Model capability profiles (IMP-017)
 
 **Date:** 2026-08-27

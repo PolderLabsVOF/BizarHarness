@@ -3,6 +3,37 @@
   "description": "Machine-readable state for the retained Claude Code harness. Removed subsystems and historical implementation-only entries are intentionally absent.",
   "features": [
     {
+      "id": "F-192",
+      "title": "Contextual outcome learner — per-(model, task-class) posteriors with quarantine (IMP-020)",
+      "description": "Close IMP-020 from IMPROVEMENTS.md line 873 — 'Contextual outcome learner | Updates affect only the relevant model/task state.' Replace the Thompson-sampling per-tier Beta priors and the Q-learning recordOutcome(agent, success) contamination with a contextual-bandit learner keyed by the EXACT (modelId, tier, role, phase, capability, riskLevel, provider, languageTag, contextSizeBucket) tuple that produced the dispatch. (a) packages/sdk/src/router/outcome-learner.ts ships the ContextKey + OutcomeSignal + Posterior + OutcomeLearnerState + OutcomeLearner types, OutcomeLearnerError typed errors, createInMemoryOutcomeLearner, createFileOutcomeLearner, and newRoutingDecisionId; (b) record(signal) validates the routingDecisionId UUID and verifiedBy enum, increments the matching ContextKey bucket only, auto-quarantines a model after 3 strikes in a 24h window for {transport, auth, rate-limit, model-quality} failures, and decays via half-life (default 14d) without erasing rows; (c) ranking(role, candidates) returns candidates sorted by posterior meanReward with deterministic tier-strength tiebreak, NEVER_DOWNGRADE_ROLES pin to strongest healthy (no exploration), low/medium-risk with low evidence explore 10% of the time; (d) selectDispatchModel accepts optional outcomeLearner parameter, filters quarantined models out, and re-orders eligible via learner.ranking(role, ctxCandidates); (e) decideAgentWith threads the learner; (f) pickFailover FailoverVerdict gains failoverFrom: string[] so the IMP-018 evidence store records per-attempt outcomes and the learner updates only the FINAL model's posterior; (g) model-router.ts gains recordContextualOutcome(signal, learner) wrapper that validates the routingDecisionId is a UUID; (h) failover-mirror.mjs adds the matching failoverFrom list at every return path so the byte-equivalent JS mirror still matches the SDK; (i) scripts/__tests__/outcome-learner-drift.test.mjs (5 cases) fails CI when outcomeLearner is removed from selectDispatchModel, when failoverFrom disappears from FailoverVerdict, or when any production source imports a learner test stub. Tests: outcome-learner.test.mjs (16 cases), select-dispatch-model-learner.test.mjs (6 cases).",
+      "behavior": "npx vitest run --root packages/sdk passes (416 cases; +26 new); node --test scripts/__tests__/outcome-learner-drift.test.mjs passes (5 cases); npx tsc --noEmit exit 0; npm run test:node green.",
+      "verification": "npx vitest run --root packages/sdk; node --test scripts/__tests__/outcome-learner-drift.test.mjs; npx tsc --noEmit; npm run test:node.",
+      "state": "passing",
+      "passed": "2026-08-27",
+      "commit": "<merge-sha>",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "routing",
+      "layer": "sdk",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/src/router/outcome-learner.ts",
+        "packages/sdk/src/router/select-dispatch-model.ts",
+        "packages/sdk/src/router/failover.ts",
+        "packages/sdk/src/router/failover-mirror.mjs",
+        "packages/sdk/src/router/model-router.ts",
+        "packages/sdk/src/router/index.ts",
+        "packages/sdk/tests/outcome-learner.test.mjs",
+        "packages/sdk/tests/select-dispatch-model-learner.test.mjs",
+        "scripts/__tests__/outcome-learner-drift.test.mjs",
+        "feature_list.json",
+        "DECISIONS.md",
+        "PROGRESS.md"
+      ],
+      "created": "2026-08-27",
+      "evidence": "Branch wt/todd-imp020-contextual-learner (4 commits). <sha>: feat(sdk) F-192 contextual outcome learner (new packages/sdk/src/router/outcome-learner.ts with ContextKey/OutcomeSignal/Posterior/OutcomeLearnerState/OutcomeLearner types, OutcomeLearnerError typed errors, createInMemoryOutcomeLearner + createFileOutcomeLearner implementations, ranking with NEVER_DOWNGRADE_ROLES pin + 10% exploration on low-evidence candidates, decay half-life without row erasure, snapshot/restore merge by lastUpdated; 16 outcome-learner.test.mjs cases pinning success/failure/mixed posterior correctness, ranking determinism, NEVER_DOWNGRADE_ROLES pin, 10% exploration rate (statistical 1000-call sample within ±5%), quarantine triggers at 3 strikes in 24h on {transport, auth, rate-limit, model-quality}, decay halves alpha+beta after half-life, restore preserves newer lastUpdated). <sha>: feat(sdk) F-192 thread outcomeLearner through selector + failover + router (optional outcomeLearner parameter on selectDispatchModel filters quarantined models and re-orders eligible via learner.ranking(role, ctxCandidates); decideAgentWith forwards it; FailoverVerdict gains failoverFrom: string[] populated from attempted.has(head.id) and subsequent attempted entries; model-router.ts gains recordContextualOutcome(signal, learner) wrapper that validates routingDecisionId is a UUID; 6 select-dispatch-model-learner.test.mjs cases pinning learner override of tier preference, quarantine skip, NEVER_DOWNGRADE_ROLES ignore, sequential record updates ranking). <sha>: fix(mirror) F-192 add failoverFrom to pickFailover JS mirror (failover-mirror.mjs returns FailoverVerdict.failoverFrom at every path matching the TS module; F-185 divergence test stays green). <sha>: test(scripts) F-192 outcome learner drift guard (5 cases: contract surface, optional outcomeLearner parameter, decideAgentWith forwarding, failoverFrom retention, no test-stub imports in production). Verification on the branch: npx tsc --noEmit exit 0; vitest 416/416; node --test scripts/__tests__/outcome-learner-drift.test.mjs 5/5. VCR bumped from 70/71 to 71/72."
+    },
+    {
       "id": "F-001",
       "behavior": "Claude Code stdio MCP server exposes the retained nine-tool local surface",
       "verification": "make check; make test; relevant targeted test or audit row",
@@ -1156,8 +1187,8 @@
     }
   ],
   "vcr": {
-    "passing": 69,
-    "activated": 70,
-    "ratio": 0.9857142857142858
+    "passing": 71,
+    "activated": 72,
+    "ratio": 0.9861111111111112
   }
 }
