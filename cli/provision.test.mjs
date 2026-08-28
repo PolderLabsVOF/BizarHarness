@@ -224,10 +224,16 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     // actions are gated by policy text and advisory hooks, not prompts.
     assert.deepEqual(settings.permissions.deny, []);
     assert.deepEqual(settings.permissions.ask, []);
-    // Local git commit is always allowed silently; push/gh pr/release/publish/deploy stay HITL.
-    assert.ok(settings.permissions.allow.includes('Bash(git commit *)'));
-    assert.ok(settings.permissions.allow.includes('Bash(git -C * commit *)'));
-    assert.ok(settings.permissions.allow.includes('Bash(git --git-dir=* commit *)'));
+    // F-176 (10.17.4): the SHIPPED template carries `permissions.allow: []`.
+    // On a fresh install the union-merge of an empty existing set against
+    // the empty template still yields []. The F-181 wildcards + the
+    // explicit `mcp__bizar__*` per-tool allowlist are NOT shipped here —
+    // they live in the operator's pre-existing settings (union-merged)
+    // or in the permission-request.mjs hook floor.
+    assert.deepEqual(settings.permissions.allow, []);
+    assert.equal(settings.permissions.allow.includes('Bash(git -C * commit *)'), false);
+    assert.equal(settings.permissions.allow.includes('Bash(git --git-dir=* commit *)'), false);
+    assert.equal(settings.permissions.allow.includes('mcp__*'), false);
     assert.equal(settings.permissions.allow.some((rule) => /git push|gh (?:pr|release)|publish|deploy/.test(rule)), false);
 
     const hookText = JSON.stringify(settings.hooks);

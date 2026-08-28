@@ -453,16 +453,22 @@ test('project settings wire portable guarded-autonomy hooks', () => {
   assert.ok(settings.hooks.PreCompact);
   assert.ok(settings.hooks.SubagentStart);
   assert.ok(settings.hooks.SubagentStop);
-  // Local git commit is always allowed silently (see AGENTS.md "Autonomy and parallelism").
-  const commitFamily = /Bash\((?:git commit \*|git -C \* commit \*|git --git-dir=\* commit \*)\)/;
-  assert.equal(settings.permissions.allow.some((rule) => commitFamily.test(rule)), true);
+  // F-176 (10.17.4): the SHIPPED template carries `permissions.allow: []`.
+  // The local git commit / read / write floors are enforced by hook output
+  // (pretooluse-bash / pretooluse-editwrite advisory reminders) and by
+  // Claude Code's `bypassPermissions` default mode — not by a static
+  // `allow` rule. Operators who want a specific `allow` pattern add it
+  // to their live `~/.claude/settings.json`; `writeClaudeSettings`
+  // union-merges it across re-installs.
+  assert.deepEqual(settings.permissions.allow, [], 'shipped allow must be [] (F-176)');
+  assert.deepEqual(settings.permissions.ask, [], 'shipped ask must be [] (F-176)');
   const hardMutation = /Bash\((?:git push|gh (?:pr|release)|(?:npm|bun|pnpm) publish|(?:vercel|wrangler|flyctl) deploy)/;
   assert.equal(settings.permissions.allow.some((rule) => hardMutation.test(rule)), false);
-  // F-176: full permissions by default — `permissions.ask` is empty.
-  // Push / PR / publish / deploy surface as advisory reminders from
-  // `git-workflow-guard.mjs`, not as Claude Code ask-pattern prompts.
-  assert.equal(settings.permissions.ask.some((rule) => hardMutation.test(rule)), false);
-  assert.deepEqual(settings.permissions.ask, []);
+  const dangerousPrefix = /Bash\((?:git -C \*|git --git-dir=\*)\s+(?:commit|push|rebase)/;
+  assert.equal(settings.permissions.allow.some((rule) => dangerousPrefix.test(rule)), false,
+    'dangerous 8-pattern family must NOT ship (F-176)');
+  assert.equal(settings.permissions.allow.includes('mcp__*'), false,
+    'mcp__* wildcard must NOT ship (F-176)');
   const commands = JSON.stringify(settings.hooks);
   // F-169: bare `bizar hook <sub>` invocations are forbidden because
   // Claude Code strips PATH under /bin/sh. The shipped template must

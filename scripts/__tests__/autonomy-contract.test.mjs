@@ -27,39 +27,47 @@ test('AUTONOMY_CONTRACT.md exists and is non-empty', () => {
   }
 });
 
-test('settings.json satisfies the contract (deny=[], ask=[], bypassPermissions)', () => {
+test('settings.json satisfies the contract (allow=[], deny=[], ask=[], bypassPermissions)', () => {
+  // F-176 (10.17.4): the SHIPPED template carries EMPTY `allow`, `deny`,
+  // and `ask` arrays. The destructive floor (push/rebase/force/destructive
+  // filesystem ops) is enforced by `permission-request.mjs` returning
+  // `behavior: 'deny'` for Tier-4 shapes; everything else is gated by
+  // the advisory hook chain (pretooluse-bash, pretooluse-editwrite,
+  // git-workflow-guard) via `additionalContext`. Operators opt into
+  // specific `allow` patterns by adding them to their live
+  // `~/.claude/settings.json`; the union-merge in
+  // `cli/provision.mjs:writeClaudeSettings` preserves them across
+  // re-installs.
   const settings = readJSON(SETTINGS_PATH);
   const perms = settings.permissions || {};
+  assert.deepEqual(perms.allow ?? null, [], 'permissions.allow must be [] (F-176)');
   assert.deepEqual(perms.deny ?? [], [], 'permissions.deny must be []');
   assert.deepEqual(perms.ask ?? [], [], 'permissions.ask must be []');
   assert.equal(perms.defaultMode, 'bypassPermissions', 'defaultMode must be bypassPermissions');
 });
 
-test('settings.json permissions.allow covers every Tier-1 pattern', () => {
+test('settings.json permissions.allow ships empty + dangerous patterns absent', () => {
   const settings = readJSON(SETTINGS_PATH);
   const allow = settings.permissions?.allow ?? [];
-  // Patterns the contract promises are always allowed silently.
-  const required = [
-    'Bash(git commit *)',
+  assert.deepEqual(allow, [], 'shipped template must carry empty allow (F-176)');
+  // F-176: the dangerous 8-pattern family and `mcp__*` wildcard must
+  // NOT ship. The explicit `mcp__bizar__*` / `mcp__semble__*` /
+  // `mcp__agent-browser__*` per-tool allowlist is enforced by hook
+  // output (`additionalContext`) at run-time, not by static allow rules.
+  for (const pattern of [
+    'mcp__*',
     'Bash(git -C * commit *)',
+    'Bash(git -C * commit)',
     'Bash(git --git-dir=* commit *)',
-    'Read(*)',
-    'Edit(*)',
-    'Write(*)',
-    'Glob(*)',
-    'Grep(*)',
-    'WebFetch(*)',
-    'WebSearch(*)',
-    'Agent(*)',
-    'CronCreate(*)',
-    'CronDelete(*)',
-    'CronList(*)',
-    'ScheduleWakeup(*)',
-  ];
-  for (const pattern of required) {
+    'Bash(git --git-dir=* commit)',
+    'Bash(git -C * commit --amend *)',
+    'Bash(git -C * commit --amend)',
+    'Bash(git --git-dir=* commit --amend *)',
+    'Bash(git --git-dir=* commit --amend)',
+  ]) {
     assert.ok(
-      allow.includes(pattern),
-      `permissions.allow must include ${pattern} (Tier-1 silent allow)`,
+      !allow.includes(pattern),
+      `permissions.allow must NOT include ${pattern} (F-176)`,
     );
   }
 });

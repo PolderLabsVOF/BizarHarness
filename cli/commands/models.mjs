@@ -247,7 +247,8 @@ export function enrichModelsWithCapabilities(candidates, catalog) {
     const gatewayId = candidate.id;
     const exact = entries.get(String(gatewayId).toLowerCase());
     if (exact) {
-      return { ...candidate, profile: toCapabilityProfile(gatewayId, exact, 'exact-id', 0.9) };
+      const profile = toCapabilityProfile(gatewayId, exact, 'exact-id', 0.9);
+      return { ...candidate, profile, contextWindow: profile.limits.contextTokens };
     }
     const wanted = normalizedModelIdentity(gatewayId);
     const matches = all.filter((entry) => {
@@ -256,9 +257,10 @@ export function enrichModelsWithCapabilities(candidates, catalog) {
       return !wanted.provider || !found.provider || found.provider === wanted.provider;
     });
     if (matches.length === 1) {
-      return { ...candidate, profile: toCapabilityProfile(gatewayId, matches[0], 'unique-normalized-id', 0.7) };
+      const profile = toCapabilityProfile(gatewayId, matches[0], 'unique-normalized-id', 0.7);
+      return { ...candidate, profile, contextWindow: profile.limits.contextTokens };
     }
-    return { ...candidate, profile: null };
+    return { ...candidate, profile: null, contextWindow: null };
   });
 }
 
@@ -269,8 +271,22 @@ function capabilityLabel(profile) {
   if (profile.capabilities.toolCall) caps.push('tools');
   if (profile.capabilities.structuredOutput) caps.push('structured');
   if (profile.capabilities.inputModalities.some((m) => m !== 'text')) caps.push('multimodal');
-  if (profile.limits.contextTokens) caps.push(`${Math.round(profile.limits.contextTokens / 1000)}k ctx`);
+  if (profile.limits.contextTokens) caps.push(formatContextTokens(profile.limits.contextTokens));
   return caps.length > 0 ? caps.join(', ') : 'basic text';
+}
+
+/**
+ * Format a context-window token count for the picker / capability label.
+ * 1_048_576 → `1M ctx`, 200_000 → `200k ctx`, 32_000 → `32k ctx`. Trailing
+ * `.0` is dropped from the M-suffix so 2_048_576 renders as `2M ctx`.
+ */
+export function formatContextTokens(tokens) {
+  if (!Number.isFinite(tokens) || tokens <= 0) return null;
+  if (tokens >= 1_000_000) {
+    const m = Math.round((tokens / 1_000_000) * 10) / 10;
+    return `${m}M ctx`;
+  }
+  return `${Math.round(tokens / 1000)}k ctx`;
 }
 
 /**

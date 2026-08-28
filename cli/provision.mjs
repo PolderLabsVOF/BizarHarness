@@ -848,9 +848,6 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       ANTHROPIC_AUTH_TOKEN:
         pickEnv('ANTHROPIC_AUTH_TOKEN')
         || 'sk_9router',
-      CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:
-        pickEnv('CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY')
-        || '1',
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:
         pickEnv('CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS')
         || shipped.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
@@ -880,6 +877,11 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     Object.assign(merged, bizarSettings);
     merged.env = { ...(existing.env || {}), ...bizarSettings.env };
     merged.hooks = mergeBizarHooks(existing.hooks, bizarSettings.hooks);
+    // F-176: the floor is enforced by the permission-request.mjs hook, not by
+    // Claude Code prompts. `Object.assign` above replaced `merged.permissions`
+    // with the template's (empty) arrays — re-union-merge so an operator's
+    // existing `allow`/`ask`/`deny` survive a force re-install.
+    merged.permissions = normalizePermissionLists(existing.permissions, bizarSettings.permissions);
   }
   else {
     merged.$schema   = merged.$schema || bizarSettings.$schema;

@@ -16,7 +16,6 @@ const GATEWAY_KEYS = [
   'ANTHROPIC_BASE_URL',
   'BIZAR_MODEL_ROUTER_URL',
   'ANTHROPIC_AUTH_TOKEN',
-  'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',
 ];
 
 function runProductionWriter({ existing, force = false, env = {} } = {}) {
@@ -60,7 +59,13 @@ describe('writeClaudeSettings gateway environment', () => {
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'http://localhost:20129/v1');
     assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'http://localhost:20129/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
-    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
+    // F-163 + 10.17.4 (Option A): CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY
+    // is operator-controlled and ABSENT from the shipped template + writer.
+    assert.equal(
+      settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY,
+      undefined,
+      'gateway discovery env must not be emitted by the production writer',
+    );
     assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
   });
 
@@ -81,7 +86,11 @@ describe('writeClaudeSettings gateway environment', () => {
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
     assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://gateway.example/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
-    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
+    assert.equal(
+      settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY,
+      undefined,
+      'production writer must not auto-add the gateway discovery env',
+    );
     assert.equal(settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'anthropic/custom-opus');
     assert.equal(settings.permissions.defaultMode, 'ask');
     assert.equal(settings.mcpServers.custom.command, 'custom-mcp');
@@ -94,14 +103,12 @@ describe('writeClaudeSettings gateway environment', () => {
           ANTHROPIC_BASE_URL: 'https://gateway.example/v1',
           BIZAR_MODEL_ROUTER_URL: 'https://models.example/v1',
           ANTHROPIC_AUTH_TOKEN: 'user-token',
-          CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '0',
         },
       },
     });
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
     assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://models.example/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'user-token');
-    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '0');
   });
 
   it('fresh installs use explicit gateway environment and keep URLs aligned', () => {
@@ -109,13 +116,17 @@ describe('writeClaudeSettings gateway environment', () => {
       env: {
         ANTHROPIC_BASE_URL: 'https://router.example/v1',
         ANTHROPIC_AUTH_TOKEN: 'ambient-token',
-        CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: 'enabled',
       },
     });
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://router.example/v1');
     assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://router.example/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'ambient-token');
-    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, 'enabled');
+    // Operator env var is preserved when explicitly passed via process.env.
+    assert.equal(
+      settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY,
+      undefined,
+      'gateway discovery env is operator-controlled and not auto-emitted',
+    );
   });
 
   it('force refreshes managed keys without deleting unrelated user env', () => {

@@ -1,5 +1,80 @@
 # Changelog
 
+## [10.17.4] - 2026-08-28
+
+- **Feature (MiniMax-M3 1M context window plumbing).**
+  `cli/commands/models.mjs` `enrichModelsWithCapabilities` now stamps
+  `contextWindow: number | null` on every candidate row from the live
+  models.dev catalog (`limit.context`), and the picker renders that as
+  `(1M ctx)` / `(200k ctx)` next to each model so operators can see the
+  context ceiling at selection time. New `formatContextTokens` helper
+  rounds to one decimal place and drops trailing zeros (1,048,576
+  tokens → `"1M ctx"`, 2,048,576 → `"2M ctx"`, 200,000 → `"200k ctx"`).
+  Verified the MiniMax-M3 1M figure against 4 independent sources:
+  models.dev catalog (`limit.context: 1048576`), the MiniMax-M3
+  HuggingFace model card, the MiniMax engineering blog, and the
+  Claude Code `model-config` docs (`https://code.claude.com/docs/en/model-config`)
+  which documents `[1m]` as the canonical 1M-window suffix.
+
+- **Settings template (F-176 explicit-allowlist hardening).**
+  `config/claude/settings.json` drops the dangerous 8-pattern commit
+  family — `Bash(git -C * commit *)`, `Bash(git -C * push *)`,
+  `Bash(git -C * rebase *)`, `Bash(git --git-dir=* commit *)`,
+  `Bash(git --git-dir=* push *)`, `Bash(git --git-dir=* rebase *)`,
+  `Bash(git --git-dir=* push --force *)`, `Bash(git --git-dir=* push -f *)`
+  — so a subagent cannot route a destructive command through a
+  `-C <dir>` / `--git-dir=<dir>` prefix to bypass the standard
+  `Bash(git push *)` / `Bash(git rebase *)` advisories. Also drops
+  `mcp__*`; the explicit `mcp__bizar__*` / `mcp__semble__*` /
+  `mcp__agent-browser__*` per-tool allowlist is the source of truth.
+  Default `model` field rewrites to
+  `claude-minimax/MiniMax-M3[1m]` and a new `modelOverrides` block
+  maps the bare ID `claude-minimax/MiniMax-M3` to the same suffixed
+  string per Claude Code's `[1m]` 1M-window convention. Re-mirror
+  live `~/.claude/settings.json` via `bizar provision`.
+
+- **Settings template flatten + installer union-merge (item 5).**
+  `config/claude/settings.json` ships `permissions.allow: []`,
+  `permissions.deny: []`, `permissions.ask: []`. The F-176 floor is
+  enforced by `config/claude/hooks/permission-request.mjs` returning
+  `behavior: 'deny'` for Tier-4 destructive shapes; everything else
+  surfaces as advisory reminders from `git-workflow-guard.mjs`,
+  `pretooluse-bash.mjs`, and `pretooluse-editwrite.mjs` via
+  `additionalContext`. Operators opt into specific `allow` patterns
+  by adding them to their live `~/.claude/settings.json`; the
+  `force: true` path in `cli/provision.mjs:writeClaudeSettings` now
+  re-runs `normalizePermissionLists(existing.permissions, …)` so an
+  operator's existing arrays survive a force re-install (the prior
+  behavior was for `Object.assign(merged, bizarSettings)` to clobber
+  them with the template's empty arrays). New test case in
+  `cli/install/force-clean.test.mjs` (`force-write (no clean)
+  union-merges operator permissions: custom allow rule survives`)
+  seeds `Bash(custom-cmd *)` + `Bash(rm -rf /)` on disk, runs
+  `writeClaudeSettings({ force: true })`, and asserts both survive.
+
+- **Test coverage.** New `cli/__tests__/models-picker-context.test.mjs`
+  (10 cases) covers `formatContextTokens` rounding/trailing-zero
+  behavior, exact-ID context propagation through
+  `enrichModelsWithCapabilities`, and picker display rendering of the
+  `1M ctx` / `200k ctx` suffix. Extended `cli/__tests__/models-picker.test.mjs`
+  with `contextWindow` assertions (exact match, ambiguous-alias null,
+  MiniMax-M3 1M flow-through). Updated `cli/provision.test.mjs`,
+  `cli/install/force-clean.test.mjs`, `cli/__tests__/settings-permissions.test.mjs`,
+  `cli/install/__tests__/merge-settings.test.mjs`, and
+  `scripts/__tests__/autonomy-contract.test.mjs` to assert the
+  new explicit-allowlist shape (negative assertions for `mcp__*` and
+  the dropped dangerous patterns).
+
+- **Gateway discovery env dropped from template (Option A).**
+  `config/claude/settings.json` no longer carries
+  `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`, and the production
+  writer in `cli/provision.mjs:writeClaudeSettings` no longer emits it
+  on fresh installs. The key stays in `FORCE_CLEAN_PRESERVE_ENV_KEYS`
+  so an operator who set it explicitly retains it across force
+  re-installs (operator-controlled surface). Three assertions in
+  `cli/install/__tests__/merge-settings.test.mjs` flipped to assert
+  `undefined` instead of `'1'` for the production writer's output.
+
 ## [10.17.3] - 2026-08-28
 
 - **Fix (`advisor-context` hook — reviewer context bleed).** The

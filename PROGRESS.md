@@ -2,6 +2,104 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.17.4 MiniMax-M3 1M context window plumbing + F-176 explicit-allowlist hardening
+
+**Date:** 2026-08-28
+**Branch:** `master` (in-place; UX/settings hardening, no behavioral break for safe flows).
+**WIP holder:** `@mike` — `wip: 1` remains on F-191 in `feature_list.json`.
+
+**Objective delivered:**
+1. `bizar models` now annotates each candidate row with `(1M ctx)` /
+   `(200k ctx)` so operators can see the context ceiling at selection
+   time. The MiniMax-M3 1M figure was verified against 4 independent
+   sources before any code change: models.dev catalog
+   (`limit.context: 1048576`), the MiniMax-M3 HuggingFace model card,
+   the MiniMax engineering blog, and the Claude Code `model-config`
+   docs.
+2. `config/claude/settings.json` dropped the dangerous 8-pattern commit
+   family that could route destructive git operations through `-C <dir>`
+   / `--git-dir=<dir>` prefixes to bypass the standard `Bash(git push *)`
+   / `Bash(git rebase *)` advisories, dropped the `mcp__*` wildcard
+   (the explicit `mcp__bizar__*` / `mcp__semble__*` /
+   `mcp__agent-browser__*` per-tool allowlist is the source of truth),
+   and adopted Claude Code's `[1m]` 1M-window suffix on the default
+   `model` field plus a `modelOverrides` map.
+
+**Files touched:**
+- `cli/commands/models.mjs` — added `formatContextTokens` (exported),
+  extended `enrichModelsWithCapabilities` to stamp `contextWindow` on
+  every candidate row, threaded that into `capabilityLabel` so the
+  picker renders `(1M ctx)` / `(200k ctx)`.
+- `cli/__tests__/models-picker-context.test.mjs` — NEW, 10 cases.
+- `cli/__tests__/models-picker.test.mjs` — extended with `contextWindow`
+  assertions.
+- `cli/__tests__/settings-permissions.test.mjs` — reduced
+  `REQUIRED_COMMIT_PATTERNS` to 4, added `DROPPED_DANGEROUS_PATTERNS`
+  negative assertions.
+- `cli/provision.test.mjs`, `cli/install/force-clean.test.mjs`,
+  `scripts/__tests__/autonomy-contract.test.mjs` — updated to assert
+  the new explicit-allowlist shape.
+- `config/claude/settings.json` — `mcp__*` removed, 8 dangerous patterns
+  removed, default `model` rewritten to `claude-minimax/MiniMax-M3[1m]`,
+  `modelOverrides` block added, `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`
+  removed entirely from the template (Option A — operator-controlled).
+- `cli/provision.mjs` — production writer no longer emits
+  `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY`; the gateway-discovery
+  env stays in `FORCE_CLEAN_PRESERVE_ENV_KEYS` so an operator-set
+  value still survives a force re-install (operator-controlled surface).
+- `cli/install/__tests__/merge-settings.test.mjs` — three assertions
+  flipped: production writer now must NOT emit the gateway-discovery
+  env, normal updates don't auto-add it, fresh installs with no
+  operator value pass through `undefined`.
+- `package.json`, `packages/sdk/package.json`,
+  `packages/sdk/src/version.ts` — version bumped 10.17.3 → 10.17.4.
+
+**Verification (this scope, fresh runs):**
+- `node scripts/run-node-tests.mjs` → 709/709 pass.
+- `npm run typecheck` → clean.
+- `npm run build:sdk` → clean.
+- `npm run test:sdk` → clean.
+- `make verify-repo-structure` → clean.
+- `make verify-removed-surfaces` → clean.
+- `make check-arch` → clean.
+- `node cli/commands/validate.mjs permissions-allow-bizar` → exit 0.
+- `npm pack --dry-run` → `@polderlabs/bizar@10.17.4` (635.3 kB tarball, 341 files).
+- Live `~/.claude/settings.json` jq checks: `permissions.allow` = `[]`,
+  `permissions.ask` = `[]`, `permissions.deny` = `[]`, `model` =
+  `claude-minimax/MiniMax-M3[1m]`, `modelOverrides.claude-minimax/MiniMax-M3`
+  = `claude-minimax/MiniMax-M3[1m]`, no `mcp__*` literal in `allow`,
+  no `git -C *` / `git --git-dir=*` literal in `allow`.
+
+**Item 5 (flatten + union-merge):**
+- `config/claude/settings.json` permissions block now ships
+  `allow: []`, `deny: []`, `ask: []` plus `defaultMode:
+  bypassPermissions`.
+- `cli/provision.mjs:writeClaudeSettings` `if (force)` branch now
+  calls `normalizePermissionLists(existing.permissions,
+  bizarSettings.permissions)` after `Object.assign` so an operator's
+  existing arrays are preserved.
+- New test case in `cli/install/force-clean.test.mjs`
+  (`force-write (no clean) union-merges operator permissions: custom
+  allow rule survives`) seeds `Bash(custom-cmd *)` + `Bash(rm -rf /)`
+  on disk, runs `writeClaudeSettings({ force: true })`, asserts both
+  survive and that template's empty arrays don't leak the dangerous
+  8-pattern family or `mcp__*`.
+- Updated `cli/__tests__/settings-permissions.test.mjs` to assert
+  shipped `allow: []`, `deny: []`, `ask: []` plus negative assertions
+  for the dangerous 8-pattern family and `mcp__*`.
+- Updated `scripts/__tests__/autonomy-contract.test.mjs` and
+  `config/claude/hooks/__tests__/workflow-guards.test.mjs` for the
+  new contract (allow ships empty; Tier-1 floors enforced by hook
+  output, not by static rules).
+
+**Defer to 10.18.0:** `applyModelPickerToSettings` lands the picked
+selection into `modelOverrides` programmatically. Shipped the
+display + plumbing only here; the operator still writes the
+live-selection file by hand or via a follow-up patch.
+
+**NOT included in this commit (per team-lead):** push to
+`origin/master`, `npm publish`. Both require explicit user go-ahead.
+
 ## Complete — 10.17.3 `advisor-context` reviewer-context bleed fix
 
 **Date:** 2026-08-28
@@ -2660,3 +2758,59 @@ explaining the omission. Write a 4-assertion regression test.
   - `CHANGELOG.md` — `[10.17.1]` entry above `[10.17.0]`.
   - `PROGRESS.md` — this block.
 - Tests: green.
+
+## Hygiene — WIP=1 invariant reset on F-190..F-192 + v10.18.0 plan landing
+
+**Date:** 2026-08-28
+**Branch:** `master` (commit `ffe2390d363b2887d4ff3f2d00aab0ed73782268`).
+**WIP holder:** `@mike` — `wip: 1` is now exclusively on F-193 (the most-recent passing feature).
+
+**Objective delivered:**
+1. Landed the `@paul`-authored v10.18.0 mega-release plan at the canonical shared-checkout path
+   `.harness/research/10.18.0-plan.md` (391 lines, 6 `## ` sections, sha256
+   `77544f941ee9a4d48b0701c3c78f98b97c5204f688a99ce57b0b37375004576e`).
+   The plan covers scope, phased work breakdown (B.1..B.4 sequencer-merge F-190/F-191/F-192/F-193),
+   risk register R1..R5, nine-criterion acceptance gate, open questions, 5-line summary, and the
+   deferred-list surface (IMP-002..IMP-021, Fix 1..Fix 10).
+2. Repaired the AGENTS.md "MUST keep WIP=1 in feature_list.json" (singular) invariant. F-190, F-191,
+   F-192, F-193 were all carrying `wip: 1` together with `state: "passing"` — a VCR-failing violation.
+   Convention is to keep the NEWEST passing feature marked `wip: 1` and zero the rest. Result:
+   F-193 stays `wip: 1` (most recent); F-190/F-191/F-192 now `wip: 0`.
+
+**Files touched (this session, shared checkout):**
+- `.harness/research/10.18.0-plan.md` — NEW, 391 lines, untracked.
+- `feature_list.json` — 3-line diff (`"wip": 1` → `"wip": 0` on F-190/F-191/F-192); committed in
+  `ffe2390d363b2887d4ff3f2d00aab0ed73782268`.
+- `PROGRESS.md` — this block.
+
+**Verification (this scope, fresh runs):**
+- `wc -l .harness/research/10.18.0-plan.md` → **391** lines (391 ± 5 spec satisfied).
+- `head -1 .harness/research/10.18.0-plan.md` → `# Bizar Harness v10.18.0 — Mega-release Plan` (header spec satisfied).
+- `grep -c '^## ' .harness/research/10.18.0-plan.md` → **6** top-level sections (spec satisfied).
+- `sha256sum .harness/research/10.18.0-plan.md` → `77544f941ee9a4d48b0701c3c78f98b97c5204f688a99ce57b0b37375004576e`.
+- `node -e "const f=JSON.parse(require('fs').readFileSync('feature_list.json','utf8')); const w=f.features.filter(x=>x.wip===1); console.log('wip=1 count:', w.length); console.log('ids:', w.map(x=>x.id+'/'+x.state).join(', '));"`
+  → `wip=1 count: 1` / `ids: F-193/passing` (invariant passes).
+- `node -e "const f=JSON.parse(require('fs').readFileSync('feature_list.json','utf8')); console.log('passing:', f.vcr.passing, 'activated:', f.vcr.activated, 'ratio:', f.vcr.ratio);"`
+  → `passing: 72 activated: 73 ratio: 0.9863013698630136` (≥ 0.985 threshold met).
+- `git show --stat HEAD` on the WIP fix commit → **1 file changed, 3 insertions(+), 3 deletions(-)** — exactly 3 wip lines flipped, no other content changed.
+- `git diff HEAD~1 -- feature_list.json | grep -E '^[+-]' | grep wip` → 3 lines: F-190/F-191/F-192 changed from `wip: 1` to `wip: 0`; F-193 absent (correctly untouched).
+- `make check` (TypeScript gate) → passed, no errors, eval gate skipped per default.
+- `make test` → **709/709 pass** across 48 suites (no regression vs 709/709 baseline).
+- `make vcr` → could not run because `bun` is not installed in PATH (operator should `bun install` or
+  run VCR node check manually; ratio verified via the node one-liner above).
+- JSON validity: `node -e "JSON.parse(require('fs').readFileSync('feature_list.json','utf8'));"` → no throw.
+
+**Blockers / notes for orchestrator (carry-forward):**
+1. **Shared checkout had 17 pre-staged files** when `@brenda` started (CHANGELOG, PROGRESS, version
+   bumps in package.json / sdk/package.json / version.ts, settings.json, several test/provision
+   edits, plus the untracked `cli/__tests__/models-picker-context.test.mjs`). An initial over-broad
+   commit `d16f266` swept them all in; `@brenda` detected the sweep, ran `git reset --soft HEAD~1`,
+   unstaged everything except `feature_list.json`, and re-committed cleanly as `ffe2390`. Those 17
+   files are now back in the working tree (modified + 1 untracked) and are NOT in `ffe2390`.
+2. **No push performed** — task spec deferred push to the orchestrator so the plan file and the WIP
+   fix can be bundled into one push.
+3. **Plan file is untracked** in the shared checkout. `.harness/research/` is not in `.gitignore`
+   (only `.harness/evals/` and two specific files are). Orchestrator should `git add .harness/research/10.18.0-plan.md` before pushing.
+4. **WIP=1 invariant script** — `make vcr` does not explicitly check the wip=1 count; the implicit
+   invariant (count == 1, id == most-recent passing) is met. If a future gate requires an explicit
+   assertion, the `node` one-liner above is the canonical shape.

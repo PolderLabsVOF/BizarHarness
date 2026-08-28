@@ -7,15 +7,16 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SETTINGS = join(REPO_ROOT, 'config', 'claude', 'settings.json');
 
-const REQUIRED_COMMIT_PATTERNS = [
-  'Bash(git commit *)',
-  'Bash(git commit)',
+// F-176: the SHIPPED template carries NO `allow` rules. The floor is
+// enforced by the `permission-request.mjs` hook, not by Claude Code prompts.
+// `cli/provision.mjs:writeClaudeSettings` union-merges the operator's
+// existing `allow`/`ask`/`deny` onto whatever the template ships so a
+// user's deliberate configuration survives a force re-install.
+const DROPPED_DANGEROUS_PATTERNS = [
   'Bash(git -C * commit *)',
   'Bash(git -C * commit)',
   'Bash(git --git-dir=* commit *)',
   'Bash(git --git-dir=* commit)',
-  'Bash(git commit --amend *)',
-  'Bash(git commit --amend)',
   'Bash(git -C * commit --amend *)',
   'Bash(git -C * commit --amend)',
   'Bash(git --git-dir=* commit --amend *)',
@@ -26,28 +27,17 @@ function loadSettings() {
   return JSON.parse(readFileSync(SETTINGS, 'utf8'));
 }
 
-test('local git commit family is in permissions.allow (not ask, not deny)', () => {
-  const perms = loadSettings().permissions || {};
-  const allow = new Set(perms.allow || []);
-  const deny = new Set(perms.deny || []);
-  const ask = new Set(perms.ask || []);
-  for (const pattern of REQUIRED_COMMIT_PATTERNS) {
-    assert.ok(allow.has(pattern), `missing allow entry: ${pattern}`);
-    assert.ok(!deny.has(pattern), `commit pattern leaked into deny: ${pattern}`);
-    assert.ok(!ask.has(pattern), `commit pattern leaked into ask: ${pattern}`);
-  }
+test('F-176: shipped permissions.allow is empty (template carries no rules)', () => {
+  const allow = loadSettings().permissions?.allow ?? null;
+  assert.deepEqual(allow, [], `expected shipped allow to be []; got ${JSON.stringify(allow)}`);
 });
 
-// F-176: full permissions by default. deny and ask are both empty.
-// Everything that USED to be a hard-deny or ask lives in the hook
-// chain as an advisory reminder injected via additionalContext.
-
-test('F-176: permissions.deny is empty (full permissions by default)', () => {
+test('F-176: shipped permissions.deny is empty (full permissions by default)', () => {
   const deny = loadSettings().permissions?.deny || [];
   assert.deepEqual(deny, [], `expected deny to be []; got ${JSON.stringify(deny)}`);
 });
 
-test('F-176: permissions.ask is empty (no HITL prompts on subagents)', () => {
+test('F-176: shipped permissions.ask is empty (no HITL prompts on subagents)', () => {
   const ask = loadSettings().permissions?.ask || [];
   assert.deepEqual(ask, [], `expected ask to be []; got ${JSON.stringify(ask)}`);
 });
@@ -55,4 +45,22 @@ test('F-176: permissions.ask is empty (no HITL prompts on subagents)', () => {
 test('F-176: permissions.defaultMode is bypassPermissions', () => {
   const mode = loadSettings().permissions?.defaultMode;
   assert.equal(mode, 'bypassPermissions');
+});
+
+test('F-176: shipped template does NOT carry the dangerous 8-pattern git family', () => {
+  const allow = loadSettings().permissions?.allow || [];
+  for (const pattern of DROPPED_DANGEROUS_PATTERNS) {
+    assert.ok(
+      !allow.includes(pattern),
+      `dangerous pattern still in shipped allow: ${pattern}`,
+    );
+  }
+});
+
+test('F-176: shipped template does NOT carry the mcp__* wildcard', () => {
+  const allow = loadSettings().permissions?.allow || [];
+  assert.ok(
+    !allow.includes('mcp__*'),
+    'mcp__* wildcard still in shipped allow (the explicit mcp__bizar__*/mcp__semble__*/mcp__agent-browser__* per-tool allowlist is the source of truth)',
+  );
 });

@@ -212,9 +212,9 @@ test('forceCleanInstall({ dryRun: true }) reports paths but performs no rmSync',
   } finally { cleanupFixture(home); }
 });
 
-// ── 6. After force + writeClaudeSettings: F-181 wildcards + env preserved ───
+// ── 6. After force-clean-install + writeClaudeSettings: template resets, env stashed ──
 
-test('force + writeClaudeSettings: F-181 wildcards land AND operator env survives', async () => {
+test('force + writeClaudeSettings: template emits empty allow + operator env stashed back', async () => {
   const { home, claudeDir, bizarHome } = freshFixture();
   try {
     // Subprocess so `CLAUDE_DIR` resolves against THIS fixture.
@@ -254,28 +254,103 @@ test('force + writeClaudeSettings: F-181 wildcards land AND operator env survive
     assert.equal(existsSync(join(claudeDir, 'settings.json')), true);
     const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
 
-    // F-181 — 14 wildcards present in permissions.allow.
-    const expectedWildcards = [
-      'Bash(*)', 'Read(*)', 'Edit(*)', 'Write(*)', 'Glob(*)', 'Grep(*)',
-      'WebFetch(*)', 'WebSearch(*)', 'Agent(*)',
-      'CronCreate(*)', 'CronDelete(*)', 'CronList(*)', 'ScheduleWakeup(*)',
-      'mcp__*',
-    ];
-    for (const w of expectedWildcards) {
-      assert.ok(
-        (settings.permissions?.allow || []).includes(w),
-        `F-181 wildcard missing from re-emitted settings: ${w}`,
-      );
-    }
-    // F-176 — deny and ask are empty arrays.
-    assert.deepEqual(settings.permissions?.deny || [], [], 'permissions.deny must be [] (F-176)');
-    assert.deepEqual(settings.permissions?.ask || [], [], 'permissions.ask must be [] (F-176)');
+    // F-176 (10.17.4): a force-clean-install wipes settings.json entirely,
+    // so the operator's `permissions.allow` cannot survive — that's the
+    // intended semantics of `--force`. The freshly-emitted settings carry
+    // the SHIPPED template shape: empty `allow`, empty `deny`, empty `ask`.
+    const allow = settings.permissions?.allow || [];
+    const deny = settings.permissions?.deny || [];
+    assert.deepEqual(allow, [], 'force-clean-install re-emits allow: [] (F-176)');
+    assert.deepEqual(deny, [], 'force-clean-install re-emits deny: [] (F-176)');
+    assert.deepEqual(settings.permissions?.ask || [], [], 'permissions.ask must be []');
     assert.equal(settings.permissions?.defaultMode, 'bypassPermissions', 'defaultMode must be bypassPermissions');
+    // F-176 — the dangerous 8-pattern family is NOT in the re-emitted allow.
+    for (const pattern of [
+      'Bash(git -C * commit *)',
+      'Bash(git --git-dir=* commit *)',
+      'Bash(git -C * commit --amend *)',
+      'Bash(git --git-dir=* commit --amend *)',
+    ]) {
+      assert.equal(allow.includes(pattern), false, `dangerous pattern leaked into allow: ${pattern}`);
+    }
+    assert.equal(allow.includes('mcp__*'), false, 'F-176: mcp__* wildcard must NOT be re-emitted');
     // F-183 — operator env was merged back from the stash.
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://router.example/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'op-secret-token');
     assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://router.example/v1');
     assert.ok(settings.env.BIZAR_HOME, 'BIZAR_HOME must be present in re-emitted settings');
+  } finally { cleanupFixture(home); }
+});
+
+// ── 6b. force-WRITE (no clean) union-merges operator permissions ────────────
+
+test('force-write (no clean) union-merges operator permissions: custom allow rule survives', async () => {
+  // Per team-lead item 5(b): the `force: true` write path in
+  // `writeClaudeSettings` must NOT clobber the operator's existing
+  // permissions. We seed a settings.json with a custom `Bash(custom-cmd *)`
+  // allow rule + a `Bash(rm -rf /)` deny rule, then call
+  // `writeClaudeSettings({ force: true })` WITHOUT first calling
+  // `forceCleanInstall` (i.e. the on-disk settings.json survives). The
+  // custom rules must survive the union-merge.
+  const home = mkdtempSync(join(tmpdir(), 'bizar-union-merge-'));
+  const claudeDir = join(home, '.claude');
+  const bizarHome = join(home, '.config', 'bizar');
+  try {
+    delete process.env.BIZAR_HOME;
+    delete process.env.BIZAR_SAVED_ENV;
+    process.env.HOME = home;
+    process.env.CLAUDE_CONFIG_DIR = claudeDir;
+    process.env.AGENTS_DIR = join(home, '.agents');
+    process.env.XDG_CONFIG_HOME = join(home, '.config');
+    mkdirSync(claudeDir, { recursive: true });
+    mkdirSync(bizarHome, { recursive: true });
+    // Pre-existing operator settings — NOT wiped before writeClaudeSettings.
+    writeFileSync(join(claudeDir, 'settings.json'), JSON.stringify({
+      permissions: {
+        allow: ['Bash(custom-cmd *)'],
+        deny: ['Bash(rm -rf /)'],
+        ask: [],
+      },
+    }, null, 2) + '\n');
+
+    const script = `
+      import { writeClaudeSettings } from './cli/provision.mjs';
+      const r = writeClaudeSettings({ force: true });
+      if (!r.ok) { process.stdout.write('FAIL: ' + r.message); process.exit(2); }
+      process.stdout.write('OK');
+    `;
+    const envForChild = { ...process.env };
+    delete envForChild.BIZAR_HOME;
+    delete envForChild.BIZAR_SAVED_ENV;
+    Object.assign(envForChild, {
+      HOME: home,
+      CLAUDE_CONFIG_DIR: claudeDir,
+      AGENTS_DIR: join(home, '.agents'),
+      XDG_CONFIG_HOME: join(home, '.config'),
+    });
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: REPO_ROOT,
+      env: envForChild,
+      encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, `child failed: ${r.stderr || r.stdout}`);
+    assert.equal(r.stdout, 'OK');
+
+    const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
+    const allow = settings.permissions?.allow || [];
+    const deny = settings.permissions?.deny || [];
+    // Operator's deliberate rules MUST survive the force write.
+    assert.ok(allow.includes('Bash(custom-cmd *)'), 'operator custom-cmd allow must survive union-merge');
+    assert.ok(deny.includes('Bash(rm -rf /)'), 'operator rm -rf deny must survive union-merge');
+    // Template's empty arrays contribute nothing — no dangerous patterns leak in.
+    for (const pattern of [
+      'Bash(git -C * commit *)',
+      'Bash(git --git-dir=* commit *)',
+      'mcp__*',
+    ]) {
+      assert.equal(allow.includes(pattern), false, `template leaked: ${pattern}`);
+    }
+    assert.deepEqual(settings.permissions?.ask || [], [], 'ask must be []');
   } finally { cleanupFixture(home); }
 });
 

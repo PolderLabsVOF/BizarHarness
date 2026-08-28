@@ -396,6 +396,7 @@ test('enrichModelsWithCapabilities: exact IDs receive capability profiles', () =
   assert.equal(model.profile.capabilities.toolCall, true);
   assert.deepEqual(model.profile.capabilities.inputModalities, ['text', 'image']);
   assert.equal(model.profile.limits.contextTokens, 123000);
+  assert.equal(model.contextWindow, 123000, 'top-level contextWindow mirrors profile.limits.contextTokens');
 });
 
 test('enrichModelsWithCapabilities: unique gateway wrapper IDs are normalized', () => {
@@ -414,6 +415,27 @@ test('enrichModelsWithCapabilities: unique gateway wrapper IDs are normalized', 
   assert.equal(model.profile.baseModel, 'minimax/minimax-m3');
   assert.equal(model.profile.metadata.matchType, 'unique-normalized-id');
   assert.equal(model.profile.metadata.confidence, 0.7);
+  assert.equal(model.contextWindow, 200000);
+});
+
+test('enrichModelsWithCapabilities: MiniMax-M3 1M context window flows through contextWindow field', () => {
+  // models.dev reports limit.context: 1048576 for MiniMax-M3. The new
+  // contextWindow field must surface that exact value (1M), not a rounded
+  // approximation, so applyModelPickerToSettings can map → [1m].
+  const [model] = enrichModelsWithCapabilities(
+    [{ id: 'claude-minimax/MiniMax-M3' }],
+    {
+      'minimax/MiniMax-M3': {
+        name: 'MiniMax M3',
+        reasoning: true,
+        tool_call: true,
+        limit: { context: 1048576, output: 512000 },
+        modalities: { input: ['text'], output: ['text'] },
+      },
+    },
+  );
+  assert.equal(model.contextWindow, 1048576);
+  assert.equal(model.profile.limits.contextTokens, 1048576);
 });
 
 test('enrichModelsWithCapabilities: ambiguous aliases remain unmatched', () => {
@@ -425,6 +447,7 @@ test('enrichModelsWithCapabilities: ambiguous aliases remain unmatched', () => {
     },
   );
   assert.equal(model.profile, null);
+  assert.equal(model.contextWindow, null);
 });
 
 test('applyModels: persists profiles only for selected models', () => {
