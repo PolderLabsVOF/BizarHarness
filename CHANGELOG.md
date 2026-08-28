@@ -1,6 +1,6 @@
 # Changelog
 
-## [10.16.2] - 2026-08-28
+## [10.17.0] - 2026-08-28
 
 - **F-191 (IMP-018) — Per-dispatch model evidence store.** Append-only
   `DispatchEvidence` ledger (`packages/sdk/src/router/dispatch-evidence.ts`)
@@ -54,7 +54,7 @@
   the F-192 design iteration; the canonical recent-pick correlation lives
   on the `recordContextualOutcome(signal, learner, recentPicks?)` parameter
   — no instance state required).
-- Versions synchronized at **10.16.2** across root `package.json`,
+- Versions synchronized at **10.17.0** across root `package.json`,
   `packages/sdk/package.json`, and `packages/sdk/src/version.ts`.
   `packages/sdk/dist/` rebuilt with F-191/F-192/F-193 surface:
   `dispatch-evidence.{js,d.ts}`, `outcome-learner.{js,d.ts}`, updated
