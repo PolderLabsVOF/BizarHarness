@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "10.17.0",
+  "version": "10.17.1",
   "description": "Autonomous, human-in-the-loop multi-agent harness for Claude Code with guarded workflows, typed SDK primitives, and MCP tools.",
   "type": "module",
   "bin": {
@@ -35,7 +35,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build:sdk": "node scripts/clean-sdk-dist.mjs && tsc -p packages/sdk/tsconfig.json",
+    "build:sdk": "node scripts/build-sdk.mjs",
     "test:sdk": "node_modules/.bin/vitest run --root packages/sdk",
     "test:sdk:watch": "node_modules/.bin/vitest --root packages/sdk",
     "test:node": "node scripts/run-node-tests.mjs",

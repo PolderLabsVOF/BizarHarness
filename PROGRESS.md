@@ -2377,4 +2377,61 @@ explaining the omission. Write a 4-assertion regression test.
 - Regression test `cli/__tests__/settings-permissions.test.mjs` fails the build if any commit-pattern lands in `ask` or `deny`.
 - Live `~/.claude/settings.json` mirrors the template.
 - AGENTS.md notes the policy.
+
+## Complete — v10.17.1 `bizar models` install-time ERR_MODULE_NOT_FOUND fix
+
+- **Date:** 2026-08-28
+- **Symptom:** `bizar install --force --yes` succeeded but the very next
+  command, `bizar models`, blew up with `ERR_MODULE_NOT_FOUND` because
+  `cli/commands/models.mjs` imported the failover mirror from
+  `packages/sdk/src/router/failover-mirror.mjs` and `src/` is correctly
+  not in the published tarball (`packages/sdk/dist/` is the only thing
+  shipped).
+- **Root cause:** v10.17.0 introduced the mirror import path while
+  shipping the `dist/` build but never taught the build pipeline to
+  copy the mirror into `dist/`, and never repointed the CLI at the
+  dist path. The dist/ directory in the tarball had every other
+  router file (compiled by `tsc`) but was missing the hand-maintained
+  `failover-mirror.mjs`.
+- **Fix:**
+  - `scripts/clean-sdk-dist.mjs` → `scripts/build-sdk.mjs` (clean +
+    copy mirror → tsc) so the published tarball contains
+    `packages/sdk/dist/router/failover-mirror.mjs`. Root
+    `package.json#scripts.build:sdk` wired to the new entrypoint.
+  - `cli/commands/models.mjs:27` import path retargeted from
+    `'../../packages/sdk/src/router/failover-mirror.mjs'` to
+    `'../../packages/sdk/dist/router/failover-mirror.mjs'` (works in
+    repo and in install). Two doc-comment + error-string references
+    updated to match.
+- **Regression test:** `cli/__tests__/models-mirror-shipped.test.mjs`
+  (NEW, 3 assertions):
+  1. `packages/sdk/dist/router/failover-mirror.mjs` exists and exports
+     `rankUserSelectedForRole` after `build:sdk`.
+  2. `cli/commands/models.mjs` does NOT contain any
+     `'../../packages/sdk/src/` substring and DOES contain the
+     `'../../packages/sdk/dist/router/failover-mirror.mjs'` substring.
+  3. Dynamic-importing `cli/commands/models.mjs` does not throw
+     `ERR_MODULE_NOT_FOUND` and exposes the symbols the picker needs.
+- **Verification (post-build, post-fix):**
+  - `node --test cli/__tests__/models-mirror-shipped.test.mjs` —
+    **3/3 pass**.
+  - `npm run build:sdk` — produces `dist/router/failover-mirror.mjs`
+    alongside the compiled `.js` siblings.
+  - `npm run typecheck` (tsc --noEmit) — clean.
+  - `npm run test:sdk` (vitest) — **481/481 pass**.
+  - `npm run test:node` (node --test) — **674/674 pass** across 48
+    suites (+3 from the new regression test).
+  - `npm pack --dry-run` — `@polderlabs/bizar@10.17.1`, 341 files
+    (+1 vs 340), includes `packages/sdk/dist/router/failover-mirror.mjs`
+    (13.1 kB).
+- **Files (6):**
+  - `scripts/build-sdk.mjs` (NEW), `scripts/clean-sdk-dist.mjs`
+    (DELETED).
+  - `package.json` — `scripts.build:sdk` + version 10.17.0 → 10.17.1.
+  - `packages/sdk/package.json` — version 10.17.0 → 10.17.1.
+  - `packages/sdk/src/version.ts` — `SDK_VERSION` 10.17.0 → 10.17.1.
+  - `cli/commands/models.mjs` — single import line + two doc refs.
+  - `cli/__tests__/models-mirror-shipped.test.mjs` (NEW).
+  - `CHANGELOG.md` — `[10.17.1]` entry above `[10.17.0]`.
+  - `PROGRESS.md` — this block.
 - Tests: green.

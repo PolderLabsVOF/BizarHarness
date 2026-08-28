@@ -1,5 +1,23 @@
 # Changelog
 
+## [10.17.1] - 2026-08-28
+
+- **Fix (`bizar models` install-time `ERR_MODULE_NOT_FOUND`).** v10.17.0
+  shipped F-191/F-192/F-193 but the published tarball did not include
+  `packages/sdk/dist/router/failover-mirror.mjs`, so
+  `cli/commands/models.mjs` blew up with `ERR_MODULE_NOT_FOUND` on the
+  first `bizar install --force` because the file was being imported
+  from `packages/sdk/src/` (correctly not shipped). `scripts/build-sdk.mjs`
+  now copies the mirror into `dist/` before `tsc` runs (replacing the
+  older `scripts/clean-sdk-dist.mjs` clean-only shim), and the CLI
+  imports from `packages/sdk/dist/router/failover-mirror.mjs` so the
+  path resolves in both the repo and the installed tarball. New
+  regression test `cli/__tests__/models-mirror-shipped.test.mjs` (3
+  assertions) pins the three pieces together: the file ships at the
+  dist path, the CLI never re-introduces a `src/` import, and the CLI
+  module dynamic-imports without `ERR_MODULE_NOT_FOUND`. Tarball file
+  count: 340 → 341 (exactly +1, the mirror).
+
 ## [10.17.0] - 2026-08-28
 
 - **F-191 (IMP-018) — Per-dispatch model evidence store.** Append-only

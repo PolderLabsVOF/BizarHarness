@@ -24,7 +24,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import {
   rankUserSelectedForRole as rankUserSelectedForRoleMirror,
-} from '../../packages/sdk/src/router/failover-mirror.mjs';
+} from '../../packages/sdk/dist/router/failover-mirror.mjs';
 
 // ── Endpoint resolution ──────────────────────────────────────────────────────
 
@@ -696,7 +696,7 @@ function explainRankedEntry(entry) {
  * Pure function over `routerPath` — no stdout I/O. The `run` entry point
  * owns the output and exit codes.
  *
- * The mirror lives at `packages/sdk/src/router/failover-mirror.mjs` and is
+ * The mirror lives at `packages/sdk/dist/router/failover-mirror.mjs` and is
  * byte-identical to the SDK's algorithm; if it diverges, the divergence
  * test in `cli/__tests__/models-picker.test.mjs` fails.
  *
@@ -721,7 +721,7 @@ export function explainSelection({ routerPath, role, requirements = {} } = {}) {
     registry = { userSelected: undefined };
   }
   if (typeof rankUserSelectedForRoleMirror !== 'function') {
-    const err = new Error('bizar models explain requires packages/sdk/src/router/failover-mirror.mjs to be loadable');
+    const err = new Error('bizar models explain requires packages/sdk/dist/router/failover-mirror.mjs to be loadable');
     err.code = 'SDK_UNAVAILABLE';
     throw err;
   }
