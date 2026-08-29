@@ -26,13 +26,48 @@ The contract was the Milestone 1 surface but did not enumerate the full audit se
 
 Regression test added: `scripts/__tests__/autonomy-contract.test.mjs:178` asserts all four milestone headers + the audit commit + every shipped Milestone 1 deliverable appear in the contract body. Tests now 17/17 (was 16/16).
 
+### Complete — Audit P0.3: durable scheduler with objective-level leases
+
+This is the audit's Milestone 2 ("Resumable controller") P0 deliverable. New module `cli/commands/objective-scheduler.mjs` (340 lines, SQLite-backed, 0o700):
+
+**Surface:**
+- `ObjectiveScheduler` class with `createObjective` / `getObjective` / `listObjectives` / `listEvents` / `claimObjective` / `heartbeatObjective` / `transitionObjective` / `cancelObjective` / `recoverStale` / `close`.
+- `OBJECTIVE_PHASES` / `OBJECTIVE_STATUSES` exported, locked to the SDK's typed `ObjectiveRunPhase` / `ObjectiveRunStatus` unions.
+- `resolveObjectiveSchedulerDb()` honors `BIZAR_OBJECTIVE_DB` → `BIZAR_HOME/state/objectives.sqlite` → `~/.config/bizar/state/objectives.sqlite`.
+
+**Invariants enforced:**
+- A lease is meaningful only while `status='active'` and the phase is non-terminal. Terminal objectives (`done` / `failed` / `cancelled`) always clear `lease_expires_at` and stamp `terminal_at`.
+- A claim by a second owner while a lease is held by another is rejected with `LEASE_HELD`; the same owner renewing does NOT bump `attempt`; a fresh first-time claim increments `attempt` exactly once.
+- `recoverStale({ thresholdMs })` is idempotent: orphans are released exactly once per sweep, `attempt` is incremented exactly once, and a second sweep with no intervening work is a no-op.
+- Every state change records a row in `objective_events` so a future `bizar explain-run` (audit #79) can replay the timeline without consulting the evidence ledger.
+
+**Schema (SQLite):**
+- `objectives(objective_run_id PK, owner, phase, status, goal, payload_json, attempt, lease_expires_at, heartbeat_at, blocker, created_at, updated_at, terminal_at)` with `CHECK` constraints on `phase` / `status` matching the SDK unions.
+- `objective_events(id PK AUTO, objective_run_id FK→objectives, kind, ts, payload_json)` for the replay timeline.
+- Indices on `(phase, status)`, `lease_expires_at`, and `(objective_run_id, ts)` for the recovery sweep.
+
+**SDK plumbing:**
+- `packages/sdk/src/autonomy/objective-run.ts` now exports `OBJECTIVE_PHASES` and `OBJECTIVE_STATUSES` as runtime arrays (typed `satisfies` against the existing unions) so JS callers and drift-guard tests can compare against the same canonical list.
+
+**Regression test (`scripts/__tests__/objective-scheduler.test.mjs`, 10 tests):**
+- Surface exports + SDK schema alignment.
+- Full `planning → executing → verifying → done` lifecycle.
+- Phase mismatch rejected with `PHASE_MISMATCH`.
+- Lease race: second owner gets `LEASE_HELD`; same-owner renewal does not bump attempt.
+- Heartbeat from non-owner rejected with `OWNER_MISMATCH`.
+- `recoverStale` idempotency + attempt increment + post-recovery re-claim works.
+- Cancel without `force` requires matching owner; `force: true` always succeeds.
+- `listEvents` returns the canonical replay timeline.
+
+`npm run test:node` now 787/787 (was 775, +12 — actually +10 new tests + 2 surfaced from prior partial coverage). `npm run test:sdk`: clean.
+
 ### Pending audit items (in priority order)
 
 | # | Recommendation | Status |
 |---|---|---|
 | 76 | P0: stop pre-checking DoD in sprint.mjs | ✅ shipped `65be8d8` |
-| 77 | P0: extend AUTONOMY_CONTRACT.md with Milestone 2-4 alignment | pending |
-| 78 | P0: durable scheduler with objective-level leases | pending |
+| 77 | P0: extend AUTONOMY_CONTRACT.md with Milestone 2-4 alignment | ✅ shipped `bd74d56` |
+| 78 | P0: durable scheduler with objective-level leases | ✅ shipped (this commit) |
 | 79 | P1: `bizar explain-run <id>` for objective-level observability | pending |
 | 80 | P1: hierarchical budgets (objective/phase/task/agent/model) | pending |
 | 81 | P1: capability-segregated authority (worker/verifier/integrator) | pending |

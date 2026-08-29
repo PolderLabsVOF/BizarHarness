@@ -38,8 +38,29 @@ export type ObjectiveRunPhase =
   | "failed"
   | "cancelled";
 
+/** Runtime array of `ObjectiveRunPhase` values — kept in lock-step with the
+ * type union above so JS callers and drift-guard tests can compare against
+ * the same canonical list. The audit calls out drift between the typed
+ * schema and the scheduler's runtime guards as a regression source. */
+export const OBJECTIVE_PHASES = Object.freeze([
+  "planning",
+  "executing",
+  "verifying",
+  "done",
+  "failed",
+  "cancelled",
+] as const) satisfies ReadonlyArray<ObjectiveRunPhase>;
+
 /** Terminal vs. in-flight status of an `ObjectiveRun`. */
 export type ObjectiveRunStatus = "active" | "succeeded" | "failed" | "cancelled";
+
+/** Runtime array of `ObjectiveRunStatus` values. See `OBJECTIVE_PHASES`. */
+export const OBJECTIVE_STATUSES = Object.freeze([
+  "active",
+  "succeeded",
+  "failed",
+  "cancelled",
+] as const) satisfies ReadonlyArray<ObjectiveRunStatus>;
 
 /** A single side effect the run is allowed to perform. */
 export interface AllowedSideEffect {
