@@ -2,6 +2,33 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — Production-autonomy audit (commit 2a283c1) implementation
+
+The audit at `docs/audits/production-autonomy-improvements-2026-08-28.md` enumerates 11 P0/P1/P2 recommendations across a 4-milestone sequence (one source of truth → resumable controller → independent verification → production operations). This block tracks per-recommendation implementation status.
+
+### Complete — Audit P0.1: stop pre-checking Definition of Done in sprint generation
+
+Commit: `65be8d8 fix(scripts): stop pre-checking Definition of Done in sprint generation` (pushed to `origin/master`).
+
+`scripts/sprint.mjs:140-144` had a buggy branch that rewrote every `[ ]` checkbox inside the `## Definition of Done (DoD)` block of the shipped template to `[x]` during sprint generation. This was the audit's exact "Stop pre-completing Definition of Done in sprint generation" P0 callout. The fix removes the pre-check branch entirely — the operator (or a post-sprint verifier) marks DoD items `[x]` after evidence-backed verification.
+
+Regression test added: `scripts/sprint.test.mjs:43` asserts every shipped DoD item (Layer 1/2/3, Documentation, feature_list, PROGRESS, Commit message) remains `[ ]` in generated sprint files and never appears as `[x]`.
+
+### Pending audit items (in priority order)
+
+| # | Recommendation | Status |
+|---|---|---|
+| 76 | P0: stop pre-checking DoD in sprint.mjs | ✅ shipped `65be8d8` |
+| 77 | P0: extend AUTONOMY_CONTRACT.md with Milestone 2-4 alignment | pending |
+| 78 | P0: durable scheduler with objective-level leases | pending |
+| 79 | P1: `bizar explain-run <id>` for objective-level observability | pending |
+| 80 | P1: hierarchical budgets (objective/phase/task/agent/model) | pending |
+| 81 | P1: capability-segregated authority (worker/verifier/integrator) | pending |
+| 82 | P1: chaos testing / deterministic fault injection | pending |
+| 83 | P1: SBOM + release provenance + signed-known-good pointer | pending |
+| 84 | P2: spec sprawl reduction | pending |
+| 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | pending |
+
 ## Complete — 10.18.0 mega-release published to npm
 
 **Release:** `@polderlabs/bizar@10.18.0` is live on the public npm registry (shasum `f262363991df9927a0ec21e5703d3a57c9d1fe54`, 345 files, 652.9 kB tarball). Git tag `v10.18.0` pushed. Rollup commit `1c2cdfe chore(release): bump to v10.18.0 (mega-release rollup)` on origin/master.
