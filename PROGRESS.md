@@ -82,6 +82,39 @@ Audit #79 (Milestone 2 observability surface). New module `cli/commands/explain-
 
 `npm run test:node`: 794/794 (was 787, +7). End-to-end smoke (`bizar explain-run --help`, `--list`, unknown id) confirmed against a real BIZAR_HOME directory.
 
+### Complete — Audit P1.2: hierarchical budgets (objective / phase / task / agent / model)
+
+Audit #80 (Milestone 2 reservation primitives). Extended `cli/cost-gate.mjs` (F-035) with hierarchical scope tracking.
+
+**Schema (additive — existing `rooms` / `transactions` unchanged):**
+- `budget_scopes(scope_id PK, parent_scope_id, scope_kind, cap_usd, spent_usd, reserved_usd, created_at)` — one row per budget cell with optional parent reference for nesting.
+- `scope_transactions(tx_id PK, scope_chain, amount_usd, kind, caller_id, ts, expires_at, committed_at, metadata)` — one row per hierarchical reservation.
+- `scope_tx_links(tx_id, scope_id)` — join table attributing each transaction to every scope in its chain.
+
+**New methods on `CostGate`:**
+- `registerScope({ scopeId, parentScopeId, scopeKind, capUsd })` — idempotent upsert; rejects missing parent and self-parent.
+- `getScope(scopeId)` — single-scope status snapshot.
+- `reserveHierarchy({ chain, amountUsd, callerId, expiryMs, metadata })` — atomic walk: if ANY scope in `chain` would exceed its cap (committed + live reserved + new amount), the entire reserve fails with `BUDGET_EXCEEDED` and `offendingScopeId`; nothing is touched.
+- `commitHierarchy(txId, actualUsd)` — atomic walk: subtracts reserved amount from `reserved_usd`, adds actual to `spent_usd` at every linked scope; emits `COMMIT_AFTER_EXPIRY` warning if the reservation had expired.
+- `releaseHierarchy(txId)` — atomic walk: refunds `reserved_usd` at every linked scope; flips tx to `released`.
+- `sweepHierarchyExpired(nowMs)` — periodic sweep that flips expired hierarchical reservations to `expired` and refunds `reserved_usd` at every linked scope; idempotent.
+
+**Backward compatibility:**
+- Single-room API (`registerRoom` / `reserve` / `commit` / `release` / `status` / `sweepExpired`) is unchanged. `hierarchical-budget.test.mjs:35` exercises a full room round-trip to prove it.
+
+**Regression test (`scripts/__tests__/hierarchical-budget.test.mjs`, 9 cases):**
+- Backward-compat room round-trip.
+- `registerScope` idempotency + parent validation.
+- Reserve links every scope and increments `reserved_usd`.
+- Reserve atomicity — failing one level leaves the rest untouched.
+- `SCOPE_NOT_FOUND` for unknown scope.
+- `commitHierarchy` moves reserved → spent at every level; double-commit rejected.
+- `releaseHierarchy` refunds the chain; double-release rejected.
+- `COMMIT_AFTER_EXPIRY` warning path.
+- `sweepHierarchyExpired` is idempotent.
+
+`npm run test:node`: 803/803 (was 794, +9).
+
 ### Pending audit items (in priority order)
 
 | # | Recommendation | Status |
@@ -90,7 +123,7 @@ Audit #79 (Milestone 2 observability surface). New module `cli/commands/explain-
 | 77 | P0: extend AUTONOMY_CONTRACT.md with Milestone 2-4 alignment | ✅ shipped `bd74d56` |
 | 78 | P0: durable scheduler with objective-level leases | ✅ shipped (this commit) |
 | 79 | P1: `bizar explain-run <id>` for objective-level observability | ✅ shipped (this commit) |
-| 80 | P1: hierarchical budgets (objective/phase/task/agent/model) | pending |
+| 80 | P1: hierarchical budgets (objective/phase/task/agent/model) | ✅ shipped (this commit) |
 | 81 | P1: capability-segregated authority (worker/verifier/integrator) | pending |
 | 82 | P1: chaos testing / deterministic fault injection | pending |
 | 83 | P1: SBOM + release provenance + signed-known-good pointer | pending |
