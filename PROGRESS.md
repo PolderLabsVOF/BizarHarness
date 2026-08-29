@@ -115,6 +115,46 @@ Audit #80 (Milestone 2 reservation primitives). Extended `cli/cost-gate.mjs` (F-
 
 `npm run test:node`: 803/803 (was 794, +9).
 
+### Complete — Audit P1.3: capability-segregated authority (worker / verifier / integrator)
+
+Audit #81 (Milestone 3 "Independent verification" deliverable). The
+PermissionRequest hook `config/claude/hooks/permission-request.mjs`
+now layers a role-based capability policy on top of the Tier 4
+destructive floor. The hook reads `BIZAR_AGENT_ROLE` (default
+`worker`) and `BIZAR_INTEGRATION_PATHS` (integrator scope list)
+from `process.env`.
+
+**Role matrix:**
+
+| Role | Capability |
+|---|---|
+| `worker` (default) | Tier 1 autonomy; Tier 4 floor only. |
+| `planner` | Read-only filesystem; writes only under `.bizar/`. No git mutations. |
+| `research` | Read-only + WebSearch/WebFetch. No Edit/Write, no git mutations. |
+| `verifier` | Strict read-only. No Edit/Write/MultiEdit/NotebookEdit; no write-shape Bash (rm/mv/cp/sed -i/tee/redirects/git commit/git push/gh pr create/npm publish/curl POST/vercel deploy/etc.). |
+| `integrator` | Writes only for paths in `BIZAR_INTEGRATION_PATHS`. Empty path list refuses all writes. May push non-force git refs. |
+| `operator` | Bypass (escape hatch). Tier 4 floor still applies. |
+
+**Audit-friendly enforcement:**
+- Tier 4 floor (force-push, rebase, rm-rf /, mkfs, shutdown) is unchanged and applies to every role.
+- Read-only roles use a regex bank of write-shape patterns (`WRITE_BASH_SHAPES`) covering git mutations, gh mutations, package publication, deployment CLIs, filesystem mutations, redirects, `sed -i`, `tee`, and curl/wget write verbs.
+- The hook returns `behavior: 'deny'` for any violation — same hard-floor semantics as the existing Tier 4 deny.
+
+**Contract drift guard (`scripts/__tests__/role-capabilities.test.mjs`, 12 cases):**
+- Tier 4 floor survives every role for force-push, rebase, rm-rf /, mkfs.
+- Worker is unaffected by role layer.
+- Verifier blocked on Edit/Write/MultiEdit/NotebookEdit + every write-shape Bash command; allowed on read-only commands.
+- Research blocked on Edit/Write + git mutations.
+- Planner allowed under `.bizar/`, blocked elsewhere.
+- Integrator allowed only for paths in `BIZAR_INTEGRATION_PATHS`; empty list refuses all.
+- Integrator may push non-force git refs (Tier 4 force-push still trips).
+- Operator bypasses role layer, still blocked by Tier 4.
+- Hook source still preserves F-176 Tier 4 regex tokens (the existing `autonomy-contract.test.mjs` test continues to pin them).
+
+**Contract doc:** `docs/decisions/AUTONOMY_CONTRACT.md` extended with a new "Tier 4½ — Role-based capability segregation" section enumerating the role matrix.
+
+`npm run test:node`: 815/815 (was 803, +12).
+
 ### Pending audit items (in priority order)
 
 | # | Recommendation | Status |
@@ -124,7 +164,7 @@ Audit #80 (Milestone 2 reservation primitives). Extended `cli/cost-gate.mjs` (F-
 | 78 | P0: durable scheduler with objective-level leases | ✅ shipped (this commit) |
 | 79 | P1: `bizar explain-run <id>` for objective-level observability | ✅ shipped (this commit) |
 | 80 | P1: hierarchical budgets (objective/phase/task/agent/model) | ✅ shipped (this commit) |
-| 81 | P1: capability-segregated authority (worker/verifier/integrator) | pending |
+| 81 | P1: capability-segregated authority (worker/verifier/integrator) | ✅ shipped (this commit) |
 | 82 | P1: chaos testing / deterministic fault injection | pending |
 | 83 | P1: SBOM + release provenance + signed-known-good pointer | pending |
 | 84 | P2: spec sprawl reduction | pending |

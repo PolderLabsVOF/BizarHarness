@@ -5,6 +5,8 @@
 **Implements:** F-176, F-181, F-182, F-183, F-184
 **Supersedes:** any contradicting `permissions.deny` / `permissions.ask`
 prose in `AGENTS.md` or older `DEC-*` documents.
+**Audit:** Milestone 3 ("Independent verification") deliverable: capability-
+segregated authority via `BIZAR_AGENT_ROLE`.
 
 ## Purpose
 
@@ -69,6 +71,26 @@ These are blocked at the hook layer with no override path:
 - Direct reads of `~/.aws/credentials`, `~/.ssh/id_*`
 - `git push --force` / `-f` against any branch
 - `git rebase` against any branch
+
+## Tier 4½ — Role-based capability segregation (audit #81)
+
+A second axis layered on top of the four tiers: the agent's role.
+The hook reads `BIZAR_AGENT_ROLE` from the environment (default
+`worker`) and tightens the policy for non-worker roles. The Tier 4
+floor still applies to every role.
+
+| Role | Capability |
+|---|---|
+| `worker` (default) | Tier 1 autonomy; Tier 4 floor only. |
+| `planner` | Read-only filesystem; may write only under `.bizar/` (sprint contracts, learning ledgers). No git mutations. |
+| `research` | Read-only filesystem + WebSearch/WebFetch. No git mutations, no package publication, no Edit/Write. |
+| `verifier` | Strict read-only. No Edit/Write/MultiEdit/NotebookEdit. No write-shape Bash (rm/mv/cp, sed -i, tee, > redirects, git commit/push, gh pr create, npm publish, vercel/wrangler/flyctl deploy, curl POST/PUT, etc.). |
+| `integrator` | Writes allowed ONLY for paths listed in `BIZAR_INTEGRATION_PATHS` (newline-separated). Empty path list refuses all writes. May push non-force git refs. |
+| `operator` | Bypass (escape hatch). Tier 4 floor still applies. |
+
+Enforced by `config/claude/hooks/permission-request.mjs` (the
+PermissionRequest hook). This is the only hook that returns `deny`;
+all PreToolUse hooks are advisory per F-176.
 
 ## Settings template
 
