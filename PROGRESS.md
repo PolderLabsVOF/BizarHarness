@@ -245,6 +245,73 @@ bizar verify-release --version <X.Y.Z> --tarball <path> --sbom <path> \
 
 `npm run test:node`: 835/835 (was 820, +15). `npm run typecheck`: clean. `make check-arch` and `make verify-removed-surfaces`: clean.
 
+### Complete — Audit P2.1: spec-sprawl reduction (schema versions + policy doc ownership + mirror parity)
+
+Audit #84. The audit's prescription: "version every schema and
+document which file is authoritative; add ownership and review
+cadence to each policy document; keep prompts concise and load
+role-specific instructions on demand; define a single canonical
+source for mirrored agent instructions and verify byte equality."
+
+**Three surfaces shipped:**
+
+1. **Schema versioning** — every F-194 autonomy schema exports a
+   `<NAME>_SCHEMA_VERSION` constant, the factory stamps it on
+   new records, and the SDK dist + d.ts agree:
+   - `OBJECTIVE_RUN_SCHEMA_VERSION = "1.0.0"` in `autonomy/objective-run.ts`
+   - `EVIDENCE_BUNDLE_SCHEMA_VERSION = "1.0.0"` in `autonomy/evidence-bundle.ts`
+   - `OUTCOME_LEARNER_SCHEMA_VERSION = "1.0.0"` in `autonomy/outcome-record.ts`
+   - Each schema's interface gains a `readonly schemaVersion: string`
+     field; each factory stamps the constant automatically.
+
+2. **Mirror parity enforcement** — `scripts/__tests__/spec-sprawl.test.mjs`
+   asserts that:
+   - `CLAUDE.md` (root) is **byte-identical** to `AGENTS.md`.
+   - `config/claude/CLAUDE.md` (inner mirror) embeds the canonical
+     body past the first `# title` line.
+   - `scripts/mirror-claude-md.sh --check` reports "in sync".
+   Drift on either mirror is now a test failure.
+
+3. **Policy doc ownership** — `docs/decisions/AUTONOMY_CONTRACT.md`
+   gains frontmatter:
+   ```
+   ---
+   owner: orchestrator
+   review-cadence: release-cut
+   schema-version: autonomy-contract/v1
+   ---
+   ```
+   `bizar spec-list` reads `owner:` / `review-cadence:` frontmatter
+   and reports it for every canonical doc (`AGENTS.md`,
+   `PROGRESS.md`, `AUTONOMY_CONTRACT.md`, the production-autonomy
+   audit).
+
+4. **`bizar spec-list`** — new CLI command (registered in
+   `cli/bin.mjs`) that emits a JSON / human-readable inventory:
+   ```
+   bizar spec-list [--format=json|human]
+   ```
+   Output:
+   - `schemas`: every SDK schema with version + source file path.
+   - `policyDocs`: every canonical doc with owner + review cadence.
+   - `mirrors`: AGENTS.md mirror pair sync status (root + inner).
+
+**Tests (`scripts/__tests__/spec-sprawl.test.mjs`, 17 cases):**
+- Schema versions exported, format `MAJOR.MINOR.PATCH`.
+- Factories stamp `schemaVersion` on new records.
+- `dist/autonomy/index.d.ts` re-declares every SCHEMA_VERSION constant.
+- AGENTS.md canonical source exists.
+- Root `CLAUDE.md` byte-equal to `AGENTS.md`.
+- Inner `config/claude/CLAUDE.md` contains canonical body past title.
+- `mirror-claude-md.sh --check` reports in sync.
+- AUTONOMY_CONTRACT.md carries `owner:` and `review-cadence:` frontmatter.
+- `buildSpecList` returns schemas + policyDocs + mirrors with correct shape.
+- `buildSpecList` finds AUTONOMY_CONTRACT.md with a real owner.
+- `buildSpecList` reports both mirrors present + root in sync.
+- `bin.mjs` registers the `spec-list` case.
+
+`npm run test:node`: 852/852 (was 835, +17). `npm run typecheck`: clean. `make check-arch`: clean.
+
 ### Pending audit items (in priority order)
 
 | # | Recommendation | Status |
@@ -257,7 +324,7 @@ bizar verify-release --version <X.Y.Z> --tarball <path> --sbom <path> \
 | 81 | P1: capability-segregated authority (worker/verifier/integrator) | ✅ shipped (this commit) |
 | 82 | P1: chaos testing / deterministic fault injection | ✅ shipped (this commit) |
 | 83 | P1: SBOM + release provenance + signed-known-good pointer | ✅ shipped (this commit) |
-| 84 | P2: spec sprawl reduction | pending |
+| 84 | P2: spec-sprawl reduction (schema versions + policy doc ownership + mirror parity) | ✅ shipped (this commit) |
 | 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | pending |
 
 ## Complete — 10.18.0 mega-release published to npm

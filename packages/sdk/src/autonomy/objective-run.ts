@@ -29,6 +29,15 @@
 
 import { randomUUID } from "node:crypto";
 
+/**
+ * Schema version of `ObjectiveRun` (audit #84, P2 spec-sprawl reduction).
+ * Bump on ANY breaking change to the schema (new required field, removed
+ * field, or semantic change). Additive changes (new optional field)
+ * bump the minor version. The factory and verifier both consult this
+ * constant so a single source of truth exists.
+ */
+export const OBJECTIVE_RUN_SCHEMA_VERSION = "1.0.0";
+
 /** Lifecycle phases of an `ObjectiveRun`. */
 export type ObjectiveRunPhase =
   | "planning"
@@ -102,6 +111,8 @@ export interface ObjectiveRun {
   readonly status: ObjectiveRunStatus;
   /** Rubric version that scored this run; required for replay parity. */
   readonly evaluatorVersion: string;
+  /** Schema version that produced this record (audit #84). */
+  readonly schemaVersion: string;
   /** Server-stamped ISO 8601 creation timestamp. */
   readonly createdAt: string;
   /** Server-stamped ISO 8601 last-update timestamp. */
@@ -155,6 +166,7 @@ export function createObjectiveRun({
     phase: "planning",
     status: "active",
     evaluatorVersion,
+    schemaVersion: OBJECTIVE_RUN_SCHEMA_VERSION,
     createdAt: now,
     updatedAt: now,
   };

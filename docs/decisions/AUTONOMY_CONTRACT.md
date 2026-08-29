@@ -1,3 +1,9 @@
+---
+owner: orchestrator
+review-cadence: release-cut
+schema-version: autonomy-contract/v1
+---
+
 # AUTONOMY_CONTRACT — Bizar Harness Autonomous Behavior Contract
 
 **Status:** Accepted

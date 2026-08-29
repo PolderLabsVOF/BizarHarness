@@ -26,6 +26,14 @@
 
 import { createHash, createHmac, randomUUID } from "node:crypto";
 
+/**
+ * Schema version of `EvidenceBundle` (audit #84, P2 spec-sprawl reduction).
+ * Bump on ANY breaking change to the schema (new required field, removed
+ * field, or semantic change). Additive changes (new optional field) bump
+ * the minor version.
+ */
+export const EVIDENCE_BUNDLE_SCHEMA_VERSION = "1.0.0";
+
 /** Test-count summary embedded in an evidence bundle. */
 export interface TestCounts {
   readonly total: number;
@@ -103,6 +111,8 @@ export interface EvidenceBundle {
   readonly signature: string;
   /** Server-stamped ISO 8601 timestamp. */
   readonly createdAt: string;
+  /** Schema version that produced this record (audit #84). */
+  readonly schemaVersion: string;
 }
 
 /** Length in characters of a SHA-256 hex digest. */
@@ -167,7 +177,7 @@ export function newBundleId(): string {
 
 /** Convenience constructor that fills in server-stamped ids + timestamp + signature. */
 export function createEvidenceBundle(
-  fields: Omit<EvidenceBundle, "bundleId" | "signature" | "createdAt">,
+  fields: Omit<EvidenceBundle, "bundleId" | "signature" | "createdAt" | "schemaVersion">,
   secret: string,
 ): EvidenceBundle {
   assertSha256Hex("envDigest", fields.envDigest);
@@ -179,6 +189,7 @@ export function createEvidenceBundle(
   assertSha256Hex("rubricSha256", fields.rubricSha256);
   const base = {
     ...fields,
+    schemaVersion: EVIDENCE_BUNDLE_SCHEMA_VERSION,
     bundleId: newBundleId(),
     createdAt: new Date().toISOString(),
   };

@@ -14,6 +14,7 @@ export {
   type ObjectiveRunConstraints,
   type AllowedSideEffect,
   type Budget,
+  OBJECTIVE_RUN_SCHEMA_VERSION,
   newObjectiveRunId,
   createObjectiveRun,
 } from "./objective-run.js";
@@ -23,6 +24,7 @@ export {
   type TestCounts,
   type TestReport,
   type ResourceUsage,
+  EVIDENCE_BUNDLE_SCHEMA_VERSION,
   SHA256_HEX_LENGTH,
   assertSha256Hex,
   canonicalize,
@@ -36,6 +38,7 @@ export {
 export {
   type OutcomeLearnerOutcome,
   type PosteriorUpdate,
+  OUTCOME_LEARNER_SCHEMA_VERSION,
   createOutcomeLearnerOutcome,
   bundleRefersTo,
 } from "./outcome-record.js";

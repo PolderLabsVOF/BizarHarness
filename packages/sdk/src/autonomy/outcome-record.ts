@@ -22,6 +22,14 @@
 import { randomUUID } from "node:crypto";
 import type { EvidenceBundle } from "./evidence-bundle.js";
 
+/**
+ * Schema version of `OutcomeLearnerOutcome` (audit #84, P2 spec-sprawl reduction).
+ * Bump on ANY breaking change to the schema (new required field, removed
+ * field, or semantic change). Additive changes (new optional field) bump
+ * the minor version.
+ */
+export const OUTCOME_LEARNER_SCHEMA_VERSION = "1.0.0";
+
 /** Posterior update the learner applied for a (agent, tier) pair. */
 export interface PosteriorUpdate {
   readonly agentRole: string;
@@ -45,6 +53,8 @@ export interface OutcomeLearnerOutcome {
   readonly summary?: string;
   /** Server-stamped ISO 8601 timestamp. */
   readonly createdAt: string;
+  /** Schema version that produced this record (audit #84). */
+  readonly schemaVersion: string;
 }
 
 /** Build an `OutcomeLearnerOutcome` from an `EvidenceBundle`. */
@@ -80,6 +90,7 @@ export function createOutcomeLearnerOutcome({
     objectiveRunId: bundle.objectiveRunId,
     posteriorUpdates: [...posteriorUpdates],
     ...(summary ? { summary } : {}),
+    schemaVersion: OUTCOME_LEARNER_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
   };
 }

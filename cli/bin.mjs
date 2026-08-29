@@ -111,6 +111,7 @@ function showHelp() {
     setup-provider         Configure a provider in ~/.claude/settings.json (since v6.2.2 installer doesn't touch providers)
     release-provenance     Generate SBOM + provenance + minisig for a release (audit #83)
     verify-release         Verify a release artifact set against the pinned allowlist
+    spec-list              List SDK schemas, policy docs, and mirror sync status (audit #84)
     team                   Run the office-manager orchestration agent
     subagent               Run a named agent in read-only plan mode
     run                    Run Claude Code once (optionally --bg)
@@ -470,6 +471,19 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'verify-release');
+      const code = await mod.run(cmdArgs);
+      if (typeof code === 'number') process.exit(code);
+      break;
+    }
+
+    case 'spec-list': {
+      const mod = await importCommand('spec-list');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load spec-list command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'spec-list');
       const code = await mod.run(cmdArgs);
       if (typeof code === 'number') process.exit(code);
       break;
