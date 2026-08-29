@@ -11,6 +11,11 @@ const PERM_REQUEST_PATH = join(REPO_ROOT, 'config', 'claude', 'hooks', 'permissi
 const PRETOOLUSE_BASH_PATH = join(REPO_ROOT, 'config', 'claude', 'hooks', 'pretooluse-bash.mjs');
 const PRETOOLUSE_EDIT_PATH = join(REPO_ROOT, 'config', 'claude', 'hooks', 'pretooluse-editwrite.mjs');
 const GIT_WORKFLOW_PATH = join(REPO_ROOT, 'config', 'claude', 'hooks', 'git-workflow-guard.mjs');
+const SECURE_DIR_PATH = join(REPO_ROOT, 'cli', 'commands', 'secure-dir.mjs');
+const EVIDENCE_BUNDLES_PATH = join(REPO_ROOT, 'cli', 'commands', 'evidence-bundles.mjs');
+const LEARNING_BEHAVIOR_PATH = join(REPO_ROOT, 'cli', 'commands', 'learning-behavior.mjs');
+const WORKER_SUGGEST_PATH = join(REPO_ROOT, 'config', 'claude', 'hooks', 'worker-suggest.mjs');
+const PROVISION_PATH = join(REPO_ROOT, 'cli', 'provision.mjs');
 
 function readJSON(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
@@ -158,9 +163,89 @@ test('AUTONOMY_CONTRACT.md cross-references every enforcement surface', () => {
     'simplify-guard.mjs',
     'content-style-guard.mjs',
     'agent-model-guard.mjs',
+    'cli/commands/secure-dir.mjs',
+    'packages/sdk/src/learning/behavior-capture.ts',
+    'config/claude/hooks/worker-suggest.mjs',
     'AGENTS.md',
     'scripts/__tests__/autonomy-contract.test.mjs',
   ]) {
     assert.ok(body.includes(ref), `AUTONOMY_CONTRACT.md must reference ${ref}`);
+  }
+});
+
+// ─── Phase B.4 extension: F-194 secure-dir + learning/evidence contract ──────
+//
+// These tests pin the file-system-side autonomy contract for the F-194
+// learning + evidence ledgers: mode 0o700, single source of truth via
+// secure-dir.mjs, no prompt text ever written to disk, force-clean
+// preserves both subtrees. Drift here means a regression can silently
+// start writing operator state world-readable.
+
+test('secure-dir.mjs exports the F-194 0o700 contract', async () => {
+  const mod = await import('../../cli/commands/secure-dir.mjs');
+  assert.equal(mod.SECURE_DIR_MODE, 0o700, 'SECURE_DIR_MODE must be 0o700');
+  assert.equal(typeof mod.resolveSecureSubdir, 'function');
+  assert.equal(typeof mod.ensureSecureDir, 'function');
+});
+
+test('evidence-bundles.mjs + learning-behavior.mjs share the secure-dir helper', () => {
+  const evidenceSrc = readFileSync(EVIDENCE_BUNDLES_PATH, 'utf8');
+  const learningSrc = readFileSync(LEARNING_BEHAVIOR_PATH, 'utf8');
+  // Both must import from secure-dir — no duplicated mkdirSync + chmodSync + existsSync blocks.
+  assert.match(evidenceSrc, /from ['"]\.\/secure-dir\.mjs['"]/);
+  assert.match(learningSrc, /from ['"]\.\/secure-dir\.mjs['"]/);
+  // Neither should carry a hand-rolled 0o700 mkdir + chmod tighten block.
+  for (const src of [evidenceSrc, learningSrc]) {
+    assert.equal(
+      /mkdirSync\([^,]+,\s*\{\s*recursive:\s*true,\s*mode:\s*0o700\s*\}\)/.test(src),
+      false,
+      '0o700 mkdir must live in secure-dir.mjs, not duplicated at the call site',
+    );
+    assert.equal(
+      /chmodSync\([^,]+,\s*0o700\)/.test(src),
+      false,
+      'chmod tighten must live in secure-dir.mjs, not duplicated at the call site',
+    );
+  }
+});
+
+test('behavior-capture.ts exposes BEHAVIOR_DIR_MODE=0o700 + FORBIDDEN_BEHAVIOR_KEYS', async () => {
+  const mod = await import('../../packages/sdk/src/learning/behavior-capture.js')
+    .catch(() => import('../../packages/sdk/dist/learning/behavior-capture.js'));
+  assert.equal(mod.BEHAVIOR_DIR_MODE, 0o700);
+  assert.ok(Array.isArray(mod.FORBIDDEN_BEHAVIOR_KEYS));
+  for (const forbidden of ['prompt', 'promptRedacted', 'rawPrompt', 'promptText', 'userInput']) {
+    assert.ok(
+      mod.FORBIDDEN_BEHAVIOR_KEYS.includes(forbidden),
+      `FORBIDDEN_BEHAVIOR_KEYS must include ${forbidden}`,
+    );
+  }
+});
+
+test('worker-suggest.mjs reads via buildLearningContext and never echoes a prompt field', () => {
+  const src = readFileSync(WORKER_SUGGEST_PATH, 'utf8');
+  assert.match(src, /buildLearningContext/);
+  assert.match(src, /learning-behavior\.mjs/);
+  // Q4 invariant: no prompt-shaped field name appears in the hook source.
+  for (const forbidden of ['promptText', 'rawPrompt', 'promptRedacted']) {
+    assert.equal(
+      src.includes(forbidden),
+      false,
+      `worker-suggest.mjs must not reference ${forbidden}`,
+    );
+  }
+});
+
+test('provision.mjs:ensureBizarHome creates evidence/ + learning/ at 0o700 and preserves both', () => {
+  const src = readFileSync(PROVISION_PATH, 'utf8');
+  // Both subtrees must be wired through the shared secure-dir helper.
+  assert.match(src, /ensureSecureDir\(\{[^}]*subdir:\s*'evidence'/);
+  assert.match(src, /ensureSecureDir\(\{[^}]*subdir:\s*'learning'/);
+  // forceCleanInstall preserves both — explicit push into preserved[].
+  for (const dir of ['evidence', 'learning']) {
+    const preservedBlock = src.match(
+      new RegExp(`const ${dir}Dir = join\\(BIZAR_HOME\\(\\), '${dir}'\\);[\\s\\S]{0,400}preserved\\.push\\(${dir}Dir\\)`),
+    );
+    assert.ok(preservedBlock, `forceCleanInstall must push ${dir}Dir into preserved[]`);
   }
 });

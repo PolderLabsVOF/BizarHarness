@@ -95,6 +95,9 @@ These are blocked at the hook layer with no override path:
 - `config/claude/hooks/simplify-guard.mjs` — Tier 2 (advisory)
 - `config/claude/hooks/content-style-guard.mjs` — Tier 2 (advisory)
 - `config/claude/hooks/agent-model-guard.mjs` — Tier 2 (advisory)
+- `cli/commands/secure-dir.mjs` — F-194 0o700 mode contract for `evidence/` + `learning/` (no mkdir or chmod duplicates at the call site)
+- `packages/sdk/src/learning/behavior-capture.ts` — F-194 structural-fingerprint contract (BEHAVIOR_DIR_MODE=0o700, FORBIDDEN_BEHAVIOR_KEYS)
+- `config/claude/hooks/worker-suggest.mjs` — Q4 invariant: never reads or echoes a prompt-shaped field
 - `scripts/__tests__/autonomy-contract.test.mjs` — consistency test
 
 ## Enforcement

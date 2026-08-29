@@ -2,6 +2,42 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase B.4: autonomy-contract extended for secure-dir + learning/evidence
+
+**Feature:** Pin the file-system-side autonomy contract for the F-194 learning + evidence ledgers so a regression cannot silently downgrade modes or expose operator state world-readable.
+
+**New shared module — `cli/commands/secure-dir.mjs`:**
+- `SECURE_DIR_MODE = 0o700`
+- `resolveSecureSubdir({ cwd, env, envOverride, envSubdir, subdir })` — single source of truth for the precedence chain `BIZAR_<subdir>_DIR > BIZAR_HOME > XDG > ~/.config/bizar/<subdir>`.
+- `ensureSecureDir({ ..., mode })` — mkdir at 0o700 + chmod-tighten pre-existing loose dirs (Windows non-fatal).
+
+**Refactor — `cli/commands/evidence-bundles.mjs` + `cli/commands/learning-behavior.mjs`:**
+- Both now import `ensureSecureDir` / `resolveSecureSubdir` from `secure-dir.mjs`.
+- Their `resolveXxxDir` / `ensureXxxDir` functions are thin adapters that pass the right `envOverride` + `envSubdir` + `subdir` keys. Zero hand-rolled mkdir+chmod blocks remain at the call sites.
+
+**Refactor — `cli/provision.mjs:ensureBizarHome`:**
+- Replaces the two duplicated `mkdirSync(... { mode: 0o700 })` + `chmodSync(0o700)` blocks for `evidence/` and `learning/` with two `ensureSecureDir({...})` calls. Same observable behavior, single point of mode enforcement.
+
+**Contract extension — `scripts/__tests__/autonomy-contract.test.mjs`:**
+- 5 new tests (was 9, now 14):
+  1. `secure-dir.mjs exports the F-194 0o700 contract` — assert `SECURE_DIR_MODE === 0o700`, `ensureSecureDir` + `resolveSecureSubdir` are functions.
+  2. `evidence-bundles.mjs + learning-behavior.mjs share the secure-dir helper` — both import from `./secure-dir.mjs`; neither carries a hand-rolled `mkdirSync({recursive, mode: 0o700})` or `chmodSync(..., 0o700)` literal.
+  3. `behavior-capture.ts exposes BEHAVIOR_DIR_MODE=0o700 + FORBIDDEN_BEHAVIOR_KEYS` — every forbidden prompt-shaped key (`prompt`, `promptRedacted`, `rawPrompt`, `promptText`, `userInput`) is in the array.
+  4. `worker-suggest.mjs reads via buildLearningContext and never echoes a prompt field` — Q4 invariant: no `promptText`/`rawPrompt`/`promptRedacted` literal in the hook source.
+  5. `provision.mjs:ensureBizarHome creates evidence/ + learning/ at 0o700 and preserves both` — `ensureSecureDir({subdir:'evidence'})` and `ensureSecureDir({subdir:'learning'})` are wired; `forceCleanInstall` pushes both into `preserved[]`.
+- The existing `AUTONOMY_CONTRACT.md cross-references every enforcement surface` test extended to require `cli/commands/secure-dir.mjs`, `packages/sdk/src/learning/behavior-capture.ts`, and `config/claude/hooks/worker-suggest.mjs` in the cross-reference list.
+
+**Contract update — `docs/decisions/AUTONOMY_CONTRACT.md`:**
+- Added three new bullets to the Cross-references section: `secure-dir.mjs`, `behavior-capture.ts`, `worker-suggest.mjs`. Drift policy: any change to the secure-dir helper, the FORBIDDEN_BEHAVIOR_KEYS array, or the worker-suggest feed surface MUST land in the same commit as the matching AUTONOMY_CONTRACT.md edit and the matching autonomy-contract.test.mjs assertion update.
+
+**Tests:**
+- 745/745 node tests pass (was 740; +5 from contract extension).
+- 513/513 vitest; typecheck clean; `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, `make check`, `make e2e` 13/13, `make clean-check` 5/5, `npm pack --dry-run` clean.
+
+**Security posture:**
+- One single point of mode enforcement (was three copies in evidence-bundles, learning-behavior, and provision). A bug in tighten-mode cannot reach only one of the three subtrees.
+- The contract test fails CI if anyone adds a hand-rolled `mkdirSync(... 0o700)` block at any call site — keeps the abstraction from being bypassed.
+
 ## Complete — 10.18.0 Phase B.3 + D.5: worker-suggest reads behavior.jsonl + instincts.jsonl + reject-feedback.jsonl (structural fingerprint only)
 
 **Feature:** F-194 Phase B.3 + IMP-D.5 — teach `worker-suggest` to read three short-term learning feeds so the orchestrator prompt carries recent worker behavior (accept/reject counts), top instincts, and recent reject reasons — without ever persisting or echoing prompt text (Q4 resolution).
