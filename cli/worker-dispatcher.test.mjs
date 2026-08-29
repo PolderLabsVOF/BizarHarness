@@ -42,7 +42,7 @@ describe('dispatch() — canonical 5-prompt dry run', () => {
     const out = dispatch('missing tests in the auth module');
     const ids = out.map((s) => s.workerId);
     assert.ok(ids.includes('testgaps'), `expected testgaps, got ${JSON.stringify(ids)}`);
-    assert.equal(out.find((s) => s.workerId === 'testgaps').matchedPattern, 'missing tests');
+    assert.equal(out.find((s) => s.workerId === 'testgaps').matchedPattern, 'missing tests?');
   });
 
   test('"deep dive into fn()" → suggests deepdive', () => {
@@ -152,6 +152,11 @@ describe('listWorkers()', () => {
     const expected = [
       'testgaps', 'audit', 'deepdive', 'refactor', 'document', 'optimize',
       'ultralearn', 'predict', 'map', 'preload', 'benchmark',
+      'design-system', 'ui-review', 'browser-e2e', 'qa-review',
+      'implement-complex', 'implement-medium', 'implement-trivial',
+      'git-operations', 'research-deep', 'explain-code', 'find-code',
+      'plan-task', 'clarify-request', 'simplify-diff', 'improve-self',
+      'release',
     ];
     for (const id of expected) {
       assert.ok(ids.includes(id), `expected worker ${id} in ${JSON.stringify(ids)}`);

@@ -16,7 +16,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -170,6 +170,49 @@ test('worker-suggest: appends instincts + reject-feedback + behavior summary whe
     assert.match(ctx, /mike: accept=1 reject=1/);
     // No prompt text field name should appear in the dumped context.
     assert.doesNotMatch(ctx, /fingerprint64=/);
+  } finally {
+    process.env.HOME = savedHome;
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
+    if (savedBizarHome === undefined) delete process.env.BIZAR_HOME;
+    else process.env.BIZAR_HOME = savedBizarHome;
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});
+
+// F-194 Phase D write side: when the hook fires on a prompt that matches a
+// worker, it must append one fingerprint-only `worker-suggest` row to
+// behavior.jsonl per matched worker.
+test('worker-suggest: appends worker-suggest rows to behavior.jsonl when matches fire', () => {
+  const tmpHome = mkdtempSync(join(tmpdir(), 'bizar-worker-suggest-write-'));
+  const savedHome = process.env.HOME;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
+  const savedBizarHome = process.env.BIZAR_HOME;
+  process.env.HOME = tmpHome;
+  delete process.env.BIZAR_HOME;
+  process.env.XDG_CONFIG_HOME = join(tmpHome, '.config');
+  try {
+    const { status, stdout, stderr } = runHook({
+      session_id: 'write-session',
+      cwd: tmpHome,
+      hook_event_name: 'UserPromptSubmit',
+      prompt: 'add some unit tests for the new feature',
+    });
+    assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+    const obj = parseStdout(stdout);
+    assert.ok(obj);
+    const ctx = obj.hookSpecificOutput.additionalContext;
+    assert.match(ctx, /implement-medium.*weight=0\.6/);
+    // behavior.jsonl now has the write-side rows.
+    const behPath = join(tmpHome, '.config', 'bizar', 'learning', 'behavior.jsonl');
+    assert.ok(existsSync(behPath), 'expected behavior.jsonl to be created');
+    const rows = readFileSync(behPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.ok(rows.length >= 1, `expected at least 1 row, got ${rows.length}`);
+    assert.equal(rows[0].kind, 'worker-suggest');
+    assert.equal(rows[0].workerId, 'implement-medium');
+    assert.match(rows[0].fingerprint64, /^[0-9a-f]{16}$/);
+    assert.equal(rows[0].accept, false);
+    assert.equal('prompt' in rows[0], false);
   } finally {
     process.env.HOME = savedHome;
     if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;

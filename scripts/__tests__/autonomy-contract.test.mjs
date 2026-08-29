@@ -16,6 +16,8 @@ const EVIDENCE_BUNDLES_PATH = join(REPO_ROOT, 'cli', 'commands', 'evidence-bundl
 const LEARNING_BEHAVIOR_PATH = join(REPO_ROOT, 'cli', 'commands', 'learning-behavior.mjs');
 const WORKER_SUGGEST_PATH = join(REPO_ROOT, 'config', 'claude', 'hooks', 'worker-suggest.mjs');
 const PROVISION_PATH = join(REPO_ROOT, 'cli', 'provision.mjs');
+const DISPATCHER_PATH = join(REPO_ROOT, 'cli', 'worker-dispatcher.mjs');
+const PATTERNS_PATH = join(REPO_ROOT, 'config', 'trigger-patterns.json');
 
 function readJSON(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
@@ -248,4 +250,39 @@ test('provision.mjs:ensureBizarHome creates evidence/ + learning/ at 0o700 and p
     );
     assert.ok(preservedBlock, `forceCleanInstall must push ${dir}Dir into preserved[]`);
   }
+});
+
+// F-194 Phase D: worker-suggest write side must persist fingerprint-only
+// rows to behavior.jsonl so future sessions can learn from accept/reject.
+test('worker-suggest.mjs: writes behavior.jsonl via appendWorkerSuggestion (Phase D)', () => {
+  const hookSrc = readFileSync(WORKER_SUGGEST_PATH, 'utf8');
+  const dispatchSrc = readFileSync(DISPATCHER_PATH, 'utf8');
+  const learningSrc = readFileSync(LEARNING_BEHAVIOR_PATH, 'utf8');
+  // Hook destructures recordSuggestion.
+  assert.match(hookSrc, /\{\s*dispatch\s*,\s*recordSuggestion\s*\}/);
+  // Dispatcher delegates to appendWorkerSuggestion.
+  assert.match(dispatchSrc, /appendWorkerSuggestion\s*\(/);
+  // Learning module validates and writes the row.
+  assert.match(learningSrc, /export\s+function\s+appendWorkerSuggestion\s*\(/);
+  assert.match(learningSrc, /validateBehaviorRecord\s*\(/);
+  assert.match(learningSrc, /fingerprint64\s*\(/);
+});
+
+test('trigger-patterns.json: covers every shipped Bizar agent (Phase D v2)', () => {
+  const patternsSrc = readFileSync(PATTERNS_PATH, 'utf8');
+  const patterns = JSON.parse(patternsSrc);
+  // 16 shipped agents + design-system / ui-review / qa-review workers.
+  const requiredAgents = [
+    'mike', 'brenda', 'greg', 'oscar', 'paul', 'linda',
+    'todd', 'karen', 'pam', 'steve', 'susan', 'janet',
+    'carl', 'kevin', 'brad', 'ria',
+  ];
+  const mapped = new Set();
+  for (const w of patterns.workers) {
+    if (typeof w.agent === 'string') mapped.add(w.agent);
+  }
+  for (const a of requiredAgents) {
+    assert.ok(mapped.has(a), `trigger-patterns.json must surface ${a} as a worker agent`);
+  }
+  assert.ok(patterns.workers.length >= 27, `expected >=27 workers, got ${patterns.workers.length}`);
 });

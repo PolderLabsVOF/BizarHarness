@@ -2,6 +2,93 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase D: worker-suggest write side + `trigger-patterns.json` v2 (11 → 27 workers)
+
+**Feature:** F-194 Phase D — close the closed-loop between suggestion dispatch (Phase B.3) and operator accept/reject feedback. The hook now persists fingerprint-only `worker-suggest` rows to `behavior.jsonl` so future sessions can learn from prior operator feedback. `trigger-patterns.json` grows from 11 → 27 workers so every shipped Bizar agent is reachable via a worker prompt.
+
+**Write side — `cli/commands/learning-behavior.mjs`:**
+- New exported `appendWorkerSuggestion({ matches, cwd, env })` — writes one row per matched worker to `behavior.jsonl`. All rows for a single dispatch share a `fingerprint64` over the canonicalized `worker-suggest|<sorted-worker-ids>` payload (no prompt text — Q4 invariant).
+- Each row carries `{ kind: 'worker-suggest', fingerprint64, workerId, weight, agent, skill, matchedPattern, accept: false, timestamp }`. `accept: false` is the starting state; future sessions can flip it to `true` once the operator accepts.
+- `validateBehaviorRecord()` is called per-row; `behaviorJsonlPath()` already invokes `ensureLearningDir` so the 0o700 directory contract from Phase B.4 is honored without duplication.
+- Returns `true` after the loop completes; `false` on error (silent — never throw from the hook path).
+
+**Dispatcher bridge — `cli/worker-dispatcher.mjs`:**
+- New exported async `recordSuggestion({ matches, cwd, env })` — lazy-imports `appendWorkerSuggestion` and returns its boolean. The hook uses this so the resolution path is identical to the existing learning-context call site.
+- The dispatcher test asserts the new 27-worker surface (16 shipped agents + design-system / ui-review / browser-e2e / qa-review / implement-complex / implement-medium / implement-trivial / git-operations / research-deep / explain-code / find-code / plan-task / clarify-request / simplify-diff / improve-self / release).
+
+**Hook integration — `config/claude/hooks/worker-suggest.mjs`:**
+- After `dispatch()` returns, the hook calls `recordSuggestion({ matches, cwd, env })` once and wraps it in `try/catch` so a learning-side failure never breaks the suggestion emission. Stderr message: `[bizar.workers] WARN: recordSuggestion raised: <err>`.
+
+**Pattern catalog — `config/trigger-patterns.json` v2:**
+- 11 → 27 workers. Coverage matrix:
+
+| Worker id | Agent | Surface |
+|---|---|---|
+| implement-medium | todd / karen | `add unit tests`, `add tests`, `fix this`, `implement this`, `make it work` |
+| implement-complex | karen / carl | `refactor`, `redesign`, `rearchitect`, `rewrite the module`, `architectural change` |
+| implement-trivial | brenda | `rename`, `rename this`, `rename the file`, `typo`, `small change` |
+| research-deep | greg | `deep dive`, `comprehensive research`, `evaluate the options`, `research the tradeoffs` |
+| research-quick | greg | `quick research`, `look up`, `check the docs`, `what's the latest` |
+| plan-task | paul | `plan it`, `draft a plan`, `phased plan`, `plan the work`, `design doc` |
+| audit | linda | `audit`, `audit the plan`, `review the changes`, `code review`, `qa review`, `qa gate` |
+| qa-review | linda | `run qa`, `verify the implementation`, `sanity check the diff` |
+| clarify-request | janet | `clarify`, `ambiguous`, `multiple interpretations`, `what do you mean` |
+| explain-code | susan | `explain`, `how does`, `walk me through`, `what is the architecture` |
+| find-code | oscar | `find`, `locate`, `where is`, `search the code for`, `grep for` |
+| design-system | brad | `design system`, `design tokens`, `typography scale`, `color tokens` |
+| ui-review | ria | `ui`, `design`, `layout`, `typography`, `spacing`, `anti-slop` |
+| browser-e2e | kevin | `e2e`, `end-to-end`, `verify in browser`, `screenshot`, `click through` |
+| release | steve | `release`, `tag and push`, `publish`, `cut a release` |
+| git-operations | steve | `commit`, `commit and push`, `open a pr`, `merge the pr` |
+| improve-self | @mike | `improve`, `self-improve`, `apply a tweak`, `audit + apply` |
+| simplify | @todd | `simplify`, `review the staged diff`, `clean it up` |
+| spec | @paul | `spec it out`, `write a spec`, `formalize` |
+| sprint | @mike | `sprint`, `timeboxed`, `until done` |
+| audit-security | @linda | `security audit`, `find vulnerabilities`, `threat model` |
+| debug-stuck | @carl | `stuck`, `two attempts failed`, `novel root cause`, `last resort debug` |
+| cost-trace | @brenda | `cost report`, `usage summary`, `how much did we spend` |
+| telemetry | @brenda | `telemetry review`, `rejected actions`, `correlation ids` |
+| testgaps | @linda | `missing tests`, `coverage gap`, `test the unhappy path` |
+
+**Drift guard — `scripts/__tests__/worker-suggest-write-drift.test.mjs` (NEW, 5 tests):**
+- `worker-suggest.mjs` destructures `{ dispatch, recordSuggestion }` from the dispatcher import.
+- `worker-suggest.mjs` calls `recordSuggestion({ matches, cwd, env })` AFTER the dispatch + BEFORE the suggestions block (so the write fires even if downstream emission fails).
+- `cli/worker-dispatcher.mjs` exports `async recordSuggestion(...)` and delegates to `appendWorkerSuggestion`.
+- `cli/commands/learning-behavior.mjs` exports `appendWorkerSuggestion`, calls `ensureLearningDir` (via `behaviorJsonlPath`), uses `fingerprint64` and `validateBehaviorRecord`.
+- `config/trigger-patterns.json` declares ≥27 workers, every worker has `id` + `regex[]`, and every shipped agent (mike/brenda/greg/oscar/paul/linda/todd/karen/pam/steve/susan/janet/carl/kevin/brad/ria) appears as a worker `agent`.
+
+**Autonomy contract extension — `scripts/__tests__/autonomy-contract.test.mjs`:**
+- New Phase D test: hook `destructures { dispatch, recordSuggestion }`; dispatcher `delegates to appendWorkerSuggestion`; learning module `exports appendWorkerSuggestion` + uses `validateBehaviorRecord` + `fingerprint64`.
+- New Phase D v2 test: `trigger-patterns.json` covers every shipped agent with `≥27` workers.
+
+**SDK bucket-key bug fix — `packages/sdk/src/router/outcome-learner.ts`:**
+- `bucketKey()` was serializing every optional field via `key.X ?? null`, producing `"provider":null` for keys where `provider` was undefined. The selector's `modelToContextKey()` produces keys with explicit `undefined` for `provider` and `contextSizeBucket`; training signals omit those fields entirely. After `?? null` both shapes contained the key but with different values, silently splitting the posterior space — the "sequential record updates the next call's ranking" acceptance test flaked ~20% of runs because the lookup fell into a different bucket than the one being updated.
+- Fixed `bucketKey()` to drop undefined fields entirely so the JSON shape matches what callers pass when they omit optional fields.
+
+**SDK test stability — `packages/sdk/tests/select-dispatch-model-learner.test.mjs`:**
+- Added `beforeAll`/`afterAll` Math.random stub (`() => 0.99`) so the 10% exploration branch never fires. The acceptance-gate tests assert deterministic posterior-ranking outcomes; exploration is exercised by a separate unit test on `ranking()` itself.
+
+**Verification (final gate sweep after `/simplify` review):**
+- `npm run typecheck`: clean
+- `npm run test:sdk`: 513/513 pass × 10 consecutive runs
+- `npm run test:node`: 775/775 pass
+- `make e2e`: 13/13 pass
+- `make clean-check`: 5/5 pass
+- `make verify-removed-surfaces` + `make verify-repo-structure` + `make check-arch`: clean
+
+**Files touched (11):**
+- `cli/__tests__/learning-behavior.test.mjs` — +2 tests for `appendWorkerSuggestion`.
+- `cli/commands/learning-behavior.mjs` — new `appendWorkerSuggestion`.
+- `cli/worker-dispatcher.mjs` — new `recordSuggestion`.
+- `cli/worker-dispatcher.test.mjs` — 11 → 27 expected workers + literal fix `'missing tests'` → `'missing tests?'`.
+- `config/claude/hooks/__tests__/worker-suggest.test.mjs` — +1 test for the write side.
+- `config/claude/hooks/worker-suggest.mjs` — `recordSuggestion` invocation after dispatch.
+- `config/trigger-patterns.json` — 11 → 27 workers.
+- `packages/sdk/src/router/outcome-learner.ts` — `bucketKey()` undefined-key drop.
+- `packages/sdk/tests/select-dispatch-model-learner.test.mjs` — Math.random stability stub.
+- `scripts/__tests__/autonomy-contract.test.mjs` — 2 new Phase D drift tests.
+- `scripts/__tests__/worker-suggest-write-drift.test.mjs` — NEW 5-test drift guard.
+
 ## Complete — 10.18.0 Phase C: bounded self-edit framework + `bizar improve` subcommand
 
 **Feature:** F-194 Phase C — teach Bizar to apply a small, audited configuration tweak to itself (or to a config file the operator owns) with a verifiable audit trail, gated by `--apply --yes` + sha256 drift detection + find-exactly-once + verification exit 0.

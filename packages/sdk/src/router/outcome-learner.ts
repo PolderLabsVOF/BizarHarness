@@ -285,17 +285,20 @@ class OutcomeLearnerImpl implements OutcomeLearner {
    *  `provider: "anthropic"` would hash differently from a query
    *  `provider: undefined` — silently splitting the bucket space). */
   private static bucketKey(key: ContextKey): string {
-    return JSON.stringify({
+    // Drop undefined keys so the JSON shape matches what callers pass
+    // when they omit optional fields (tests + production callers both
+    // omit rather than set `null`). Otherwise `provider: null` would
+    // hash to a different bucket than `provider: undefined`, silently
+    // splitting the posterior space.
+    const out: Record<string, unknown> = {
       modelId: key.modelId,
       tier: key.tier,
-      role: key.role ?? null,
-      phase: key.phase ?? null,
-      capability: key.capability ?? null,
-      riskLevel: key.riskLevel ?? null,
-      provider: key.provider ?? null,
-      languageTag: key.languageTag ?? null,
-      contextSizeBucket: key.contextSizeBucket ?? null,
-    });
+    };
+    for (const f of ["role", "phase", "capability", "riskLevel", "provider", "languageTag", "contextSizeBucket"] as const) {
+      const v = key[f];
+      if (v !== undefined) out[f] = v;
+    }
+    return JSON.stringify(out);
   }
 
   private static emptyPosterior(now: string): Posterior {

@@ -26,6 +26,7 @@ import {
   resolveLearningDir,
   ensureLearningDir,
   buildLearningContext,
+  appendWorkerSuggestion,
 } from '../commands/learning-behavior.mjs';
 
 import {
@@ -142,4 +143,40 @@ test('behavior.jsonl row has no prompt / promptRedacted / rawPrompt fields', () 
     assert.equal('promptRedacted' in obj, false);
     assert.equal('rawPrompt' in obj, false);
   });
+});
+
+// F-194 Phase D: appendWorkerSuggestion writes one fingerprint-only row per
+// matched worker to behavior.jsonl. Q4 invariant: no prompt text ever.
+test('appendWorkerSuggestion writes one row per worker with shared fingerprint', () => {
+  const dir = ensureLearningDir();
+  const filePath = join(dir, 'behavior.jsonl');
+  if (existsSync(filePath)) rmSync(filePath);
+  const matches = [
+    { workerId: 'testgaps', weight: 0.8, agent: 'linda', skill: null, matchedPattern: 'coverage' },
+    { workerId: 'audit', weight: 0.7, agent: 'linda', skill: null, matchedPattern: 'audit' },
+  ];
+  const wrote = appendWorkerSuggestion({ matches });
+  assert.equal(wrote, true);
+  const raw = readFileSync(filePath, 'utf8').trim();
+  const rows = raw.split('\n').map((l) => JSON.parse(l));
+  assert.equal(rows.length, 2);
+  // All rows share the same fingerprint (same dispatch).
+  assert.equal(rows[0].fingerprint64, rows[1].fingerprint64);
+  assert.match(rows[0].fingerprint64, /^[0-9a-f]{16}$/);
+  assert.equal(rows[0].kind, 'worker-suggest');
+  assert.equal(rows[1].kind, 'worker-suggest');
+  assert.equal(rows[0].workerId, 'testgaps');
+  assert.equal(rows[1].workerId, 'audit');
+  assert.equal(rows[0].accept, false);
+  // Q4: no prompt text field names appear.
+  for (const row of rows) {
+    for (const forbidden of ['prompt', 'promptText', 'rawPrompt', 'promptRedacted', 'userInput', 'rawInput']) {
+      assert.equal(forbidden in row, false, `leaked forbidden key ${forbidden}`);
+    }
+  }
+});
+
+test('appendWorkerSuggestion returns false for empty matches', () => {
+  const wrote = appendWorkerSuggestion({ matches: [] });
+  assert.equal(wrote, false);
 });

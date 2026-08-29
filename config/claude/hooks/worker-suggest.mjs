@@ -91,13 +91,12 @@ process.stdin.on('end', async () => {
   ].join('\n');
 
   let dispatch;
+  let recordSuggestion;
   try {
-    ({ dispatch } = await import(join(__dirname, '..', '..', '..', 'cli', 'worker-dispatcher.mjs')));
+    ({ dispatch, recordSuggestion } = await import(join(__dirname, '..', '..', '..', 'cli', 'worker-dispatcher.mjs')));
   } catch (err) {
     process.stderr.write(
-      `[bizar.workers] WARN: dispatch failed (import): ${
-        err && err.message ? err.message : String(err)
-      }\n`,
+      `[bizar.workers] WARN: dispatch failed (import): ${err?.message ?? String(err)}\n`,
     );
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
@@ -114,9 +113,7 @@ process.stdin.on('end', async () => {
     suggestions = dispatch(prompt, { maxSuggestions: 3 });
   } catch (err) {
     process.stderr.write(
-      `[bizar.workers] WARN: dispatch failed: ${
-        err && err.message ? err.message : String(err)
-      }\n`,
+      `[bizar.workers] WARN: dispatch failed: ${err?.message ?? String(err)}\n`,
     );
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
@@ -135,6 +132,25 @@ process.stdin.on('end', async () => {
     process.stderr.write(
       `[bizar.workers] suggested: ${s.workerId} (${skill}${agent}) via pattern "${s.matchedPattern}"\n`,
     );
+  }
+
+  // Phase D write side: persist a fingerprint-only `worker-suggest` row to
+  // behavior.jsonl so future sessions can learn which workers the operator
+  // accepted vs rejected. The record carries no prompt text — only worker
+  // ids, agents, skills, and a fingerprint over the canonicalized record.
+  // Failure is silent (never throw from the hook path).
+  if (suggestions.length > 0) {
+    try {
+      await recordSuggestion({
+        matches: suggestions,
+        cwd: input.cwd || process.cwd(),
+        env: process.env,
+      });
+    } catch (err) {
+      process.stderr.write(
+        `[bizar.workers] WARN: recordSuggestion raised: ${err?.message ?? String(err)}\n`,
+      );
+    }
   }
 
   // Build additionalContext for the model so Bizar routing is mandatory even

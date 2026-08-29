@@ -230,6 +230,35 @@ export function listWorkers(opts = {}) {
   return workers.map((w) => w.id);
 }
 
+/**
+ * Write a suggestion event into the behavior ledger so future sessions can
+ * learn which worker suggestions the operator accepted vs rejected. The
+ * event is captured as a fingerprint (sha256 of the canonicalized record
+ * shape), never the prompt text itself — Q4 invariant.
+ *
+ * Lazy-imports the `learning-behavior.mjs` helper to keep the resolution
+ * path identical to the hook's other learning-context call.
+ *
+ * @param {{
+ *   matches: Array<{ workerId: string, weight: number, agent: string|null, skill: string|null }>,
+ *   cwd?: string,
+ *   env?: NodeJS.ProcessEnv,
+ * }} args
+ * @returns {Promise<boolean>} true if the row was written; false on error
+ *   or when no captures are produced (silent — never throw from the hook).
+ */
+export async function recordSuggestion({ matches, cwd, env } = {}) {
+  try {
+    const { appendWorkerSuggestion } = await import('./commands/learning-behavior.mjs');
+    return appendWorkerSuggestion({ matches, cwd, env });
+  } catch (err) {
+    process.stderr.write(
+      `[bizar.workers] WARN: recordSuggestion failed: ${err?.message ?? String(err)}\n`,
+    );
+    return false;
+  }
+}
+
 // Direct CLI entrypoint for dry-runs / debugging.
 //   node cli/worker-dispatcher.mjs "your prompt here" [--max N] [--list]
 if (

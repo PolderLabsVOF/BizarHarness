@@ -26,7 +26,9 @@ import { join } from 'node:path';
 import {
   BEHAVIOR_DIR_MODE,
   createFileBehaviorCapture,
+  fingerprint64,
   summarizeBehavior,
+  validateBehaviorRecord,
 } from '../../packages/sdk/dist/learning/behavior-capture.js';
 import {
   ensureSecureDir,
@@ -128,6 +130,57 @@ export function buildLearningContext({
 
   if (sections.length === 0) return '';
   return sections.join('\n\n');
+}
+
+/**
+ * Append a `worker-suggest` row to behavior.jsonl. Called by
+ * `cli/worker-dispatcher.mjs:recordSuggestion()` on every UserPromptSubmit
+ * dispatch so future sessions can replay which suggestions the operator
+ * accepted vs rejected.
+ *
+ * Q4 invariant: never persists prompt text. The `promptFingerprint` is a
+ * 64-bit sha256 prefix over the canonicalized record shape, not the prompt.
+ *
+ * @param {{
+ *   matches: Array<{ workerId: string, weight: number, agent?: string|null, skill?: string|null }>,
+ *   cwd?: string,
+ *   env?: NodeJS.ProcessEnv,
+ * }} args
+ * @returns {boolean} true if the row was written, false on error
+ *   (silent — never throw from the hook path).
+ */
+export function appendWorkerSuggestion({ matches, cwd, env } = {}) {
+  if (!Array.isArray(matches) || matches.length === 0) return false;
+  try {
+    const filePath = behaviorJsonlPath({ cwd: cwd || process.cwd(), env: env || process.env });
+    const capture = createFileBehaviorCapture({ filePath });
+    // One row per matched worker. The fingerprint is the same across all
+    // rows for a given dispatch (it identifies the prompt), and `accept`
+    // starts as false — the operator's accept/reject feedback flips it later.
+    const workerIds = matches.map((m) => m.workerId).sort().join(',');
+    const fp = fingerprint64(`worker-suggest|${workerIds}`);
+    for (const m of matches) {
+      const record = {
+        kind: 'worker-suggest',
+        fingerprint64: fp,
+        workerId: m.workerId,
+        weight: m.weight,
+        agent: m.agent ?? null,
+        skill: m.skill ?? null,
+        matchedPattern: m.matchedPattern ?? null,
+        accept: false,
+        timestamp: new Date().toISOString(),
+      };
+      validateBehaviorRecord(record);
+      capture.append(record);
+    }
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `[bizar.learning] WARN: appendWorkerSuggestion failed: ${err?.message ?? String(err)}\n`,
+    );
+    return false;
+  }
 }
 
 function safeReadJsonl(path) {

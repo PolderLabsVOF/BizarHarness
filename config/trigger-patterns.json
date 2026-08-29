@@ -1,145 +1,134 @@
 {
   "$schema": "./trigger-patterns.v1.schema.json",
-  "version": 1,
-  "description": "Prompt-trigger table for Bizar skill and agent suggestions. The UserPromptSubmit dispatcher emits ranked, non-blocking context hints.",
+  "version": 2,
+  "description": "Prompt-trigger table for Bizar skill and agent suggestions. The UserPromptSubmit dispatcher emits ranked, non-blocking context hints. v2 extends coverage from 11 to 27 workers to cover the full Bizar agent + skill surface (16 agents + skill-specific workers).",
   "workers": [
     {
       "id": "testgaps",
       "regex": [
-        "missing tests",
+        "missing tests?",
         "low coverage",
-        "no tests for",
+        "no tests? for",
         "tests? for .+ that",
         "test gaps?",
         "test coverage",
-        "coverage report",
-        "add tests"
+        "coverage report"
       ],
       "weight": 0.8,
       "skill": "harness-engineering",
-      "agent": "linda",
-      "description": "Identify test coverage gaps and untested code paths."
+      "agent": "linda"
     },
     {
       "id": "audit",
       "regex": [
+        "audit",
+        "review the code",
+        "code review",
+        "qa pass",
+        "quality check",
+        "static analysis",
+        "lint .+ thoroughly",
         "security scan",
-        "security audit",
-        "vulnerab",
-        "cve",
-        "owasp",
-        "pentest"
+        "security review"
       ],
-      "weight": 0.9,
-      "skill": "harness-engineering",
-      "agent": "linda",
-      "description": "Security analysis and vulnerability scanning."
+      "weight": 0.7,
+      "skill": null,
+      "agent": "linda"
     },
     {
       "id": "deepdive",
       "regex": [
-        "deep dive into",
         "deep dive",
-        "explain .{20,}",
-        "how does .+ work",
-        "walk me through",
-        "in-depth analysis",
-        "comprehensive review"
+        "thoroughly analyze",
+        "investigate root cause",
+        "explain in depth",
+        "go deep on"
       ],
-      "weight": 0.7,
-      "skill": null,
-      "agent": "greg",
-      "description": "Deep code analysis and thorough explanation."
+      "weight": 0.6,
+      "skill": "harness-engineering",
+      "agent": "carl"
     },
     {
       "id": "refactor",
       "regex": [
         "refactor",
-        "clean up .{1,30}",
-        "simplify",
+        "clean up",
+        "tidy up",
         "restructure",
-        "improve code quality",
-        "make .+ more readable"
+        "reorganize",
+        "consolidate .+ into"
       ],
       "weight": 0.7,
-      "skill": null,
-      "agent": "todd",
-      "description": "Code refactoring suggestions and structural cleanup."
+      "skill": "simplify",
+      "agent": "todd"
     },
     {
       "id": "document",
       "regex": [
-        "write docs",
-        "write readme",
-        "add jsdoc",
-        "document .{1,40}",
-        "api docs",
-        "generate docs",
-        "add documentation"
+        "document",
+        "write docs?",
+        "update docs?",
+        "explain how .+ works",
+        "write a readme",
+        "usage docs?"
       ],
-      "weight": 0.6,
+      "weight": 0.55,
       "skill": null,
-      "agent": "brenda",
-      "description": "Auto-documentation generation (README, JSDoc, API docs)."
+      "agent": "brenda"
     },
     {
       "id": "optimize",
       "regex": [
-        "optimize .{1,40} for",
-        "performance issue",
-        "make .+ faster",
+        "optimize",
         "speed up",
-        "reduce .{1,20}(memory|time)",
-        "improve performance"
+        "make it faster",
+        "performance issue",
+        "perf issue",
+        "slow .+ query",
+        "latency"
       ],
       "weight": 0.7,
-      "skill": null,
-      "agent": "todd",
-      "description": "Performance optimization and tuning."
+      "skill": "harness-engineering",
+      "agent": "karen"
     },
     {
       "id": "ultralearn",
       "regex": [
-        "learn about",
-        "understand how",
-        "understand what",
-        "understand why",
-        "comprehensive guide",
-        "master .+"
+        "ultralearn",
+        "ultra work",
+        "ultra-code",
+        "ultra code"
       ],
-      "weight": 0.65,
-      "skill": "harness-engineering",
-      "agent": "greg",
-      "description": "Deep knowledge acquisition and learning."
+      "weight": 0.9,
+      "skill": null,
+      "agent": "mike"
     },
     {
       "id": "predict",
       "regex": [
-        "what will happen",
-        "predict",
-        "forecast",
-        "anticipate",
-        "prepare for"
+        "predict .+ behavior",
+        "what will happen if",
+        "trace .+ flow",
+        "walk through .+ scenario",
+        "reason about"
       ],
-      "weight": 0.55,
+      "weight": 0.5,
       "skill": null,
-      "agent": "greg",
-      "description": "Predictive preloading and anticipation."
+      "agent": "carl"
     },
     {
       "id": "map",
       "regex": [
-        "map .{0,5}codebase",
-        "architecture overview",
-        "project structure",
-        "dependency graph",
+        "map .+ code",
         "code map",
-        "explore codebase"
+        "dependency graph",
+        "find all callers",
+        "who uses",
+        "reverse lookup"
       ],
       "weight": 0.6,
-      "skill": "harness-engineering",
-      "agent": "greg",
-      "description": "Codebase mapping and architecture analysis."
+      "skill": null,
+      "agent": "oscar"
     },
     {
       "id": "preload",
@@ -147,12 +136,11 @@
         "preload",
         "cache ahead",
         "prefetch",
-        "warm .+ cache"
+        "warm up"
       ],
       "weight": 0.4,
       "skill": null,
-      "agent": null,
-      "description": "Resource preloading and cache warming."
+      "agent": "greg"
     },
     {
       "id": "benchmark",
@@ -160,13 +148,225 @@
         "benchmark",
         "performance test",
         "measure speed",
-        "stress test",
-        "load test"
+        "stress test"
       ],
       "weight": 0.65,
       "skill": null,
-      "agent": "todd",
-      "description": "Performance benchmarking."
+      "agent": "todd"
+    },
+    {
+      "id": "design-system",
+      "regex": [
+        "design system",
+        "design tokens",
+        "typography scale",
+        "color palette",
+        "brand identity",
+        "design\\.md"
+      ],
+      "weight": 0.7,
+      "skill": "artifact-design",
+      "agent": "brad"
+    },
+    {
+      "id": "ui-review",
+      "regex": [
+        "ui review",
+        "ux audit",
+        "component layout",
+        "spacing rhythm",
+        "anti-slop",
+        "design polish"
+      ],
+      "weight": 0.65,
+      "skill": "artifact-design",
+      "agent": "ria"
+    },
+    {
+      "id": "browser-e2e",
+      "regex": [
+        "browser e2e",
+        "e2e browser",
+        "agent-browser",
+        "playwright check",
+        "browser verify"
+      ],
+      "weight": 0.7,
+      "skill": null,
+      "agent": "kevin"
+    },
+    {
+      "id": "qa-review",
+      "regex": [
+        "qa review",
+        "review .+ plan",
+        "challenge the plan",
+        "reviewer pass",
+        "audit .+ before"
+      ],
+      "weight": 0.75,
+      "skill": null,
+      "agent": "linda"
+    },
+    {
+      "id": "implement-complex",
+      "regex": [
+        "implement .+ feature",
+        "build .+ from scratch",
+        "architect .+ system",
+        "design .+ schema",
+        "new architecture"
+      ],
+      "weight": 0.8,
+      "skill": null,
+      "agent": "karen"
+    },
+    {
+      "id": "implement-medium",
+      "regex": [
+        "fix .+ bug",
+        "add .+ endpoint",
+        "wire up",
+        "add .+ support",
+        "small refactor",
+        "implement .+ endpoint",
+        "(add|write|create).+tests?",
+        "add .+ tests? for",
+        "implement .+ function",
+        "write .+ handler",
+        "add .+ method"
+      ],
+      "weight": 0.6,
+      "skill": null,
+      "agent": "todd"
+    },
+    {
+      "id": "implement-trivial",
+      "regex": [
+        "rename .+ file",
+        "fix typo",
+        "bump version",
+        "small edit",
+        "quick fix",
+        "one liner"
+      ],
+      "weight": 0.4,
+      "skill": null,
+      "agent": "pam"
+    },
+    {
+      "id": "git-operations",
+      "regex": [
+        "git commit",
+        "git push",
+        "create .+ pr",
+        "merge .+ branch",
+        "open .+ pull request",
+        "rebase .+ branch"
+      ],
+      "weight": 0.85,
+      "skill": null,
+      "agent": "steve"
+    },
+    {
+      "id": "research-deep",
+      "regex": [
+        "research .+ thoroughly",
+        "investigate .+ in depth",
+        "find official docs? for",
+        "look up .+ documentation"
+      ],
+      "weight": 0.7,
+      "skill": "harness-engineering",
+      "agent": "greg"
+    },
+    {
+      "id": "explain-code",
+      "regex": [
+        "explain how .+ works",
+        "how does .+ work",
+        "what does .+ do",
+        "walk me through",
+        "where is .+ defined"
+      ],
+      "weight": 0.5,
+      "skill": null,
+      "agent": "susan"
+    },
+    {
+      "id": "find-code",
+      "regex": [
+        "find .+ implementation",
+        "where is .+ implemented",
+        "locate .+ function",
+        "search .+ codebase"
+      ],
+      "weight": 0.55,
+      "skill": null,
+      "agent": "oscar"
+    },
+    {
+      "id": "plan-task",
+      "regex": [
+        "plan .+ work",
+        "draft .+ plan",
+        "phase out .+ work",
+        "definition of done",
+        "scope .+ work"
+      ],
+      "weight": 0.65,
+      "skill": null,
+      "agent": "paul"
+    },
+    {
+      "id": "clarify-request",
+      "regex": [
+        "what do you mean",
+        "i need to know",
+        "which .+ should i",
+        "ambiguous",
+        "unclear request"
+      ],
+      "weight": 0.45,
+      "skill": null,
+      "agent": "janet"
+    },
+    {
+      "id": "simplify-diff",
+      "regex": [
+        "/simplify",
+        "review .+ diff",
+        "simplify .+ code",
+        "tidy .+ before commit"
+      ],
+      "weight": 0.6,
+      "skill": "simplify",
+      "agent": null
+    },
+    {
+      "id": "improve-self",
+      "regex": [
+        "improve .+ config",
+        "self-edit",
+        "apply .+ proposal",
+        "bizar improve"
+      ],
+      "weight": 0.7,
+      "skill": null,
+      "agent": null
+    },
+    {
+      "id": "release",
+      "regex": [
+        "release .+ version",
+        "cut .+ release",
+        "publish .+ to npm",
+        "tag .+ release",
+        "ship .+ version"
+      ],
+      "weight": 0.85,
+      "skill": null,
+      "agent": "steve"
     }
   ]
 }

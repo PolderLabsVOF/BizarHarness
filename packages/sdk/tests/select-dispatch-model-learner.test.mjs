@@ -11,11 +11,23 @@
  *   4. Sequential `record(signal)` updates the next call's ranking.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 
 import { selectDispatchModel, REASON, NEVER_DOWNGRADE_ROLES } from "../src/router/select-dispatch-model.ts";
 import { createInMemoryOutcomeLearner, newRoutingDecisionId } from "../src/router/outcome-learner.ts";
+
+/** The outcome learner rolls Math.random() < 0.1 for exploration when
+ *  candidates have low evidence. Stub it to 0.99 so the 10% exploration
+ *  branch NEVER fires; these acceptance-gate tests assert deterministic
+ *  tier-strength / posterior-ranking outcomes, not exploration. */
+const REAL_RANDOM = Math.random;
+beforeAll(() => {
+  Math.random = () => 0.99;
+});
+afterAll(() => {
+  Math.random = REAL_RANDOM;
+});
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
