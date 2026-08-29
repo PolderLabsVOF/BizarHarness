@@ -137,11 +137,12 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
       out.push(line);
       continue;
     }
-    // DoD — pre-check all standard items
-    if (inDod && /^\s*-\s+\[ \]/.test(line)) {
-      out.push(line.replace('[ ]', '[x]'));
-      continue;
-    }
+    // DoD — copy the template checkboxes verbatim. The operator (or a
+    // post-sprint verifier) marks them `[x]` after evidence-backed
+    // verification. Pre-checking would silently turn every acceptance
+    // criterion into a "done" claim with no recorded proof.
+    // See: docs/audits/production-autonomy-improvements-2026-08-28.md (P0:
+    // "Stop pre-completing Definition of Done in sprint generation").
     // Scope out — skip any remaining placeholders (already handled above)
     if (inScopeOut && /^-\s*<item/.test(line)) {
       continue; // skip placeholder — we added our own above
