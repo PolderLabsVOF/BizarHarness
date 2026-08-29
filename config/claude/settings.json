@@ -73,9 +73,6 @@
   "autoDreamEnabled": true,
   "env": {
     "BIZAR_HOME": "${HOME}/.config/bizar",
-    "ANTHROPIC_BASE_URL": "http://localhost:20129/v1",
-    "BIZAR_MODEL_ROUTER_URL": "http://localhost:20129/v1",
-    "ANTHROPIC_AUTH_TOKEN": "sk_9router",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "hooks": {

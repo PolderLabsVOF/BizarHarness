@@ -2,6 +2,46 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase A.2: strip 9Router from shipped config + doctor + validate
+
+- Removed the three 9Router-pointed env vars (`ANTHROPIC_BASE_URL`,
+  `BIZAR_MODEL_ROUTER_URL`, `ANTHROPIC_AUTH_TOKEN`) from the shipped
+  `config/claude/settings.json` template. The `BIZAR_HOME` and
+  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env vars remain.
+- Set `endpoint: null` and `gateway.endpoint: null` in
+  `config/claude/model-router.json` and updated the top-level comment
+  to make the provider-agnostic policy explicit: operators MUST
+  configure the gateway via `ANTHROPIC_BASE_URL` or
+  `BIZAR_MODEL_ROUTER_URL`. Bizar ships no default provider.
+- Renamed `cli/doctor.mjs:check9RouterReachable` →
+  `checkProviderReachable`. The check now reads
+  `ANTHROPIC_BASE_URL`/`BIZAR_MODEL_ROUTER_URL` (was `NINEROUTER_URL`)
+  and probes `${url}/v1/models` (was `/health`). Returns "provider
+  gateway not configured (using session default)" when no env var is
+  set, so a missing env is informational rather than a failure. The
+  check id `9router-reachable` was renamed to `provider-reachable` and
+  the stale comment line was corrected.
+- Renamed the same check id in `cli/commands/validate.mjs` and updated
+  its probe path to `/v1/models` (was `/api/health`). Updated the
+  LENIENT_CHECKS set and the help text to drop the `9router` label.
+- Updated `cli/__tests__/workflow-state.test.mjs` to construct a
+  probe-specific registry with a placeholder `http://127.0.0.1:1/v1`
+  endpoint for the `availability probes enforce timeout and exact
+  response ids` test, since the shipped router's `endpoint` is now
+  `null`. The shipped `testRegistry` remains valid for the snapshot
+  tests because `workflow.mjs` correctly inherits the session model
+  when the gateway endpoint is null.
+- Verification: `npm run typecheck` (clean), `npm run test:node`
+  (708/708 pass), `npm run test:sdk` (481/481 pass), `make
+  check-arch` (0 failed), `make verify-removed-surfaces` (PASS).
+- Residual 9Router surface still present in `cli/provision.mjs`,
+  `cli/commands/models.mjs`, `cli/commands/model.mjs`,
+  `cli/__tests__/models-picker.test.mjs`, and
+  `cli/install/__tests__/merge-settings.test.mjs` — these are A.3
+  scope and intentionally not touched in A.2.
+- Files changed: 5 (+13/-10).
+- Date: 2026-08-29.
+
 ## Complete — Hotfix: `bizar models` persists router under `BIZAR_HOME`, not cwd
 
 **Date:** 2026-08-28

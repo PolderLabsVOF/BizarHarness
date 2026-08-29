@@ -169,9 +169,12 @@ test('workflow starts snapshot dynamic routing decisions and inherit when discov
 });
 
 test('availability probes enforce timeout and exact response ids', async () => {
+  const probeRegistry = structuredClone(testRegistry);
+  probeRegistry.endpoint = 'http://127.0.0.1:1/v1';
+  probeRegistry.gateway.endpoint = 'http://127.0.0.1:1/v1';
   await assert.rejects(
     probeAvailableModels({
-      registry: testRegistry,
+      registry: probeRegistry,
       timeoutMs: 5,
       fetchImpl: (_url, { signal }) => new Promise((_resolve, reject) => {
         signal.addEventListener('abort', () => {
@@ -185,7 +188,7 @@ test('availability probes enforce timeout and exact response ids', async () => {
   );
   await assert.rejects(
     probeAvailableModels({
-      registry: testRegistry,
+      registry: probeRegistry,
       fetchImpl: async () => ({
         ok: true,
         async json() { return { data: [{ id: ' claude-qwen/qwen3.8-max ' }] }; },

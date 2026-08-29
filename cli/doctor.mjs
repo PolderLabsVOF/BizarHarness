@@ -17,7 +17,7 @@
  *   skill-files-installed:   SKILL.md files deployed
  *   tools-on-path:           at least one of semble/skills/claude
  *   bizar-home:              BIZAR_HOME exists
- *   9router-reachable:       provider gateway responds
+ *   provider-reachable:       provider gateway responds
  *
  * Usage:
  *   import { runDoctor } from "./doctor.mjs";
@@ -131,18 +131,21 @@ async function checkBizarHome() {
   return `BIZAR_HOME present at ${BIZAR_HOME}`;
 }
 
-async function check9RouterReachable() {
-  const url = process.env.NINEROUTER_URL || 'http://127.0.0.1:20128';
+async function checkProviderReachable() {
+  const url = process.env.ANTHROPIC_BASE_URL || process.env.BIZAR_MODEL_ROUTER_URL;
+  if (!url) {
+    return 'provider gateway not configured (using session default)';
+  }
   let res;
   try {
-    res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+    res = await fetch(`${url}/v1/models`, { signal: AbortSignal.timeout(3000) });
   } catch (err) {
-    throw new Error(`9router at ${url} unreachable: ${err.message ?? err}`);
+    throw new Error(`provider at ${url} unreachable: ${err.message ?? err}`);
   }
   if (!res.ok) {
-    throw new Error(`9router at ${url} responded HTTP ${res.status}`);
+    throw new Error(`provider at ${url} responded HTTP ${res.status}`);
   }
-  return `9router at ${url} ok`;
+  return `provider at ${url} ok`;
 }
 
 // ── runner ──────────────────────────────────────────────────────────────────
@@ -156,7 +159,7 @@ const CHECKS = [
   { name: 'skill-files-installed',     run: checkSkillFilesInstalled },
   { name: 'tools-on-path',             run: checkToolsAvailable },
   { name: 'bizar-home',                run: checkBizarHome },
-  { name: '9router-reachable',         run: check9RouterReachable },
+  { name: 'provider-reachable',        run: checkProviderReachable },
 ];
 
 export async function runDoctor(opts = {}) {

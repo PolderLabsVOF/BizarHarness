@@ -342,18 +342,17 @@ const CHECKS = {
     return `BIZAR_HOME = ${h}`;
   },
 
-  '9router-reachable': async () => {
-    const url = process.env.NINEROUTER_URL || 'http://localhost:20128';
+  'provider-reachable': async () => {
+    const url = process.env.ANTHROPIC_BASE_URL || process.env.BIZAR_MODEL_ROUTER_URL;
+    if (!url) {
+      return 'provider gateway not configured (using session default)';
+    }
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 4000);
     try {
-      const res = await fetch(`${url}/api/health`, { signal: ac.signal });
-      if (!res.ok) throw new Error(`9router at ${url} returned HTTP ${res.status}`);
-      const body = await res.text().catch(() => '');
-      if (!body.includes('"ok":true')) {
-        throw new Error(`9router at ${url} responded but body did not include ok:true`);
-      }
-      return `9router healthy at ${url}`;
+      const res = await fetch(`${url}/v1/models`, { signal: ac.signal });
+      if (!res.ok) throw new Error(`provider at ${url} returned HTTP ${res.status}`);
+      return `provider reachable at ${url}`;
     } finally {
       clearTimeout(timer);
     }
@@ -395,12 +394,12 @@ const CHECK_ORDER = [
   'hooks-installed',
   'bizar-home-exists',
   'claude-md-mirrored',
-  '9router-reachable',
+  'provider-reachable',
 ];
 
 const LENIENT_CHECKS = new Set([
   'claude-cli-reachable', // Claude Code CLI is normally on $PATH only on dev hosts; CI containers without it shouldn't fail validation
-  '9router-reachable',
+  'provider-reachable',
   'permissions-deny-dangerous', // advisory — user may have intentionally customized
   'hooks-sessionend-wired', // advisory — SessionEnd is optional
   'claude-settings-schema', // advisory — schema field is documentation
@@ -413,7 +412,7 @@ export function showValidateHelp() {
   Usage:
     bizar validate                Run the full check battery (default)
     bizar validate --json         Machine-readable JSON output
-    bizar validate --strict       Fail on lenient checks (e.g. 9router offline)
+    bizar validate --strict       Fail on lenient checks (e.g. provider gateway offline)
     bizar validate --only <name>  Run only the named check (e.g. team-command-present)
     bizar validate --help         Show this help
 
