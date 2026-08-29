@@ -312,7 +312,7 @@ source for mirrored agent instructions and verify byte equality."
 
 `npm run test:node`: 852/852 (was 835, +17). `npm run typecheck`: clean. `make check-arch`: clean.
 
-### Pending audit items (in priority order)
+### Complete — all audit items shipped
 
 | # | Recommendation | Status |
 |---|---|---|
