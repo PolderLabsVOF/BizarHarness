@@ -175,6 +175,40 @@ test('AUTONOMY_CONTRACT.md cross-references every enforcement surface', () => {
   }
 });
 
+// ─── Audit (commit 2a283c1) Milestone alignment ───────────────────────────────
+//
+// The production-autonomy audit defines a 4-milestone implementation
+// sequence. AUTONOMY_CONTRACT.md is the Milestone 1 surface; the contract
+// must enumerate each milestone + the deliverables that close it so the
+// drift between "what the contract says" and "what's actually shipped"
+// stays measurable.
+test('AUTONOMY_CONTRACT.md aligns to the 4-milestone audit sequence', () => {
+  const body = readFileSync(CONTRACT_PATH, 'utf8');
+  for (const milestone of [
+    'Milestone 1: One source of truth',
+    'Milestone 2: Resumable controller',
+    'Milestone 3: Independent verification',
+    'Milestone 4: Production operations',
+  ]) {
+    assert.match(body, new RegExp(milestone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      `AUTONOMY_CONTRACT.md must reference ${milestone}`);
+  }
+  // The audit commit is the source of truth for the milestones; the
+  // contract must point at it so a future reader can trace any drift.
+  assert.match(body, /2a283c1/, 'contract must cite audit commit 2a283c1');
+  // The shipped Milestone 1 deliverables must be enumerated so a future
+  // reader can verify each is wired through the contract's tier model.
+  for (const delivered of [
+    'EvidenceBundle',
+    'ObjectiveRun',
+    'OutcomeLearnerOutcome',
+    'bizar improve',
+  ]) {
+    assert.ok(body.includes(delivered),
+      `AUTONOMY_CONTRACT.md Milestone 1 must mention ${delivered}`);
+  }
+});
+
 // ─── Phase B.4 extension: F-194 secure-dir + learning/evidence contract ──────
 //
 // These tests pin the file-system-side autonomy contract for the F-194
