@@ -22,7 +22,7 @@ Sections:
   (`plan_action`, `loop_*`, `graph_*`, `list_instincts`, `list_decisions`).
 - **Wired `bizar` commands** — every `bizar <cmd>` you can run from the
   terminal (`install`, `update`, `doctor`, `repair`, `audit`, `validate`,
-  `backup`, `restore`, `migrate`, `browser`, `picker-proxy`, `rca`, `sandbox`,
+  `backup`, `restore`, `migrate`, `browser`, `rca`, `sandbox`,
   `model`, `cost`, `claim`, `task`, `control`, `workflow`, `hook`,
   `setup-provider`, `claude-cmd`, `heads-up`, `worktree-merge`, `init`,
   `audit`).

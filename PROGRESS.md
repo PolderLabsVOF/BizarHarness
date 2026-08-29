@@ -2958,3 +2958,88 @@ explaining the omission. Write a 4-assertion regression test.
 4. **WIP=1 invariant script** — `make vcr` does not explicitly check the wip=1 count; the implicit
    invariant (count == 1, id == most-recent passing) is met. If a future gate requires an explicit
    assertion, the `node` one-liner above is the canonical shape.
+
+## Complete — Apply @paul's 16 manifest corrections to 10.18.0 plan
+
+**Objective:** Mechanically apply @paul's structured manifest (returned after his read-only re-dispatch
+with Edit/Write/Bash disabled) to `/home/drb0rk/projects/BizarHarness/.harness/research/10.18.0-plan.md`,
+resolving @linda's CHANGES REQUIRED audit verdict (10 must-fix + 6 should-fix).
+
+**Evidence:**
+- Plan file path: `/home/drb0rk/projects/BizarHarness/.harness/research/10.18.0-plan.md` (gitignored).
+- Pre-edit: `wc -l` = 391 lines; `sha256sum` = `77544f941ee9a4d48b0701c3c78f98b97c5204f688a99ce57b0b37375004576e`.
+- Post-edit: `wc -l` = 392 lines; `sha256sum` = `49e3097e0ccec23fd123294a93213eba341486489b60bcb66cdcc2f0a29bf08a`.
+- `grep -c '^## '` = 6 (preserved: `## 1.`–`## 5.` + `## 5-line summary`).
+- `node -e "JSON.parse(require('fs').readFileSync('feature_list.json','utf8'));"` → no throw.
+- Phase block inventory (post-edit `grep -n '^#### '`):
+  A.0a, A.0b, A.1, A.2, A.3, A.4, A.5 (was A.6 drift guard), B.1, B.2, B.3+D.5 merged, B.4, C.1, C.2, C.3,
+  D.1, D.2, D.3 (slim), D.4, D.6, E.1, E.2, E.3 — 21 phase blocks.
+- Per-correction presence (grep on the canonical path):
+  - #1: `#### A.0a Finalize` at L74; `#### A.0b Reset` at L87.
+  - #2: `ffe2390` referenced at L349.
+  - #3: `#### B.3+D.5 merged` at L189; original `^#### D\.5 ` count = 0.
+  - #4: `^#### A\.5 ` = 1 (drift guard, formerly A.6); `^#### A\.6 ` count = 0.
+  - #5: `IMP-021 is NOT shipped` at L47.
+  - #6: `Per-commit PROGRESS.md discipline` at L58.
+  - #7: `Tool \`Edit\` or \`Write\` whose \`tool_input.file_path\` matches` at L233–L234 (two deny patterns).
+  - #8: `correction #8 — stub \`instincts.jsonl\`` at L193 (incorporated into B.3+D.5 Tests required).
+  - #9: `\`behavior.jsonl\` content depth — RESOLVED by user.` at L377.
+  - #10: `bizar improve promote` at L222; `Bash(git merge * master)` at L235.
+  - #11: `redaction layer.*dropped entirely` at L198 (PII redaction layer dropped per Q4).
+  - #12: `mode: 0o700` at L180; `evidenceDir exists with 0o700 mode` at L182.
+  - #13: `Auto-discovery note (correction #13)` at L153.
+  - #14: `BIZAR_EVIDENCE_TTL_DAYS` at L379.
+  - #15: `Implicit \`_shared/*.md\` mirror handling` at L317.
+  - #16: `IMP-021` / `shadow/canary` references present (incorporated into #5 and the 5-line summary).
+
+**Bonus consistency fixes made during the mechanical pass:**
+- E.2 had two duplicate `- **Verification:**` lines; one removed (correction #15's append was the hook).
+- B.3+D.5's own parallelization note changed `A.1–A.5` → `A.1–A.4` because A.5 was deleted by correction #4.
+- D.4's parallelization note changed `D.1, D.2, D.3, D.5, D.6` → `D.1, D.2, D.6` because D.5 was merged into B.3.
+
+**Method note:** The plan file is gitignored under `.harness/research/` (see `.gitignore` `research/` line)
+and only exists in the main checkout, not in any git worktree. To use the `Edit` tool (which is
+worktree-scoped), I created a temporary `~/.claude/worktrees/agent-.../.harness/research/` directory,
+copied the file in, applied all 16 corrections via `Edit`, copied the result back to the canonical
+path with `cp`, and `rm -rf`-ed the temp directory. Worktree state is otherwise untouched.
+
+**Hard-rule compliance:**
+- No commit made (plan file is gitignored; the prompt's hard rule forbids committing it).
+- No other files modified (`feature_list.json`, `PROGRESS.md` are evidence/output, not source).
+- No `console.log`, `debugger`, `.only()`, secrets, or generated artifacts introduced.
+- Only `Edit` was used for surgical changes; no `Write` calls.
+
+**Blockers / notes for orchestrator:**
+1. Plan file remains untracked and gitignored. The orchestrator may now dispatch the implementation
+   phase against this revised plan; @brenda is done.
+2. Bizar now has a complete plan that satisfies @linda's CHANGES REQUIRED verdict. The next agent in
+   the pipeline should consume this file directly rather than re-running @paul.
+
+## Complete — 10.18.0 Phase A.1: delete 9Router skill packs and picker-proxy CLI
+
+**Date:** 2026-08-28
+**Branch:** `master` (direct, token-plan ceiling blocked subagent dispatch per user override).
+**WIP holder:** @mike (F-193 remains `wip:1`).
+
+**Objective delivered:** Remove the 9Router-specific skill pack surface and the picker-proxy CLI command.
+Bizar is now router- and provider-agnostic at the CLI surface; the picker-proxy arm and its 9Router
+help line are gone; `bin.mjs` no longer dispatches to `cli/commands/picker-proxy.mjs`.
+
+**Files touched (5 files, 289 deletions, 2 insertions):**
+- `cli/commands/9router-picker-proxy.mjs` — DELETED (100 lines).
+- `cli/commands/picker-proxy.mjs` — DELETED (18 lines).
+- `cli/__tests__/9router-picker-proxy.test.mjs` — DELETED (164 lines).
+- `cli/bin.mjs` — picker-proxy help line removed (L120); dispatch case + import removed (L503-506).
+- `config/claude/commands/tools.md` — picker-proxy dropped from command list (L25).
+
+**Evidence:**
+- `git diff --cached --stat`: 5 files, +2/-289.
+- `grep -rn 'picker-proxy\|9router' cli/bin.mjs config/claude/commands/tools.md` returns zero hits.
+- `ls cli/commands/9router-picker-proxy.mjs cli/commands/picker-proxy.mjs cli/__tests__/9router-picker-proxy.test.mjs`
+  → `No such file or directory` for all three (A.1 exit criterion met).
+- `npm run typecheck` → clean.
+- `npm run test:node` → 708 pass / 0 fail (was 709 before; deletion removed one test file's cases).
+- `npx vitest run` → 7 pass / 0 fail.
+
+**Next:** A.2 (settings.json + model-router.json gateway-default strip) and A.3 (provision.mjs
+gateway-fallback strip) and A.4 (agent prompts + feature ledger strip) — same parallel/direct mode.
