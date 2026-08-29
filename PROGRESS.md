@@ -2,6 +2,42 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 mega-release published to npm
+
+**Release:** `@polderlabs/bizar@10.18.0` is live on the public npm registry (shasum `f262363991df9927a0ec21e5703d3a57c9d1fe54`, 345 files, 652.9 kB tarball). Git tag `v10.18.0` pushed. Rollup commit `1c2cdfe chore(release): bump to v10.18.0 (mega-release rollup)` on origin/master.
+
+**Phases shipped:**
+- **A.1–A.5** — 9Router removal across shipped harness (config, doctor, validate, settings, prompts, skills) + drift guard (`make verify-removed-surfaces`). Bizar is now router and provider agnostic.
+- **B.1** — typed `ObjectiveRun` / `EvidenceBundle` / `OutcomeLearnerOutcome` schema in `@polderlabs/bizar-sdk`.
+- **B.2** — typed `EvidenceBundle` ledger at `~/.config/bizar/evidence/` (mode 0o700, single source of truth via `cli/commands/secure-dir.mjs`).
+- **B.3+D.5** — `worker-suggest` reads `behavior.jsonl` + `instincts.jsonl` + `reject-feedback.jsonl` (structural fingerprint only — Q4 invariant).
+- **B.4** — `AUTONOMY_CONTRACT.md` extended for `secure-dir` + learning/evidence enforcement surfaces; `autonomy-contract.test.mjs` pins the file-system contract.
+- **C** — `bizar improve` subcommand (`propose | run | verify | rollback | list`) with `--apply --yes` floor + sha256 drift detection + find-exactly-once + verification exit 0.
+- **D** — `appendWorkerSuggestion()` + `recordSuggestion()` bridge + hook write side + `trigger-patterns.json` v2 (11 → 27 workers). 5-test drift guard `scripts/__tests__/worker-suggest-write-drift.test.mjs`.
+
+**Fix:**
+- `packages/sdk/src/router/outcome-learner.ts` `bucketKey()` undefined-key drop — was silently splitting the posterior space by serializing undefined optional fields as `"<key>":null` while training signals omitted those fields entirely. The "sequential record updates the next call's ranking" acceptance test had been flaking ~20% of runs; now deterministic.
+
+**Final gate sweep (post-bump, post-build):**
+- `npm run build:sdk`: clean — `dist/version.js` carries `SDK_VERSION = "10.18.0"`.
+- `npm run typecheck`: clean.
+- `npm run test:sdk`: 513/513 pass.
+- `npm run test:node`: 775/775 pass.
+- `make e2e`: 13/13 pass.
+- `make clean-check`: 5/5 pass.
+- `make verify-removed-surfaces`: clean (9Router absent).
+- `make verify-repo-structure`: clean.
+- `make check-arch`: 0 failures.
+- `npm pack --dry-run`: 345 files, 652.9 kB.
+- `npm publish`: `+ @polderlabs/bizar@10.18.0` confirmed via `npm view @polderlabs/bizar@10.18.0`.
+
+**Versions bumped in this commit:**
+- `package.json`: 10.17.4 → 10.18.0
+- `packages/sdk/package.json`: 10.17.4 → 10.18.0
+- `packages/sdk/src/version.ts`: SDK_VERSION 10.17.4 → 10.18.0
+
+**WIP=1 invariant:** exactly one feature in `feature_list.json` carries `wip: 1` after the rollup.
+
 ## Complete — 10.18.0 Phase D: worker-suggest write side + `trigger-patterns.json` v2 (11 → 27 workers)
 
 **Feature:** F-194 Phase D — close the closed-loop between suggestion dispatch (Phase B.3) and operator accept/reject feedback. The hook now persists fingerprint-only `worker-suggest` rows to `behavior.jsonl` so future sessions can learn from prior operator feedback. `trigger-patterns.json` grows from 11 → 27 workers so every shipped Bizar agent is reachable via a worker prompt.
