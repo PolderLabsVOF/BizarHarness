@@ -14,6 +14,18 @@ Commit: `65be8d8 fix(scripts): stop pre-checking Definition of Done in sprint ge
 
 Regression test added: `scripts/sprint.test.mjs:43` asserts every shipped DoD item (Layer 1/2/3, Documentation, feature_list, PROGRESS, Commit message) remains `[ ]` in generated sprint files and never appears as `[x]`.
 
+### Complete — Audit P0.2: align AUTONOMY_CONTRACT.md to the 4-milestone audit sequence
+
+Commit: `bd74d56 docs(contract): align AUTONOMY_CONTRACT.md to the audit's 4-milestone sequence` (pushed to `origin/master`).
+
+The contract was the Milestone 1 surface but did not enumerate the full audit sequence. Added a "Milestone alignment" section that:
+
+- Pins Milestone 1 as shipped (ObjectiveRun + EvidenceBundle + OutcomeLearnerOutcome + `bizar improve` + `sprint.mjs` DoD pre-check removal)
+- Enumerates Milestone 2–4 deliverables (resumable controller, independent verification, production operations) with their target enforcement surfaces
+- Cites audit commit `2a283c1` as the source of truth
+
+Regression test added: `scripts/__tests__/autonomy-contract.test.mjs:178` asserts all four milestone headers + the audit commit + every shipped Milestone 1 deliverable appear in the contract body. Tests now 17/17 (was 16/16).
+
 ### Pending audit items (in priority order)
 
 | # | Recommendation | Status |
