@@ -67,6 +67,9 @@ clean-check:  ## Run the five-dimension clock-out verifier
 verify-removed-surfaces:  ## Prove removed UI and note-vault systems are absent
 	@node scripts/verify-removed-surfaces.mjs
 
+verify-no-9router:  ## Drift guard: 9Router must not reappear in the shipped surface
+	@node scripts/verify-no-9router.mjs
+
 verify-repo-structure:  ## Prove tracked and published paths match the core harness
 	@node scripts/verify-repo-structure.mjs
 
@@ -113,4 +116,4 @@ worktree-init:  ## Bootstrap a new worktree with shared node_modules / dist syml
 	@./scripts/worktree-setup.sh "$(WORKTREE)"
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check verify-removed-surfaces verify-repo-structure audit eval-gate feature-state-machine session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup sync-skills-mirror verify-thinking-skills
+.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check verify-removed-surfaces verify-repo-structure verify-no-9router audit eval-gate feature-state-machine session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup sync-skills-mirror verify-thinking-skills

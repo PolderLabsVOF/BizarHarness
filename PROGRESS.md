@@ -2,6 +2,51 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase A.5: drift guard against 9Router reappearing
+
+- New `scripts/verify-no-9router.mjs` scans the shipped surface
+  (`cli/`, `packages/`, `scripts/`, `config/claude/hooks`,
+  `config/claude/commands`, `config/claude/agents`, `config/skills`,
+  `config/claude/skills`, `config/claude/settings.json`,
+  `config/claude/model-router.json`, `Makefile`, `package.json`,
+  `tsconfig.json`, `AGENTS.md`, `CLAUDE.md`) for any of these
+  forbidden patterns: `\b9router\b`, `\bninerouter\b`, `\bNINEROUTER\b`,
+  `\bsk_9router\b`, `localhost:20128`, `localhost:20129`. Any hit
+  fails the script with exit 1 and prints `path:line` evidence.
+- The script excludes its own filename (`scripts/verify-no-9router.mjs`),
+  all `*.test.*` files (so test fixtures and test files don't trip
+  the guard), `node_modules/`, `dist/`, and `.bizar/`. The single
+  intentional self-reference (`verify-no-9router` Makefile target
+  name) is allow-listed line-locally.
+- Wired into the Makefile as `make verify-no-9router` and added to
+  the `.PHONY` list. CI can opt into the drift guard by chaining it
+  after `make verify-removed-surfaces` (the existing removed-surface
+  verifier) without modifying the latter.
+- Added `scripts/__tests__/verify-no-9router.test.mjs` with 4 cases:
+  passes on the current repo surface; fails when a 9router ref is
+  reintroduced into a scanned file (uses an in-tree canary file that
+  is removed before the test exits); still passes after the canary
+  is removed; and asserts the `*.test.*` skip rule is encoded in
+  the source. The runner in `scripts/run-node-tests.mjs` already
+  picks up `scripts/__tests__/`, so no runner changes were needed.
+- One residual `9Router` reference was found in
+  `cli/commands/validate.mjs:432` help text and rewritten to
+  "configured provider gateway reachable (lenient unless --strict)".
+
+### Verification (A.5)
+
+- `node scripts/verify-no-9router.mjs` — passes.
+- `npm run typecheck` — clean.
+- `npm run test:node` — 712/712 pass.
+- `make check-arch` — 0 failed.
+- `make verify-removed-surfaces` — PASS.
+
+### Files changed (A.5)
+
+- 2 new files (drift guard + regression test), 3 modified
+  (Makefile, PROGRESS.md, cli/commands/validate.mjs).
+- Date: 2026-08-29.
+
 ## Complete — 10.18.0 Phase A.3 + A.4: strip 9Router from runtime + retire skills
 
 ### A.3 — provisioner + CLI commands no longer auto-inject a default gateway

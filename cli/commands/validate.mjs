@@ -429,7 +429,7 @@ export function showValidateHelp() {
       • all shipped slash commands
       • all skills / rules / hooks mirrored to ~/.claude/
       • ~/.config/bizar/ runtime state ready
-      • 9Router gateway reachable (lenient unless --strict)
+      • configured provider gateway reachable (lenient unless --strict)
 
   Exit codes:
     0  All checks passed (or only lenient ones failed)
