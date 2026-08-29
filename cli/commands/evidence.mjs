@@ -316,6 +316,98 @@ function handleAudit(args) {
   return report.missingOutcome.length === 0 && report.mismatched.length === 0 ? 0 : 1;
 }
 
+// ── F-194 typed EvidenceBundle subcommands ───────────────────────────────────
+//
+// `bizar evidence append --file <bundle.json>`  append a signed bundle to its run JSONL
+// `bizar evidence list`                          list every per-run JSONL with row counts
+// `bizar evidence verify-bundles`                re-verify every signed bundle + manifest
+//
+// These commands consume the typed EvidenceBundle ledger kept under
+// `~/.config/bizar/evidence/<objectiveRunId>.jsonl` + `signatures.bundle`.
+// They are deliberately distinct from the F-191 subcommands above so the
+// two ledgers do not race on the same append handle.
+
+import {
+  appendBundle,
+  listBundles,
+  verifyBundles,
+} from './evidence-bundles.mjs';
+
+function readSecret() {
+  return process.env.BIZAR_EVIDENCE_SECRET
+    || process.env.BIZAR_AUTONOMY_SECRET
+    || '';
+}
+
+function handleAppend(args) {
+  const fileArg = args.find((a) => a.startsWith('--file='))?.slice('--file='.length);
+  const fileFlag = args.includes('--file');
+  const fileIdx = fileFlag ? args.indexOf('--file') + 1 : -1;
+  const filePath = fileArg || (fileIdx > 0 ? args[fileIdx] : null);
+  if (!filePath) {
+    console.error(chalk.red('  ✗ bizar evidence append requires --file <path-to-bundle.json>'));
+    return 2;
+  }
+  const secret = readSecret();
+  if (!secret) {
+    console.error(chalk.red('  ✗ set BIZAR_EVIDENCE_SECRET (or BIZAR_AUTONOMY_SECRET) before appending bundles'));
+    return 2;
+  }
+  let bundle;
+  try {
+    const raw = readFileSync(filePath, 'utf8');
+    bundle = JSON.parse(raw);
+  } catch (err) {
+    console.error(chalk.red(`  ✗ could not parse ${filePath}: ${err.message}`));
+    return 2;
+  }
+  try {
+    const result = appendBundle({ bundle, secret });
+    console.log(chalk.green(`  ✓ appended bundleId=${bundle.bundleId} → ${result.path}`));
+    return 0;
+  } catch (err) {
+    console.error(chalk.red(`  ✗ append failed: ${err.message}`));
+    return 1;
+  }
+}
+
+function handleList(args) {
+  const wantJson = args.includes('--json');
+  const rows = listBundles();
+  if (wantJson) {
+    process.stdout.write(JSON.stringify(rows, null, 2) + '\n');
+    return 0;
+  }
+  if (rows.length === 0) {
+    console.log(chalk.yellow('  ! no per-run evidence JSONL files yet'));
+    return 0;
+  }
+  for (const r of rows) {
+    console.log(`${chalk.cyan(r.objectiveRunId)}  rows=${r.rowCount}  last=${r.lastAppendedAt ?? '(unknown)'}`);
+  }
+  return 0;
+}
+
+function handleVerifyBundles(args) {
+  const wantJson = args.includes('--json');
+  const secret = readSecret();
+  if (!secret) {
+    console.error(chalk.red('  ✗ set BIZAR_EVIDENCE_SECRET (or BIZAR_AUTONOMY_SECRET) before verifying'));
+    return 2;
+  }
+  const result = verifyBundles({ secret });
+  if (wantJson) {
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return result.ok ? 0 : 1;
+  }
+  if (!result.ok) {
+    console.error(chalk.red(`  ✗ verify-bundles failed: ${result.reason}${result.runId ? ` (run=${result.runId})` : ''}`));
+    return 1;
+  }
+  console.log(chalk.green(`  ✓ ${result.verifiedRuns} run(s), ${result.totalRows} bundle(s) verified`));
+  return 0;
+}
+
 // ── run() entrypoint ─────────────────────────────────────────────────────────
 
 export async function run(name, args, isHelpRequest) {
@@ -346,6 +438,15 @@ export async function run(name, args, isHelpRequest) {
       return true;
     case 'audit':
       process.exit(handleAudit(rest));
+      return true;
+    case 'append':
+      process.exit(handleAppend(rest));
+      return true;
+    case 'list':
+      process.exit(handleList(rest));
+      return true;
+    case 'verify-bundles':
+      process.exit(handleVerifyBundles(rest));
       return true;
     default:
       console.error(chalk.red(`  ✗ unknown evidence subcommand: ${sub}`));

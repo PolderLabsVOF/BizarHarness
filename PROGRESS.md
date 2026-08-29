@@ -2,6 +2,33 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase B.2: typed EvidenceBundle ledger at ~/.config/bizar/evidence/
+
+**Feature:** F-194 Milestone 2 — durable per-run ledger for typed `EvidenceBundle` records, separate from the F-191 dispatch.jsonl ledger.
+
+**New file:**
+- `cli/commands/evidence-bundles.mjs` — `resolveEvidenceDir` (`BIZAR_EVIDENCE_DIR` > `BIZAR_HOME` > XDG > `~/.config/bizar`), `ensureEvidenceDir` (creates with `0o700`, tightens pre-existing dirs), `bundleJsonlPath` (rejects path-traversal `objectiveRunId`), `signaturesBundlePath`, `appendBundle` (verifies HMAC, appends one JSONL line + updates `signatures.bundle` aggregate), `listBundles` (per-run JSONL enumeration with row counts + last appended timestamp), `verifyBundles` (re-verifies every HMAC + cross-checks `signatures.bundle` manifest). Exports `EVIDENCE_DIR_MODE = 0o700` and `SIGNATURES_BUNDLE = 'signatures.bundle'`.
+
+**CLI subcommands** (added to `cli/commands/evidence.mjs`, do not replace the F-191 subcommands):
+- `bizar evidence append --file <bundle.json>` — reads a typed bundle, verifies the signature with `BIZAR_EVIDENCE_SECRET` / `BIZAR_AUTONOMY_SECRET`, appends.
+- `bizar evidence list [--json]` — lists every per-run JSONL with row counts.
+- `bizar evidence verify-bundles [--json]` — re-verifies every signed bundle + cross-checks `signatures.bundle`. Returns exit code 1 on tamper.
+
+**Wiring:**
+- `cli/provision.mjs:ensureBizarHome` — also `mkdirSync(evidenceDir, { recursive: true, mode: 0o700 })` + `chmodSync(0o700)`.
+- `cli/provision.mjs:forceCleanInstall` — adds `evidence/` to `preserved[]` so per-run JSONL + `signatures.bundle` survive `bizar install --force`.
+
+**Tests:**
+- `cli/__tests__/evidence-bundles.test.mjs` — 9 cases (mode constant; dir-resolution precedence; 0o700 creation + tightening; append + manifest update; signature-mismatch rejection; empty-secret rejection; path-traversal rejection; list enumeration with row counts; verify clean + tampered).
+- `cli/install/force-clean.test.mjs` — +2 cases (force-clean preserves `BIZAR_HOME/evidence/` with mode 0o700; `ensureBizarHome` creates `evidence/` with 0o700).
+- `scripts/__tests__/evidence-ledger-drift.test.mjs` — 4 cases (exports present; CLI dispatches append/list/verify-bundles; provision wires 0o700 + preserves evidence; help text mentions new subcommands).
+- 727/727 node tests pass; 10835/10835 vitest; typecheck clean.
+
+**Security posture:**
+- `evidence/` mode `0o700` enforced at create time AND on every `ensureEvidenceDir` call (loose pre-existing dirs get re-tightened).
+- HMAC-SHA256 over the recursive deep-sort-key canonicalization prevents silent row swaps. Any third party can replay + verify with the same secret.
+- `signatures.bundle` carries a per-row `sha256BundleLine` so the manifest is bound to the exact on-disk bytes — appending a row with a re-canonicalized secret produces a mismatch on verify.
+
 ## Complete — 10.18.0 Phase B.1: typed ObjectiveRun + EvidenceBundle + OutcomeLearnerOutcome schema
 
 **Feature:** F-194 (Milestone 1) — typed autonomy contract surface.

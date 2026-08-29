@@ -40,6 +40,7 @@ import {
   writeFileSync,
   readFileSync,
   readdirSync,
+  statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -155,6 +156,56 @@ test('forceCleanInstall preserves ~/.config/bizar/ (BIZAR_HOME)', async () => {
     const login = JSON.parse(readFileSync(join(bizarHome, 'login.json'), 'utf8'));
     assert.equal(login.user, 'op', 'login.json contents must be byte-identical');
     assert.ok(result.preserved.includes(bizarHome), 'preserved[] should include BIZAR_HOME');
+  } finally { cleanupFixture(home); }
+});
+
+// ── 2b. forceCleanInstall preserves ~/.config/bizar/evidence/ with mode 0o700 ─
+test('forceCleanInstall preserves ~/.config/bizar/evidence/ with mode 0o700', async () => {
+  const { home, bizarHome } = freshFixture();
+  const evidenceDir = join(bizarHome, 'evidence');
+  mkdirSync(evidenceDir, { recursive: true, mode: 0o700 });
+  writeFileSync(join(evidenceDir, '00000000-0000-4000-8000-000000000001.jsonl'),
+    '{"bundleId":"x","objectiveRunId":"00000000-0000-4000-8000-000000000001","signature":"y"}\n');
+  writeFileSync(join(evidenceDir, 'signatures.bundle'),
+    '{"00000000-0000-4000-8000-000000000001":[{"bundleId":"x","signature":"y"}]}\n');
+  try {
+    const { forceCleanInstall } = await import('../provision.mjs');
+    const result = forceCleanInstall();
+    assert.equal(existsSync(evidenceDir), true, 'evidence/ must survive the wipe');
+    assert.equal(statSync(evidenceDir).mode & 0o777, 0o700, 'evidence/ mode must remain 0o700');
+    assert.equal(
+      existsSync(join(evidenceDir, '00000000-0000-4000-8000-000000000001.jsonl')),
+      true,
+      'pre-existing per-run JSONL must survive',
+    );
+    assert.equal(
+      existsSync(join(evidenceDir, 'signatures.bundle')),
+      true,
+      'signatures.bundle must survive',
+    );
+    assert.ok(
+      result.preserved.includes(evidenceDir),
+      'preserved[] should include BIZAR_HOME/evidence',
+    );
+  } finally { cleanupFixture(home); }
+});
+
+// ── 2c. ensureBizarHome creates evidence/ with 0o700 ─────────────────────────
+test('ensureBizarHome creates evidence/ subdirectory with mode 0o700', async () => {
+  const { home } = freshFixture();
+  try {
+    const { ensureBizarHome, BIZAR_HOME } = await import('../provision.mjs');
+    delete process.env.BIZAR_HOME; // freshFixture already cleared it, but be defensive
+    process.env.XDG_CONFIG_HOME = join(home, '.config');
+    process.env.HOME = home;
+    // Pre-clean: make sure the dir is missing so the test verifies creation, not idempotence.
+    const bizarHome = BIZAR_HOME();
+    const evidenceDir = join(bizarHome, 'evidence');
+    if (existsSync(evidenceDir)) rmSync(evidenceDir, { recursive: true, force: true });
+    const result = ensureBizarHome({});
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(evidenceDir), true);
+    assert.equal(statSync(evidenceDir).mode & 0o777, 0o700);
   } finally { cleanupFixture(home); }
 });
 

@@ -311,6 +311,10 @@ export function ensureBizarHome({ dryRun = false } = {}) {
   if (dryRun) return { ok: true, message: `[dry-run] would ensure ${BIZAR_HOME()}` };
   mkdirSync(BIZAR_HOME(), { recursive: true });
   mkdirSync(join(BIZAR_HOME(), 'loops'), { recursive: true });
+  // F-194: typed EvidenceBundle ledger. Mode 0o700 — operator-only reads.
+  const evidenceDir = join(BIZAR_HOME(), 'evidence');
+  mkdirSync(evidenceDir, { recursive: true, mode: 0o700 });
+  try { chmodSync(evidenceDir, 0o700); } catch { /* non-fatal on Windows */ }
   return { ok: true, message: `${BIZAR_HOME()} ready`, path: BIZAR_HOME() };
 }
 
@@ -1360,6 +1364,11 @@ export function forceCleanInstall(opts = {}) {
 
   const preserved = [];
   if (existsSync(BIZAR_HOME())) preserved.push(BIZAR_HOME());
+  // F-194: typed EvidenceBundle ledger under BIZAR_HOME. Re-emitting
+  // 0o700 per `ensureBizarHome` keeps its permissions correct on every
+  // wipe, but the per-run JSONL + signatures.bundle MUST survive.
+  const evidenceDir = join(BIZAR_HOME(), 'evidence');
+  if (existsSync(evidenceDir)) preserved.push(evidenceDir);
   // Document the third-party state we intentionally left alone.
   for (const sub of ['.credentials.json', 'statsig', '.playwright-mcp']) {
     const p = join(claudeDir, sub);
@@ -1367,7 +1376,7 @@ export function forceCleanInstall(opts = {}) {
   }
 
   const tag = dryRun ? '[dry-run] ' : '';
-  const message = `${tag}F-183 clean: wiped ${wiped.length} paths; preserved ${preserved.length} paths (BIZAR_HOME + third-party state)`;
+  const message = `${tag}F-183 clean: wiped ${wiped.length} paths; preserved ${preserved.length} paths (BIZAR_HOME + evidence + third-party state)`;
   return { ok: true, message, wiped, preserved, env: savedEnv };
 }
 
