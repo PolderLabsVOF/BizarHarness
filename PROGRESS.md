@@ -2,6 +2,73 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase C: bounded self-edit framework + `bizar improve` subcommand
+
+**Feature:** F-194 Phase C — teach Bizar to apply a small, audited configuration tweak to itself (or to a config file the operator owns) with a verifiable audit trail, gated by `--apply --yes` + sha256 drift detection + find-exactly-once + verification exit 0.
+
+**New CLI module — `cli/commands/improve-proposal.mjs`:**
+- `Proposal` schema: `{ id, targetFile, originalSha256, find, newText, verification, rollbackPlan, reason, createdAt, dryRun }`.
+- `FORBIDDEN_PROPOSAL_KEYS = ['prompt','promptRedacted','rawPrompt','promptText','userInput','rawInput','rawInputBytes']` — same Q4 invariant as behavior-capture: no prompt text or raw input bytes ever enter a proposal or its evidence row.
+- `sha256Text(text)` → 64-char hex.
+- `newProposalId({targetFile, cwd})` → `imp-<12 hex>`, deterministic per `(targetFile, cwd)`.
+- `validateProposal(raw)` — checks required keys, types, `find !== newText`, `verification.command` non-empty, `rollbackPlan.kind ∈ {replace-back, manual}`.
+- `planApply(proposal, currentFileBytes)` — refuses on sha256 drift (`currentSha !== proposal.originalSha256`) or find-count ≠ 1; otherwise returns `{ ok: true, newBytes, originalBytes }`.
+- `planRollback(proposal, postApplyBytes)` — for `replace-back`: returns the reverse bytes; for `manual`: returns `{ kind: 'manual', manualCommand }`.
+
+**New CLI module — `cli/commands/improve.mjs`:**
+- Subcommands: `propose | run | verify | rollback | list`.
+- `IMPROVE_LOG = 'improve.jsonl'` (under the same secure evidence dir as `evidence.jsonl`).
+- `FORBIDDEN_IMPROVE_KEYS` extends the proposal set with `targetBytes` (the post-apply file bytes never enter an evidence row).
+- `resolveImproveEvidenceDir({cwd, env})` delegates to `ensureSecureDir({envOverride:'BIZAR_EVIDENCE_DIR', envSubdir:'BIZAR_HOME', subdir:'evidence'})` — single source of truth shared with Phase B.4.
+- `appendImproveRow({row, evidenceDir})` — refuses forbidden keys (TypeError), mkdirs the file at 0o600, appends one JSON line.
+- `doPropose({flags, cwd})` — emits proposal JSON to stdout (or `--out <file>`); freezes `originalSha256`.
+- `doRun({flags, cwd})` — **floor**: `--apply` requires `--yes`; `planApply` must succeed; verification must exit `expectedExitCode`. On verification failure: rollback writes original bytes back and records a `status: 'rolled-back'` row. On success: writes the new bytes, records a `status: 'applied'` row with both before/after sha256.
+- `doVerify({flags, cwd})` — runs the verification command without applying anything; prints `{ ok, exitCode, stdoutTail, stderrTail }`.
+- `doRollback({flags, cwd})` — `replace-back` requires `--yes`; manual returns the manual command for operator execution.
+- `doList({flags})` — recent rows from `improve.jsonl` (default `--limit 20`).
+
+**Dispatch — `cli/bin.mjs`:**
+- New `case 'improve':` follows the established pattern (importCommand → `mod.run` → usage on `false` return).
+
+**Advisory hook — `config/claude/hooks/git-workflow-guard.mjs`:**
+- New critical advisory fires on `bizar improve (run|rollback) ... --(apply|yes)`. Message: "Review the proposal file (sha256 match + verification command + rollback plan) before confirming. The apply writes an evidence row to ~/.config/bizar/evidence/improve.jsonl."
+- The floor is enforced by `bizar improve` itself; the hook reminds the operator to read the proposal before confirming.
+
+**Tests — `scripts/__tests__/improve-contract.test.mjs` (8 drift-guard tests):**
+1. `improve.mjs` exports the F-194 Phase C surface (`run`, `appendImproveRow`, `listImproveRows`, `resolveImproveEvidenceDir`, `IMPROVE_LOG`, `FORBIDDEN_IMPROVE_KEYS`).
+2. `improve-proposal.mjs` exports the schema surface (`newProposalId`, `validateProposal`, `planApply`, `planRollback`, `sha256Text`, `FORBIDDEN_PROPOSAL_KEYS`).
+3. `bin.mjs` dispatches the `improve` subcommand.
+4. `git-workflow-guard.mjs` emits a critical advisory on `bizar improve --apply`.
+5. `improve.mjs` requires `--apply --yes` two-key floor.
+6. `improve.mjs` + `improve-proposal.mjs` verify sha256 match + find-exactly-once + verification exit 0.
+7. `improve.mjs` appends an evidence row on every apply (≥ 2 `appendImproveRow` call sites).
+8. `improve.mjs` writes the row via the secure-dir evidence path.
+
+**Tests — `cli/__tests__/improve.test.mjs` (12 functional tests):**
+1. `improve --help` lists all subcommands.
+2. `propose` emits a proposal JSON with frozen sha256 + verification.
+3. `run` dry-run does not modify the target file or write an evidence row.
+4. `run --apply --yes` mutates target, runs verification, appends `status: 'applied'` row with both sha256s.
+5. `run` refuses if target sha256 drifted since propose (exit 2 + "sha256 drift" stderr).
+6. `run` refuses if find matches zero or more than once (exit 2 + "matched 0 times").
+7. `run` rolls back when verification exits non-zero (file restored, row `status: 'rolled-back'`, exit 2).
+8. `run` refuses `--apply` without `--yes` (exit 2 + "requires --yes").
+9. `verify` runs the verification command without applying anything.
+10. `rollback` restores original bytes and records a `kind: 'improve-rollback'` row.
+11. `list` returns recent evidence rows.
+12. `appendImproveRow` refuses rows carrying FORBIDDEN keys (`prompt`, `rawInput`).
+
+**Test totals after Phase C:**
+- 765/765 node tests pass (was 753; +12 from `improve.test.mjs`).
+- 8 new contract drift tests in `improve-contract.test.mjs`.
+- 513/513 vitest; typecheck clean; `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, `make check`, `make e2e` 13/13, `make clean-check` 5/5, `npm pack --dry-run` 345 files (was 342; +3 from improve + tests).
+
+**Security posture:**
+- A bounded self-edit cannot mutate a file outside its proposal's `targetFile`, cannot apply if the file changed since `propose` (sha256 drift), and cannot apply if the find string is ambiguous (count ≠ 1).
+- Verification failure auto-rolls-back and records a `rolled-back` row — every apply attempt is auditable.
+- The critical advisory hook warns the operator before any `bizar improve run|rollback ... --apply|--yes` actually mutates a file.
+- Q4 invariant (no prompt text or raw input bytes) extends to proposals, rows, and the file-path-safety floor — same `FORBIDDEN_*_KEYS` discipline as behavior-capture.
+
 ## Complete — 10.18.0 Phase B.4: autonomy-contract extended for secure-dir + learning/evidence
 
 **Feature:** Pin the file-system-side autonomy contract for the F-194 learning + evidence ledgers so a regression cannot silently downgrade modes or expose operator state world-readable.

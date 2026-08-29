@@ -370,5 +370,19 @@ process.stdin.on('end', () => {
   const deployment = /\b(?:(?:npx|bunx|pnpm\s+exec)\s+)?(?:vercel|wrangler|flyctl)\b[\s\S]*(?:\bdeploy\b|\bpublish\b|--prod\b)/i.test(command);
   if (releaseMutation || packagePublish || deployment) {
     advisory('warn', 'This command publishes or deploys externally.', 'Release/publish/deploy used to require HITL confirmation; F-176 lets them proceed with a heads-up.');
+    return;
+  }
+  // F-194 Phase C: `bizar improve run --apply --yes` mutates a shipped or
+  // operator-owned config file. Critical heads-up: the floor is enforced by
+  // `bizar improve` itself (--apply --yes + sha256 match + find-exactly-once
+  // + verification exit 0), but the operator should review the proposal
+  // (sha256 + verification command + rollback plan) before confirming.
+  const improveApply = /\bbizar\s+improve\s+(?:run|rollback)\b[\s\S]*--(?:apply|yes)/i.test(command);
+  if (improveApply) {
+    advisory(
+      'critical',
+      'This command runs `bizar improve --apply` and mutates a config file.',
+      'Review the proposal file (sha256 match + verification command + rollback plan) before confirming. The apply writes an evidence row to ~/.config/bizar/evidence/improve.jsonl.',
+    );
   }
 });

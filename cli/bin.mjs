@@ -447,6 +447,22 @@ async function main() {
       break;
     }
 
+    case 'improve': {
+      const mod = await importCommand('improve');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load improve command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'improve');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar improve <subcommand> — run 'bizar improve --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
     case 'model': {
       // Deprecated alias. Routes to the original `model.mjs` so the
       // legacy JSON shape (`{ providers: { ... }, total: N }`) and table
