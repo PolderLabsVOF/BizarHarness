@@ -2,6 +2,29 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase B.1: typed ObjectiveRun + EvidenceBundle + OutcomeLearnerOutcome schema
+
+**Feature:** F-194 (Milestone 1) — typed autonomy contract surface.
+
+**New files:**
+- `packages/sdk/src/autonomy/objective-run.ts` — `ObjectiveRun`, `ObjectiveRunPhase`, `ObjectiveRunStatus`, `ObjectiveRunConstraints`, `AllowedSideEffect`, `Budget`; `newObjectiveRunId()`, `createObjectiveRun({ goal, scope, allowedSideEffects, forbiddenPaths, budget, evaluatorVersion })`. Server-stamps `objectiveRunId`, `createdAt`, `updatedAt`. Validates non-empty goal + `evaluatorVersion`, non-negative integer `budget.usd`. Preserves `wallClockSeconds` only when defined; preserves `scope` only when supplied.
+- `packages/sdk/src/autonomy/evidence-bundle.ts` — `EvidenceBundle`, `TestCounts`, `TestReport`, `ResourceUsage`. HMAC-SHA256 over a recursive deep-sort-key canonicalization so any third party can replay + verify. Helpers: `SHA256_HEX_LENGTH = 64`, `assertSha256Hex`, `canonicalize`, `sha256Hex`, `signBundle`, `verifyBundleSignature`, `newBundleId`, `createEvidenceBundle`.
+- `packages/sdk/src/autonomy/outcome-record.ts` — `OutcomeLearnerOutcome`, `PosteriorUpdate`, `createOutcomeLearnerOutcome({ bundle, posteriorUpdates, summary })`, `bundleRefersTo`. Server-stamps `outcomeId`, `createdAt`; copies `bundleId`/`objectiveRunId` from the source `EvidenceBundle`. Validates non-empty `posteriorUpdates`, every update has non-empty `agentRole` + `tier`, integer `delta`, string `reason`.
+- `packages/sdk/src/autonomy/index.ts` — barrel re-exporting all three modules.
+
+**Wiring:** `packages/sdk/src/index.ts` re-exports `./autonomy/index.js` so external consumers (MCP server, CLI, `bizar evidence`) get the full F-194 surface.
+
+**Tests (`packages/sdk/tests/autonomy/`):**
+- `objective-run.test.mjs` — 6 cases (UUID format, factory stamping + validation, empty goal/evaluatorVersion/negative/non-integer budget, `wallClockSeconds` round-trip, `scope` round-trip).
+- `evidence-bundle.test.mjs` — 9 cases (SHA256 length + known vector, `assertSha256Hex` rejects, canonicalize is order-independent across nested objects, sign/verify round-trip, tampering flips to false, wrong secret flips to false, empty secret throws, factory fills id+ts+sig, factory rejects malformed SHA fields).
+- `outcome-record.test.mjs` — 6 cases (stamping + bundle/objectiveRunId copy, summary omission, empty updates rejection, non-integer delta, invalid agentRole/tier/reason, `bundleRefersTo` folds to bundleId equality).
+- All 22 new vitest cases pass.
+
+**Behavior fixes discovered during testing:**
+- `canonicalize` originally sorted only top-level keys. A nested-object equality test caught the bug. Now `deepSortKeys` recursively sorts at every depth, so any third party can re-canonicalize from a different field-insertion order and still verify the signature. The `EvidenceBundle` invariant is now strictly "any re-ordering of fields at any depth yields the same canonical payload."
+
+**Exit criterion:** 22/22 new vitest pass; `tsc --noEmit` clean; barrel re-export present.
+
 ## Complete — 10.18.0 Phase A.5: drift guard against 9Router reappearing
 
 - New `scripts/verify-no-9router.mjs` scans the shipped surface

@@ -124,4 +124,8 @@ export {
   type CronTask,
 } from "./agent/cron.js";
 
+// F-194 — Autonomy contract (Phase B.1): typed ObjectiveRun,
+// EvidenceBundle, OutcomeLearnerOutcome.
+export * from "./autonomy/index.js";
+
 export { SDK_VERSION } from "./version.js";
