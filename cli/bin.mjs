@@ -521,6 +521,22 @@ async function main() {
       return;
     }
 
+    case 'explain-run': {
+      const mod = await importCommand('explain-run');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load explain-run command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'explain-run');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar explain-run <id> — run 'bizar explain-run --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
     default: {
       console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
       showHelp();

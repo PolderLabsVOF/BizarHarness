@@ -61,6 +61,27 @@ This is the audit's Milestone 2 ("Resumable controller") P0 deliverable. New mod
 
 `npm run test:node` now 787/787 (was 775, +12 — actually +10 new tests + 2 surfaced from prior partial coverage). `npm run test:sdk`: clean.
 
+### Complete — Audit P1.1: `bizar explain-run <id>` for objective-level observability
+
+Audit #79 (Milestone 2 observability surface). New module `cli/commands/explain-run.mjs` plus `cli/bin.mjs` registration.
+
+**Surface:**
+- `bizar explain-run <objectiveRunId>` — JSON report by default, joins the scheduler state + lifecycle events + EvidenceBundle row summary (`rowCount`, `lastAppendedAt`, file path).
+- `bizar explain-run <id> --format=human` — multi-line operator-friendly view with goal, phase, status, owner, attempt, lease/heartbeat timestamps, payload, and an aligned event timeline.
+- `bizar explain-run --list [--phase=X] [--status=Y] [--format=json|human]` — tabular listing of every objective in the scheduler, filterable by phase and status. Used by `bizar status` (Milestone 2 sibling) for top-down observability.
+
+**Library exports (`buildExplainRun`, `listObjectives`, `run`, `USAGE`)** so future internal callers (e.g. SessionStart prompt stitching, slash command wiring) can consume the same report without going through the CLI shim.
+
+**Regression test (`scripts/__tests__/explain-run.test.mjs`, 7 cases):**
+- Surface exports + `cli/bin.mjs` routes `explain-run` via the same pattern as `improve` / `evidence`.
+- `buildExplainRun` returns `null` for unknown ids.
+- Happy-path join covers scheduler state + events + evidence summary.
+- `listObjectives` filters by phase and status.
+- `run()` responds to `--help` with USAGE.
+- `run()` exits with code 2 + clear message for unknown ids.
+
+`npm run test:node`: 794/794 (was 787, +7). End-to-end smoke (`bizar explain-run --help`, `--list`, unknown id) confirmed against a real BIZAR_HOME directory.
+
 ### Pending audit items (in priority order)
 
 | # | Recommendation | Status |
@@ -68,7 +89,7 @@ This is the audit's Milestone 2 ("Resumable controller") P0 deliverable. New mod
 | 76 | P0: stop pre-checking DoD in sprint.mjs | ✅ shipped `65be8d8` |
 | 77 | P0: extend AUTONOMY_CONTRACT.md with Milestone 2-4 alignment | ✅ shipped `bd74d56` |
 | 78 | P0: durable scheduler with objective-level leases | ✅ shipped (this commit) |
-| 79 | P1: `bizar explain-run <id>` for objective-level observability | pending |
+| 79 | P1: `bizar explain-run <id>` for objective-level observability | ✅ shipped (this commit) |
 | 80 | P1: hierarchical budgets (objective/phase/task/agent/model) | pending |
 | 81 | P1: capability-segregated authority (worker/verifier/integrator) | pending |
 | 82 | P1: chaos testing / deterministic fault injection | pending |
