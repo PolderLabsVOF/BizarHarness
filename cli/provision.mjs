@@ -306,15 +306,17 @@ export async function buildSdk({ dryRun = false } = {}) {
 
 // ─── Bizar HOME bootstrap ────────────────────────────────────────────────────
 
+import { ensureSecureDir } from './commands/secure-dir.mjs';
+
 /** Ensure `~/.config/bizar/` exists with loop state. Idempotent. */
 export function ensureBizarHome({ dryRun = false } = {}) {
   if (dryRun) return { ok: true, message: `[dry-run] would ensure ${BIZAR_HOME()}` };
   mkdirSync(BIZAR_HOME(), { recursive: true });
   mkdirSync(join(BIZAR_HOME(), 'loops'), { recursive: true });
-  // F-194: typed EvidenceBundle ledger. Mode 0o700 — operator-only reads.
-  const evidenceDir = join(BIZAR_HOME(), 'evidence');
-  mkdirSync(evidenceDir, { recursive: true, mode: 0o700 });
-  try { chmodSync(evidenceDir, 0o700); } catch { /* non-fatal on Windows */ }
+  // F-194: typed EvidenceBundle ledger + structural-fingerprint learning ledger.
+  // Both at mode 0o700 — operator-only reads. Shared via secure-dir helper.
+  ensureSecureDir({ env: process.env, envSubdir: 'BIZAR_HOME', subdir: 'evidence' });
+  ensureSecureDir({ env: process.env, envSubdir: 'BIZAR_HOME', subdir: 'learning' });
   return { ok: true, message: `${BIZAR_HOME()} ready`, path: BIZAR_HOME() };
 }
 
@@ -1369,6 +1371,10 @@ export function forceCleanInstall(opts = {}) {
   // wipe, but the per-run JSONL + signatures.bundle MUST survive.
   const evidenceDir = join(BIZAR_HOME(), 'evidence');
   if (existsSync(evidenceDir)) preserved.push(evidenceDir);
+  // F-194 B.3: structural-fingerprint learning ledger
+  // (instincts.jsonl + reject-feedback.jsonl + behavior.jsonl).
+  const learningDir = join(BIZAR_HOME(), 'learning');
+  if (existsSync(learningDir)) preserved.push(learningDir);
   // Document the third-party state we intentionally left alone.
   for (const sub of ['.credentials.json', 'statsig', '.playwright-mcp']) {
     const p = join(claudeDir, sub);
@@ -1376,7 +1382,7 @@ export function forceCleanInstall(opts = {}) {
   }
 
   const tag = dryRun ? '[dry-run] ' : '';
-  const message = `${tag}F-183 clean: wiped ${wiped.length} paths; preserved ${preserved.length} paths (BIZAR_HOME + evidence + third-party state)`;
+  const message = `${tag}F-183 clean: wiped ${wiped.length} paths; preserved ${preserved.length} paths (BIZAR_HOME + evidence + learning + third-party state)`;
   return { ok: true, message, wiped, preserved, env: savedEnv };
 }
 

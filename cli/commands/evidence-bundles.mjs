@@ -34,20 +34,21 @@
 import { createHash } from 'node:crypto';
 import {
   existsSync,
-  mkdirSync,
   readFileSync,
   readdirSync,
-  statSync,
   writeFileSync,
   appendFileSync,
-  chmodSync,
 } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { verifyBundleSignature } from '../../packages/sdk/dist/autonomy/evidence-bundle.js';
+import {
+  ensureSecureDir,
+  resolveSecureSubdir,
+  SECURE_DIR_MODE,
+} from './secure-dir.mjs';
 
 /** Mode applied to the evidence directory and to every JSONL row file. */
-export const EVIDENCE_DIR_MODE = 0o700;
+export const EVIDENCE_DIR_MODE = SECURE_DIR_MODE;
 
 /** Name of the per-run JSONL file when not provided. */
 export const SIGNATURES_BUNDLE = 'signatures.bundle';
@@ -59,34 +60,23 @@ export const SIGNATURES_BUNDLE = 'signatures.bundle';
  *   3. `~/.config/bizar/evidence` (XDG fallback).
  */
 export function resolveEvidenceDir({ cwd = process.cwd(), env = process.env } = {}) {
-  if (env.BIZAR_EVIDENCE_DIR && typeof env.BIZAR_EVIDENCE_DIR === 'string') {
-    return isAbsolute(env.BIZAR_EVIDENCE_DIR)
-      ? env.BIZAR_EVIDENCE_DIR
-      : resolve(cwd, env.BIZAR_EVIDENCE_DIR);
-  }
-  const home = env.BIZAR_HOME
-    || (env.XDG_CONFIG_HOME ? `${env.XDG_CONFIG_HOME}/bizar` : null)
-    || (env.HOME ? `${env.HOME}/.config/bizar` : null)
-    || join(homedir(), '.config', 'bizar');
-  return join(home, 'evidence');
+  return resolveSecureSubdir({
+    cwd, env,
+    envOverride: 'BIZAR_EVIDENCE_DIR',
+    envSubdir: 'BIZAR_HOME',
+    subdir: 'evidence',
+  });
 }
 
 /** Create the evidence dir if missing. Idempotent. Returns the path. */
 export function ensureEvidenceDir({ cwd = process.cwd(), env = process.env } = {}) {
-  const dir = resolveEvidenceDir({ cwd, env });
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true, mode: EVIDENCE_DIR_MODE });
-  } else {
-    // Tighten permissions on pre-existing dirs to avoid leaking prior installs.
-    try {
-      // Best-effort mode correction; ignored on Windows where chmod is limited.
-      const cur = statSync(dir).mode & 0o777;
-      if (cur !== EVIDENCE_DIR_MODE) {
-        chmodSync(dir, EVIDENCE_DIR_MODE);
-      }
-    } catch { /* non-fatal */ }
-  }
-  return dir;
+  return ensureSecureDir({
+    cwd, env,
+    envOverride: 'BIZAR_EVIDENCE_DIR',
+    envSubdir: 'BIZAR_HOME',
+    subdir: 'evidence',
+    mode: EVIDENCE_DIR_MODE,
+  });
 }
 
 /** Path to a single run's JSONL file. */

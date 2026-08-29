@@ -209,6 +209,47 @@ test('ensureBizarHome creates evidence/ subdirectory with mode 0o700', async () 
   } finally { cleanupFixture(home); }
 });
 
+// ── 2d. ensureBizarHome creates learning/ with 0o700 ─────────────────────────
+test('ensureBizarHome creates learning/ subdirectory with mode 0o700', async () => {
+  const { home } = freshFixture();
+  try {
+    const { ensureBizarHome, BIZAR_HOME } = await import('../provision.mjs');
+    process.env.XDG_CONFIG_HOME = join(home, '.config');
+    process.env.HOME = home;
+    const learningDir = join(BIZAR_HOME(), 'learning');
+    if (existsSync(learningDir)) rmSync(learningDir, { recursive: true, force: true });
+    const result = ensureBizarHome({});
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(learningDir), true);
+    assert.equal(statSync(learningDir).mode & 0o777, 0o700);
+  } finally { cleanupFixture(home); }
+});
+
+// ── 2e. forceCleanInstall preserves ~/.config/bizar/learning/ with mode 0o700 ─
+test('forceCleanInstall preserves ~/.config/bizar/learning/ with mode 0o700', async () => {
+  const { home, bizarHome } = freshFixture();
+  const learningDir = join(bizarHome, 'learning');
+  mkdirSync(learningDir, { recursive: true, mode: 0o700 });
+  writeFileSync(join(learningDir, 'behavior.jsonl'),
+    '{"fingerprint64":"aabbccddeeff0011","workerId":"mike","accept":true,"timestamp":"2026-08-28T00:00:00.000Z"}\n');
+  writeFileSync(join(learningDir, 'instincts.jsonl'), '{}\n');
+  try {
+    const { forceCleanInstall } = await import('../provision.mjs');
+    const result = forceCleanInstall();
+    assert.equal(existsSync(learningDir), true, 'learning/ must survive the wipe');
+    assert.equal(statSync(learningDir).mode & 0o777, 0o700, 'learning/ mode must remain 0o700');
+    assert.equal(
+      existsSync(join(learningDir, 'behavior.jsonl')),
+      true,
+      'behavior.jsonl must survive',
+    );
+    assert.ok(
+      result.preserved.includes(learningDir),
+      'preserved[] should include BIZAR_HOME/learning',
+    );
+  } finally { cleanupFixture(home); }
+});
+
 // ── 3. forceCleanInstall preserves third-party state ─────────────────────────
 
 test('forceCleanInstall preserves ~/.claude/.credentials.json, statsig/, .playwright-mcp/ and user-owned subdirs', async () => {

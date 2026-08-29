@@ -2,6 +2,52 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase B.3 + D.5: worker-suggest reads behavior.jsonl + instincts.jsonl + reject-feedback.jsonl (structural fingerprint only)
+
+**Feature:** F-194 Phase B.3 + IMP-D.5 — teach `worker-suggest` to read three short-term learning feeds so the orchestrator prompt carries recent worker behavior (accept/reject counts), top instincts, and recent reject reasons — without ever persisting or echoing prompt text (Q4 resolution).
+
+**New SDK module — `packages/sdk/src/learning/behavior-capture.ts`:**
+- `BehaviorRecord` — `{ fingerprint64, workerId, accept, rejectReason?, timestamp }`. `fingerprint64 = sha256(deepSortKeys(prompt)).slice(0, 16)` (16-hex = 64 bits). NO prompt field anywhere.
+- `FORBIDDEN_BEHAVIOR_KEYS = ['prompt','promptRedacted','rawPrompt','promptText','userInput','raw_input']` — `validateBehaviorRecord` throws if any forbidden key reappears.
+- `BEHAVIOR_DIR_MODE = 0o700` + `createFileBehaviorCapture({filePath})` mkdirs with 0o700 and tightens pre-existing files (the file is treated as living inside a 0o700 dir).
+- `summarizeBehavior(records)` → `{ [workerId]: { accept, reject, lastRejectReason? } }`.
+- `createBehaviorRecord` server-stamps `timestamp` so callers can't fake it.
+- `createInMemoryBehaviorCapture` for tests; `createFileBehaviorCapture` for prod.
+
+**New CLI — `cli/commands/learning-behavior.mjs`:**
+- `resolveLearningDir` — `BIZAR_LEARNING_DIR` > `BIZAR_HOME` > `XDG_CONFIG_HOME` > `~/.config/bizar/learning`.
+- `ensureLearningDir` — `mkdirSync({recursive, mode:0o700})` + `chmodSync(0o700)` to tighten pre-existing loose dirs.
+- `buildLearningContext({cwd, env, maxInstincts=5, maxRejectReasons=3})` — reads `instincts.jsonl` (top-N by `confidence`), `reject-feedback.jsonl` (last N), `behavior.jsonl` (summarize). Returns markdown with three sections:
+  - `## Instincts (top by confidence)`
+  - `## Recent reject-feedback`
+  - `## Behavior summary (no prompt text)`
+  - Returns `''` when no feeds exist. Forbidden field names (`prompt`, `promptText`, `rawPrompt`, `promptRedacted`) NEVER appear in the rendered context — invariant enforced by drift test.
+
+**Hook wiring — `config/claude/hooks/worker-suggest.mjs`:**
+- Dynamically imports `buildLearningContext` from `cli/commands/learning-behavior.mjs` (path resolved via `import.meta.url`).
+- Appends `'\n\n' + feed` to `note` when feed is non-empty. Failures are silent (`stderr` warn only) so a corrupted feed never breaks the orchestrator prompt.
+- The feed is part of `hookSpecificOutput.additionalContext` — never replaces the orchestrator policy, only supplements it.
+
+**Wiring — `cli/provision.mjs`:**
+- `ensureBizarHome` adds `mkdirSync(learningDir, {recursive, mode:0o700})` + `chmodSync(0o700)`.
+- `forceCleanInstall` adds `learningDir` to `preserved[]`; user-owned feed JSONL survives `bizar install --force`. Updated copy: `"BIZAR_HOME + evidence + learning + third-party state"`.
+
+**Tests:**
+- `packages/sdk/tests/learning/behavior-capture.test.mjs` — 10 vitest cases (fingerprint determinism + 16-hex shape; FORBIDDEN key rejection on each forbidden field; createFileBehaviorCapture creates 0o700 dir + tightens pre-existing; in-memory + file append + list + size; createBehaviorRecord server-stamps timestamp; summarizeBehavior counts + lastRejectReason; forbidden keys never appear on the record surface).
+- `cli/__tests__/learning-behavior.test.mjs` — 5 node:test cases (precedence: BIZAR_LEARNING_DIR > BIZAR_HOME > HOME default; ensureLearningDir creates 0o700 + tightens pre-existing; buildLearningContext returns empty string when no feeds; buildLearningContext renders all three sections without any prompt-shaped field; `behavior.jsonl` row written via createFileBehaviorCapture has zero `prompt`/`promptRedacted`/`rawPrompt` keys).
+- `scripts/__tests__/behavior-capture-drift.test.mjs` — 5 drift-guard cases (SDK module exports `BEHAVIOR_DIR_MODE=0o700` + forbidden array; BehaviorRecord has no prompt-shaped field; CLI module never references prompt-shaped field; worker-suggest.mjs reads three feeds via `buildLearningContext` and never reads a prompt field; provision.mjs creates learning/ at 0o700 + preserves it under force-clean).
+- `cli/install/force-clean.test.mjs` — +2 cases (`ensureBizarHome` creates `learning/` with 0o700; force-clean preserves `~/.config/bizar/learning/` with 0o700 even after writing fixtures to it).
+- `config/claude/hooks/__tests__/worker-suggest.test.mjs` — +1 case (`appends instincts + reject-feedback + behavior summary when feeds exist`; stubs the three JSONL files in a tmp HOME; asserts all three section headers present + `doesNotMatch(ctx, /fingerprint64=/)` enforces Q4 invariant).
+- 740/740 node tests pass (was 727; +13); 513/513 vitest pass; typecheck clean; `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, `make check`, `make e2e` all green; `make clean-check` 5/5; `npm pack --dry-run` 342 files.
+
+**Security posture:**
+- `learning/` mode `0o700` enforced at create time AND on every `ensureLearningDir` call. Pre-existing loose dirs are tightened, so an earlier bug that wrote 0o755 cannot persist.
+- Q4 invariant (no prompt text ever reaches disk or echo back) is enforced at three layers:
+  - **Type layer** — `FORBIDDEN_BEHAVIOR_KEYS` + `validateBehaviorRecord` throws on construction.
+  - **SDK layer** — `createBehaviorRecord` accepts no `prompt`-shaped argument.
+  - **Drift layer** — `behavior-capture-drift.test.mjs` greps every source file for the forbidden field names and fails CI on reappearance.
+- Worker-suggest silently swallows build failures (`stderr` warn only) so a corrupted feed never breaks the orchestrator prompt or escalates to a permission ask.
+
 ## Complete — 10.18.0 Phase B.2: typed EvidenceBundle ledger at ~/.config/bizar/evidence/
 
 **Feature:** F-194 Milestone 2 — durable per-run ledger for typed `EvidenceBundle` records, separate from the F-191 dispatch.jsonl ledger.

@@ -991,7 +991,7 @@
       "verification": "node --test scripts/__tests__/autonomy-contract.test.mjs (9/9); npm run test:node (586/586); git diff --check",
       "state": "passing",
       "passed": "2026-08-27",
-      "commit": null,
+      "commit": "d04c7e3",
       "category": "policy",
       "layer": "docs",
       "owner": "@brenda",

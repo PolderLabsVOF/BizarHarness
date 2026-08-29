@@ -128,3 +128,54 @@ test('worker-suggest: emits orchestrator prompt (you ARE @mike) when sentinel ab
     /Do not implement directly in the primary session\./,
   );
 });
+
+// F-194 Phase B.3: when the three learning feeds are present, the
+// hook must include them in additionalContext (no prompt text, only
+// worker ids + counts + reasons).
+test('worker-suggest: appends instincts + reject-feedback + behavior summary when feeds exist', () => {
+  const tmpHome = mkdtempSync(join(tmpdir(), 'bizar-worker-suggest-feeds-'));
+  const learningDir = join(tmpHome, '.config', 'bizar', 'learning');
+  mkdirSync(learningDir, { recursive: true, mode: 0o700 });
+  writeFileSync(join(learningDir, 'instincts.jsonl'),
+    JSON.stringify({ id: 'inst-001', trigger: 'npm test', action: 'run', confidence: 0.9 }) + '\n',
+  );
+  writeFileSync(join(learningDir, 'reject-feedback.jsonl'),
+    JSON.stringify({ workerId: 'todd', reason: 'too eager' }) + '\n',
+  );
+  writeFileSync(join(learningDir, 'behavior.jsonl'),
+    JSON.stringify({ fingerprint64: 'aabbccddeeff0011', workerId: 'mike', accept: true, timestamp: '2026-08-28T00:00:00.000Z' }) + '\n' +
+    JSON.stringify({ fingerprint64: 'aabbccddeeff0022', workerId: 'mike', accept: false, rejectReason: 'wrong tier', timestamp: '2026-08-28T00:00:01.000Z' }) + '\n',
+  );
+  const savedHome = process.env.HOME;
+  const savedXdg = process.env.XDG_CONFIG_HOME;
+  const savedBizarHome = process.env.BIZAR_HOME;
+  process.env.HOME = tmpHome;
+  delete process.env.BIZAR_HOME;
+  process.env.XDG_CONFIG_HOME = join(tmpHome, '.config');
+  try {
+    const { status, stdout, stderr } = runHook({
+      session_id: 'feed-session',
+      cwd: tmpHome,
+      hook_event_name: 'UserPromptSubmit',
+      prompt: 'show me what the worker suggestions look like',
+    });
+    assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+    const obj = parseStdout(stdout);
+    assert.ok(obj);
+    const ctx = obj.hookSpecificOutput.additionalContext;
+    assert.match(ctx, /Instincts \(top by confidence\)/);
+    assert.match(ctx, /Recent reject-feedback/);
+    assert.match(ctx, /todd rejected: too eager/);
+    assert.match(ctx, /Behavior summary \(no prompt text/);
+    assert.match(ctx, /mike: accept=1 reject=1/);
+    // No prompt text field name should appear in the dumped context.
+    assert.doesNotMatch(ctx, /fingerprint64=/);
+  } finally {
+    process.env.HOME = savedHome;
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
+    if (savedBizarHome === undefined) delete process.env.BIZAR_HOME;
+    else process.env.BIZAR_HOME = savedBizarHome;
+    rmSync(tmpHome, { recursive: true, force: true });
+  }
+});

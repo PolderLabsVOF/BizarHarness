@@ -152,6 +152,25 @@ process.stdin.on('end', async () => {
       lines.join('\n');
   }
 
+  // F-194 Phase B.3+D.5: append the structural-fingerprint learning feed
+  // (instincts + reject-feedback + behavior summary). No prompt text is
+  // ever persisted or echoed; only worker ids, counts, and most-recent
+  // reject reasons. Failure is silent — the model still gets the routing
+  // policy above even if the learning ledger is unreadable.
+  try {
+    const { buildLearningContext } = await import(
+      join(__dirname, '..', '..', '..', 'cli', 'commands', 'learning-behavior.mjs')
+    );
+    const feed = buildLearningContext({ cwd: input.cwd || process.cwd(), env: process.env });
+    if (feed) note += '\n\n' + feed;
+  } catch (err) {
+    process.stderr.write(
+      `[bizar.workers] WARN: learning feed unavailable: ${
+        err && err.message ? err.message : String(err)
+      }\n`,
+    );
+  }
+
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {
       hookEventName: 'UserPromptSubmit',

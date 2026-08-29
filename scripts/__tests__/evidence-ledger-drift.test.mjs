@@ -50,10 +50,10 @@ describe('F-194 evidence ledger drift guard', () => {
       join(process.cwd(), 'cli', 'provision.mjs'),
       'utf8',
     );
-    // ensureBizarHome creates the evidence subdir at 0o700.
+    // ensureBizarHome creates the evidence subdir via the shared secure-dir
+    // helper (which mkdirs at 0o700 and tightens pre-existing loose dirs).
     assert.match(src, /join\(BIZAR_HOME\(\), 'evidence'\)/);
-    assert.match(src, /mkdirSync\(evidenceDir,\s*\{\s*recursive:\s*true,\s*mode:\s*0o700\s*\}\)/);
-    assert.match(src, /chmodSync\(evidenceDir,\s*0o700\)/);
+    assert.match(src, /ensureSecureDir\(\{[^}]*subdir:\s*'evidence'/);
     // forceCleanInstall preserves the evidence dir explicitly.
     const preservedBlock = src.match(/const evidenceDir = join\(BIZAR_HOME\(\), 'evidence'\);[\s\S]{0,400}preserved\.push\(evidenceDir\)/);
     assert.ok(preservedBlock, 'forceCleanInstall must push evidenceDir into preserved[]');
