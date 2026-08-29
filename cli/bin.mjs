@@ -112,6 +112,7 @@ function showHelp() {
     release-provenance     Generate SBOM + provenance + minisig for a release (audit #83)
     verify-release         Verify a release artifact set against the pinned allowlist
     spec-list              List SDK schemas, policy docs, and mirror sync status (audit #84)
+    bench                  Efficiency benchmarks + auto-fan-out rule (audit #85)
     team                   Run the office-manager orchestration agent
     subagent               Run a named agent in read-only plan mode
     run                    Run Claude Code once (optionally --bg)
@@ -484,6 +485,19 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'spec-list');
+      const code = await mod.run(cmdArgs);
+      if (typeof code === 'number') process.exit(code);
+      break;
+    }
+
+    case 'bench': {
+      const mod = await importCommand('bench');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load bench command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'bench');
       const code = await mod.run(cmdArgs);
       if (typeof code === 'number') process.exit(code);
       break;

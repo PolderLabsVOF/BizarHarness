@@ -131,4 +131,7 @@ export * from "./autonomy/index.js";
 // Audit #83 — Release provenance: SBOM, SLSA attestation, signature.
 export * from "./release/index.js";
 
+// Audit #85 — Efficiency benchmarks + auto-fan-out reduction.
+export * from "./bench/index.js";
+
 export { SDK_VERSION } from "./version.js";

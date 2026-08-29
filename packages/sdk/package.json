@@ -11,7 +11,8 @@
     ".": "./dist/index.js",
     "./mcp": "./dist/mcp/server.js",
     "./dangerous-patterns": "./dist/dangerous-patterns.js",
-    "./learning": "./dist/learning/index.js"
+    "./learning": "./dist/learning/index.js",
+    "./bench": "./dist/bench/index.js"
   },
   "files": [
     "dist"

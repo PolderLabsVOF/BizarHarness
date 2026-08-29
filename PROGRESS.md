@@ -325,7 +325,7 @@ source for mirrored agent instructions and verify byte equality."
 | 82 | P1: chaos testing / deterministic fault injection | ✅ shipped (this commit) |
 | 83 | P1: SBOM + release provenance + signed-known-good pointer | ✅ shipped (this commit) |
 | 84 | P2: spec-sprawl reduction (schema versions + policy doc ownership + mirror parity) | ✅ shipped (this commit) |
-| 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | pending |
+| 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | ✅ shipped (this commit) |
 
 ## Complete — 10.18.0 mega-release published to npm
 
