@@ -155,6 +155,42 @@ from `process.env`.
 
 `npm run test:node`: 815/815 (was 803, +12).
 
+### Complete — Audit P1.4: chaos testing / deterministic fault injection
+
+Audit #82 (Milestone 4 "Production operations" P1). The chaos
+framework is the contract between the Milestone 2 durable scheduler
+and the Milestone 3 evidence ledger — both must converge to a
+valid terminal state when each fault class fires. New module
+`scripts/__tests__/chaos.test.mjs` (5 fault classes, fresh
+in-memory scheduler per test for determinism):
+
+| Fault class | What it injects | What it asserts |
+|---|---|---|
+| `crash-during-resume` | owner set but `lease_expires_at IS NULL` (process died between the two writes) | Fresh claim by a new owner succeeds; recovery sweep is a no-op while the lease is valid |
+| `duplicate-event` | Two `claimed` rows for the same objective (writer retry without an idempotency key) | `getObjective` still reflects single ownership; `attempt` is not doubled |
+| `out-of-order-event` | Events with backwards timestamps (`ts=900/800/700k`) | `listEvents` returns rows in stable `(ts ASC, id ASC)` order |
+| `expired-lease` | Silent worker keeps heartbeating its own state but the lease wall-clock has passed expiry | `recoverStale` releases the lease + bumps `attempt` once; new owner claims cleanly; old worker's heartbeat is rejected with `OWNER_MISMATCH` |
+| `corrupt-evidence-row` | Malformed JSONL row + truncated tail appended to an evidence file | `listBundles` does not throw, `rowCount` counts the corrupt line as a row, `lastAppendedAt` is `null`; `verifyBundles` returns `ok: false` with one of the documented stable reason codes (`signatures-bundle-orphan`, `signatures-bundle-shape`, `signatures-bundle-count-mismatch`, `bundle-signature-mismatch`) |
+
+**Convergent-state guarantees pinned:**
+- Recovery sweep is idempotent: a second sweep with no intervening
+  work must be a no-op (no double-attempt).
+- Replay is stable: `(ts ASC, id ASC)` is the canonical order — the
+  audit explicitly forbids wall-clock-based ordering.
+- `verifyBundles` MUST NOT throw on corrupt evidence; it MUST
+  return a stable, machine-readable reason.
+- A duplicate event row is observable but semantically inert —
+  consumers of `getObjective` / `recoverStale` see one ownership.
+
+`npm run test:node`: 820/820 (was 815, +5). `npm run typecheck`:
+clean.
+
+### In progress — Audit P1.5: SBOM + release provenance + signed-known-good pointer
+
+Next deliverable: per-release CycloneDX SBOM, minisign signature,
+provenance attestation per tarball; `KNOWN_GOUL_RELEASES` pin in
+`cli/commands/install.mjs`. Track under #83.
+
 ### Pending audit items (in priority order)
 
 | # | Recommendation | Status |
@@ -165,8 +201,8 @@ from `process.env`.
 | 79 | P1: `bizar explain-run <id>` for objective-level observability | ✅ shipped (this commit) |
 | 80 | P1: hierarchical budgets (objective/phase/task/agent/model) | ✅ shipped (this commit) |
 | 81 | P1: capability-segregated authority (worker/verifier/integrator) | ✅ shipped (this commit) |
-| 82 | P1: chaos testing / deterministic fault injection | pending |
-| 83 | P1: SBOM + release provenance + signed-known-good pointer | pending |
+| 82 | P1: chaos testing / deterministic fault injection | ✅ shipped (this commit) |
+| 83 | P1: SBOM + release provenance + signed-known-good pointer | in progress |
 | 84 | P2: spec sprawl reduction | pending |
 | 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | pending |
 
