@@ -1,5 +1,42 @@
 # Changelog
 
+## [10.18.0] - 2026-08-29
+
+Mega-release: 9Router removal + evidence/learning ledger + bounded self-edit + worker-suggest write side.
+
+### Removed
+
+- **9Router and `mcp__9router__*` references** across the shipped harness (config, doctor, validate, settings, prompts, skills). Bizar is now router and provider agnostic. Drift guard (`make verify-removed-surfaces`) asserts no 9Router surface returns.
+
+### Added — 10.18.0-A (9Router cleanup)
+
+- `feat(10.18.0-A.2)`: strip 9Router from shipped config + doctor + validate.
+- `feat(10.18.0-A.3+A.4)`: strip 9Router from runtime + retire `9router-*` skills.
+- `feat(10.18.0-A.5)`: drift guard against 9Router reappearing.
+
+### Added — 10.18.0-B (evidence + learning ledger)
+
+- `feat(sdk): 10.18.0-B.1`: typed `ObjectiveRun` / `EvidenceBundle` / `OutcomeLearnerOutcome` schema (F-194).
+- `feat(cli): 10.18.0-B.2`: typed `EvidenceBundle` ledger at `~/.config/bizar/evidence/` (mode 0o700, single source of truth via `cli/commands/secure-dir.mjs`).
+- `feat(sdk+cli): 10.18.0-B.3+D.5`: `worker-suggest` reads `behavior.jsonl` + `instincts.jsonl` + `reject-feedback.jsonl` (structural fingerprint only, no prompt text ever persisted — Q4 invariant).
+- `feat(policy): 10.18.0-B.4`: `AUTONOMY_CONTRACT.md` extended for `secure-dir` + learning/evidence enforcement surfaces; `autonomy-contract.test.mjs` regression test pins the file-system contract.
+
+### Added — 10.18.0-C (bounded self-edit)
+
+- `feat(cli): 10.18.0-C`: `bizar improve` subcommand with `propose | run | verify | rollback | list`. Floor: `--apply --yes` + sha256 drift detection + find-exactly-once + verification exit 0. Forbidden proposal keys: `prompt`, `promptRedacted`, `rawPrompt`, `promptText`, `userInput`, `rawInput`, `rawInputBytes`. `improve.jsonl` lives under the same 0o700 evidence dir.
+- `bizar improve (run|rollback) ... --(apply|yes)` triggers a `git-workflow-guard.mjs` advisory so the operator reads the proposal before confirming.
+
+### Added — 10.18.0-D (worker-suggest write side + pattern catalog v2)
+
+- `feat(cli+hooks): 10.18.0-D`: `appendWorkerSuggestion()` writes fingerprint-only `worker-suggest` rows to `behavior.jsonl` so future sessions can learn from operator accept/reject. `cli/worker-dispatcher.mjs:recordSuggestion()` bridges the dispatcher to the learning module. `config/claude/hooks/worker-suggest.mjs` invokes `recordSuggestion()` after `dispatch()`. Failure is silent — never throws from the hook path.
+- `config/trigger-patterns.json` v2: 11 → 27 workers. Coverage: every shipped Bizar agent (mike, brenda, greg, oscar, paul, linda, todd, karen, pam, steve, susan, janet, carl, kevin, brad, ria) is reachable via a worker prompt.
+- `scripts/__tests__/worker-suggest-write-drift.test.mjs`: 5-test drift guard for the write side.
+- `scripts/__tests__/autonomy-contract.test.mjs`: +2 Phase D drift tests.
+
+### Fixed
+
+- `packages/sdk/src/router/outcome-learner.ts`: `bucketKey()` was serializing every optional field via `key.X ?? null`, producing `"provider":null` for keys where `provider` was undefined. The selector's `modelToContextKey()` produces keys with explicit `undefined` for `provider` and `contextSizeBucket`; training signals omit those fields entirely. After `?? null` both shapes contained the key but with different values, silently splitting the posterior space — the "sequential record updates the next call's ranking" acceptance test flaked ~20% of runs because the lookup fell into a different bucket than the one being updated. Fixed `bucketKey()` to drop undefined fields so the JSON shape matches what callers pass.
+
 ## [10.17.4] - 2026-08-28
 
 - **Feature (MiniMax-M3 1M context window plumbing).**
