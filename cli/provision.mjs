@@ -738,8 +738,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const existing = readJsonSafe(fp, {}) || {};
   const existingEnv = existing.env || {};
   const shipped = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'settings.json'), {}) || {};
-  const shippedRouter = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'model-router.json'), {}) || {};
-  const defaultGatewayUrl = shippedRouter.endpoint || shippedRouter.gateway?.endpoint || 'http://localhost:20129/v1';
+  // Bizar is provider-agnostic. We do NOT auto-inject a default gateway URL
+  // or auth token into the user's `~/.claude/settings.json` — operators MUST
+  // configure `ANTHROPIC_BASE_URL`, `BIZAR_MODEL_ROUTER_URL`, and
+  // `ANTHROPIC_AUTH_TOKEN` via their shell environment if they want a
+  // non-default gateway. If those env vars are absent we omit the keys
+  // entirely and let Claude Code's session model handle dispatch.
 
   // F-183 — when `forceCleanInstall` has wiped `~/.claude/settings.json`,
   // it stashes the prior env block into `process.env.BIZAR_SAVED_ENV`.
@@ -772,12 +776,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
 
   const savedBaseUrl = pickEnv('ANTHROPIC_BASE_URL');
   const savedRouterUrl = pickEnv('BIZAR_MODEL_ROUTER_URL');
-  const gatewayUrl = savedBaseUrl
+  const existingBaseUrl = !force ? (existingEnv.ANTHROPIC_BASE_URL || existingEnv.BIZAR_MODEL_ROUTER_URL) : undefined;
+  const operatorGatewayUrl = savedBaseUrl
     || savedRouterUrl
     || process.env.ANTHROPIC_BASE_URL
     || process.env.BIZAR_MODEL_ROUTER_URL
-    || (!force && (existingEnv.ANTHROPIC_BASE_URL || existingEnv.BIZAR_MODEL_ROUTER_URL))
-    || defaultGatewayUrl;
+    || existingBaseUrl;
   // Resolve hook commands via `resolveHookCommand`, which emits the
   // absolute-path wrapper invocation when the shim is executable and
   // falls back to the POSIX-portable `sh -c` PATH probe shipped by
@@ -841,13 +845,18 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     showThinkingSummaries: shipped.showThinkingSummaries !== undefined ? shipped.showThinkingSummaries : true,
     env: {
       BIZAR_HOME: BIZAR_HOME(),
-      ANTHROPIC_BASE_URL: gatewayUrl,
-      BIZAR_MODEL_ROUTER_URL:
-        pickEnv('BIZAR_MODEL_ROUTER_URL')
-        || gatewayUrl,
-      ANTHROPIC_AUTH_TOKEN:
-        pickEnv('ANTHROPIC_AUTH_TOKEN')
-        || 'sk_9router',
+      ...(operatorGatewayUrl
+        ? {
+            ANTHROPIC_BASE_URL: operatorGatewayUrl,
+            BIZAR_MODEL_ROUTER_URL:
+              pickEnv('BIZAR_MODEL_ROUTER_URL')
+              || process.env.BIZAR_MODEL_ROUTER_URL
+              || operatorGatewayUrl,
+          }
+        : {}),
+      ...(pickEnv('ANTHROPIC_AUTH_TOKEN')
+        ? { ANTHROPIC_AUTH_TOKEN: pickEnv('ANTHROPIC_AUTH_TOKEN') }
+        : {}),
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS:
         pickEnv('CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS')
         || shipped.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS

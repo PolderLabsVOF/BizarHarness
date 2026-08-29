@@ -72,12 +72,12 @@ export function resolveEndpoint(opts = {}) {
     }
   }
 
-  const url = fromEnvUrl || fromSettingsUrl || fromRouterUrl || 'http://localhost:20128/v1';
+  const url = fromEnvUrl || fromSettingsUrl || fromRouterUrl || null;
   const token = fromEnvToken || fromSettingsToken;
   const source = fromEnvUrl ? 'env'
     : fromSettingsUrl ? 'settings.json'
     : fromRouterUrl ? 'model-router.json'
-    : 'default';
+    : 'unconfigured';
   return { endpoint: url, authToken: token, source };
 }
 
@@ -467,7 +467,10 @@ export function applyModels({ routerPath, models, tierHints = {}, profiles = {},
     : {};
   router.userSelected = block;
   if (!router.version) router.version = '13.0.0';
-  if (!router.endpoint) router.endpoint = 'http://localhost:20128/v1';
+  // Do NOT auto-inject a default endpoint here. Operators configure the
+  // gateway via $BIZAR_MODEL_ROUTER_URL or $ANTHROPIC_BASE_URL; if neither
+  // is set, the router's `endpoint` stays null and downstream commands
+  // surface a clear "no gateway configured" error.
   writeAtomic(routerPath, JSON.stringify(router, null, 2) + '\n');
   return block;
 }
@@ -596,7 +599,8 @@ export function applyRefresh({
     source: 'refresh',
   };
   if (!router.version) router.version = '13.0.0';
-  if (!router.endpoint) router.endpoint = 'http://localhost:20128/v1';
+  // Do NOT auto-inject a default endpoint here either; same rationale as
+  // the picker write path above.
   writeAtomic(routerPath, JSON.stringify(router, null, 2) + '\n');
 
   return { refreshed, preservedOperator, skippedFresh };
@@ -1134,7 +1138,9 @@ function showHelp() {
   Endpoint resolution order: $BIZAR_MODEL_ROUTER_URL / $ANTHROPIC_BASE_URL
     -> ~/.claude/settings.json#env.BIZAR_MODEL_ROUTER_URL
     -> model-router.json#endpoint
-    -> http://localhost:20128/v1
+    If none of the above is configured, the gateway-dependent subcommands
+    (probe, --refresh) exit with a configuration error rather than guessing
+    a default. Bizar is provider-agnostic and ships no default gateway.
 
   Auth: $ANTHROPIC_AUTH_TOKEN -> settings.json#env.ANTHROPIC_AUTH_TOKEN.\n\n  Discovered models are enriched from https://models.dev/models.json.\n  Metadata lookup is best-effort and never hides gateway-reported models.
 `;

@@ -5,17 +5,18 @@ allowed-tools: Bash
 
 # /use-default — Revert to claude-minimax/MiniMax-M3 (default)
 
-The local model router at `http://localhost:20128/v1` defaults to
-`claude-minimax/MiniMax-M3` for everyday reasoning. Use this when you've
-been running on premium (`claude-qwen/qwen3.8-max`) and want to drop back
-to the cheaper default.
+The provider gateway you have configured defaults to `claude-minimax/MiniMax-M3`
+for everyday reasoning. Bizar is provider-agnostic — set
+`BIZAR_MODEL_ROUTER_URL` (or `ANTHROPIC_BASE_URL`) to whatever gateway URL
+your operator runs. Use this when you've been running on premium
+(`claude-qwen/qwen3.8-max`) and want to drop back to the cheaper default.
 
 ## Commands
 
 ### One-shot launch (recommended)
 
 ```bash
-ANTHROPIC_BASE_URL=http://localhost:20128/v1 \
+ANTHROPIC_BASE_URL="${BIZAR_MODEL_ROUTER_URL:-http://your-gateway/v1}" \
 claude
 ```
 
@@ -23,7 +24,7 @@ If `ANTHROPIC_MODEL` is set in your shell, unset it first:
 
 ```bash
 unset ANTHROPIC_MODEL
-ANTHROPIC_BASE_URL=http://localhost:20128/v1 \
+ANTHROPIC_BASE_URL="${BIZAR_MODEL_ROUTER_URL:-http://your-gateway/v1}" \
 claude
 ```
 
@@ -35,7 +36,7 @@ this project, remove it (or set it back to `claude-minimax/MiniMax-M3`).
 ```json
 {
   "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:20128/v1"
+    "ANTHROPIC_BASE_URL": "${BIZAR_MODEL_ROUTER_URL}"
   }
 }
 ```

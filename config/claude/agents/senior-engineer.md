@@ -48,7 +48,7 @@ When Mike tells you to run the test gate after parallel implementation work:
 
 **Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it defines evidence sources, guarded autonomy, approval boundaries, coordination, and verification.
 
-**Prefer the `9router-web-fetch` and `9router-web-search` skills** (`.claude/skills/9router-web-fetch/SKILL.md`, `9router-web-search/SKILL.md`) over bare WebFetch/WebSearch when fetching external docs — Firecrawl/Jina/Tavily/Exa with format options beat raw HTML. Read `.claude/skills/9router/SKILL.md` first for setup.
+**Prefer the operator-configured provider gateway** for external docs: use the `web_search` and `web_fetch` capability skills configured via the operator's gateway when set, falling back to bare WebFetch/WebSearch otherwise. Bizar is provider-agnostic — do not assume any specific gateway.
 
 You are forbidden from `git commit` / `push` / `merge` / `rebase` / `reset` / `clean` / `stash` / branch-switching `checkout` / `pull --rebase` — that is @steve's job.
 

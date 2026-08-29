@@ -340,11 +340,11 @@ test('resolveEndpoint: router.json wins over default', () => {
   }
 });
 
-test('resolveEndpoint: falls back to localhost default', () => {
+test('resolveEndpoint: returns unconfigured when no source is set', () => {
   const dir = tmpDir();
   const r = resolveEndpoint({ cwd: dir, env: {}, settingsJsonPath: join(dir, 'nope.json'), routerPath: join(dir, 'nope-router.json') });
-  assert.equal(r.endpoint, 'http://localhost:20128/v1');
-  assert.equal(r.source, 'default');
+  assert.equal(r.endpoint, null);
+  assert.equal(r.source, 'unconfigured');
 });
 
 test('fetchModelsDevCatalog: loads provider-agnostic Models.dev metadata', async () => {

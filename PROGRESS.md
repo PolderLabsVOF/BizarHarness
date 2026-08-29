@@ -2,6 +2,86 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.18.0 Phase A.3 + A.4: strip 9Router from runtime + retire skills
+
+### A.3 — provisioner + CLI commands no longer auto-inject a default gateway
+
+- `cli/provision.mjs:writeClaudeSettings` no longer injects
+  `ANTHROPIC_BASE_URL`, `BIZAR_MODEL_ROUTER_URL`, or
+  `ANTHROPIC_AUTH_TOKEN` when no operator env var is set. The
+  `defaultGatewayUrl` fallback that used to resolve to
+  `http://localhost:20129/v1` is gone. Operators MUST configure
+  gateway credentials via their shell environment; the writer only
+  emits the keys when at least one operator-provided URL is
+  resolvable (via process env, force-clean stashed env, or an
+  explicitly configured `existing.env` value on non-force updates).
+- `cli/commands/model.mjs` reads `BIZAR_MODEL_ROUTER_URL` /
+  `ANTHROPIC_BASE_URL` and exits with a clear "no gateway
+  configured" error when neither is set, instead of silently probing
+  `localhost:20128/v1`. The `--help` text and SKILL.md-style header
+  were rewritten to reflect the provider-agnostic contract.
+- `cli/commands/models.mjs` resolves `endpoint` to `null` when no
+  source is configured (`source: 'unconfigured'`) rather than
+  defaulting to `localhost:20128/v1`. The picker/refresh writers no
+  longer auto-inject a default endpoint into the router file. The
+  help text and endpoint-resolution-order comment were updated.
+- `cli/install/__tests__/merge-settings.test.mjs` rewritten to assert
+  the new provider-agnostic contract: no env → no gateway keys
+  emitted; existing ANTHROPIC_BASE_URL → mirrors to
+  BIZAR_MODEL_ROUTER_URL; explicit env → keys emitted verbatim.
+- `cli/__tests__/models-picker.test.mjs:resolveEndpoint` test
+  rewritten from "falls back to localhost default" → "returns
+  unconfigured when no source is set" with `endpoint: null` and
+  `source: 'unconfigured'`.
+- `cli/provision.test.mjs` fixture renamed: skill directory
+  `9router/` → `other-skill/` and the assertion checks
+  `lock.skills['other-skill']` instead of `lock.skills['9router']`.
+  The test no longer names a 9Router artifact.
+- `cli/install/force-clean.test.mjs` thresholds lowered to match the
+  skill and command surface after retirement (skills ≥66,
+  commands ≥38).
+
+### A.4 — retire 9Router skills + clean agent/command references
+
+- Deleted 17 files: 8 canonical skills (`config/skills/9router*`)
+  and 8 mirror skills (`config/claude/skills/9router*`) plus the
+  orphaned mirror `9router-web-search/SKILL.md` that had no canonical
+  pair.
+- Deleted `config/claude/commands/picker.md` — its underlying
+  `picker-proxy` command was retired in Phase A.1.
+- Rewrote `config/claude/commands/use-default.md` and
+  `config/claude/commands/use-premium.md` to derive
+  `ANTHROPIC_BASE_URL` from `${BIZAR_MODEL_ROUTER_URL}` rather than
+  hardcoding `http://localhost:20128/v1`.
+- Updated `config/claude/agents/principal-engineer.md`,
+  `help-desk.md`, and `senior-engineer.md` to drop the
+  "Prefer the 9router-web-fetch and 9router-web-search skills"
+  paragraph and replace it with a generic operator-configured-gateway
+  paragraph that does not name 9Router.
+- Updated `config/claude/agents/_shared/SKILLS.md` to drop the
+  `providers` / `9router` entry and replace it with a `providers`
+  entry documenting the provider-agnostic, env-driven contract.
+
+### Verification (A.3 + A.4)
+
+- `npm run typecheck` — clean.
+- `npm run test:node` — 708/708 pass.
+- `npm run test:sdk` — 481/481 pass.
+- `make check-arch` — 0 failed.
+- `make verify-removed-surfaces` — PASS.
+
+### Residual 9Router mentions (intentional fixtures, not shipped surface)
+
+- `cli/commands/setup-provider.test.mjs:55` — passes
+  `--gateway http://localhost:20128/v1` as test input.
+- `cli/__tests__/models-picker.test.mjs:186` — fixture input data
+  for `applyModels`, not an asserted default.
+
+### Files changed (A.3 + A.4)
+
+- 17 files deleted, 14 files modified.
+- Date: 2026-08-29.
+
 ## Complete — 10.18.0 Phase A.2: strip 9Router from shipped config + doctor + validate
 
 - Removed the three 9Router-pointed env vars (`ANTHROPIC_BASE_URL`,

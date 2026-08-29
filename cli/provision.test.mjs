@@ -280,8 +280,8 @@ describe('writeBizarSkillLock() — shared registry compatibility', () => {
     mkdirSync(skillsSrc, { recursive: true });
     mkdirSync(join(skillsSrc, 'bizar'), { recursive: true });
     writeFileSync(join(skillsSrc, 'bizar', 'SKILL.md'), '# Bizar skill');
-    mkdirSync(join(skillsSrc, '9router'), { recursive: true });
-    writeFileSync(join(skillsSrc, '9router', 'SKILL.md'), '# 9router skill');
+    mkdirSync(join(skillsSrc, 'other-skill'), { recursive: true });
+    writeFileSync(join(skillsSrc, 'other-skill', 'SKILL.md'), '# other skill');
     mkdirSync(agentsDir, { recursive: true });
   });
 
@@ -300,9 +300,9 @@ describe('writeBizarSkillLock() — shared registry compatibility', () => {
     assert.ok(existsSync(lockPath));
     const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
     assert.ok(lock.skills.bizar, 'bizar entry should exist');
-    assert.ok(lock.skills['9router'], '9router entry should exist');
+    assert.ok(lock.skills['other-skill'], 'other-skill entry should exist');
     assert.equal(lock.skills.bizar.source, 'bizar/builtin');
-    assert.equal(lock.skills['9router'].source, 'bizar/builtin');
+    assert.equal(lock.skills['other-skill'].source, 'bizar/builtin');
     assert.equal(lock.skills.bizar.pluginName, 'bizar');
     assert.ok(lock.skills.bizar.installedAt);
     assert.ok(lock.skills.bizar.updatedAt);

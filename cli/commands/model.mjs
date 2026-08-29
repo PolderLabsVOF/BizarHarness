@@ -2,36 +2,49 @@
  * cli/commands/model.mjs
  *
  * `bizar model` subcommands:
- *   list  — fetch all models from the 9Router gateway and group by provider prefix
+ *   list  — fetch all models from the configured provider gateway and group
+ *           by provider prefix.
  *
- * Gateway model discovery (CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1) makes
- * the /model picker surface only IDs prefixed with "claude" or "anthropic".
- * This command shows the FULL set including cx/, bizar/, oc/, and unprefixed IDs.
+ * The gateway URL is read from `BIZAR_MODEL_ROUTER_URL` or
+ * `ANTHROPIC_BASE_URL`. If neither is set, the command errors out with a
+ * clear message instead of guessing a default. Bizar is provider-agnostic
+ * and ships no default gateway.
+ *
+ * Gateway model discovery (CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1)
+ * makes the /model picker surface only IDs prefixed with "claude" or
+ * "anthropic". This command shows the FULL set including cx/, oc/, and
+ * unprefixed IDs.
  */
 import chalk from 'chalk';
 
 const BIZAR_MODEL_ROUTER_URL = process.env.BIZAR_MODEL_ROUTER_URL
   || process.env.ANTHROPIC_BASE_URL
-  || 'http://localhost:20128/v1';
-const ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN || 'sk_9router';
+  || null;
+const ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN || null;
 
 const PROVIDER_GROUPS = [
   'cx/', 'claude-minimax/', 'claude-qwen/', 'oc/', 'claude/', 'anthropic/',
 ];
 
 function showHelp() {
+  const gatewayDisplay = BIZAR_MODEL_ROUTER_URL ?? '(not configured)';
   console.log(`
-  bizar model — List all available models from the 9Router gateway
+  bizar model — List all available models from the provider gateway
 
   Usage:
     bizar model list         List all models grouped by provider (default)
     bizar model list --json  Emit machine-readable JSON
 
   Description:
-    Fetches GET ${BIZAR_MODEL_ROUTER_URL}/models?limit=1000
+    Fetches GET ${gatewayDisplay}/models?limit=1000
     and prints a table of provider | id | display_name.
     The /model picker inside Claude Code shows only "claude"/"anthropic" prefixed
     IDs. This command exposes the full set (cx/, claude-minimax/, claude-qwen/, oc/, etc.).
+
+  Gateway configuration:
+    Set BIZAR_MODEL_ROUTER_URL or ANTHROPIC_BASE_URL to your provider gateway
+    (e.g. https://router.example.com/v1). If neither is set, this command
+    exits with a configuration error.
 
   Flags:
     --json   Emit { providers: { "cx/": [...], ... }, total: N }
@@ -43,6 +56,11 @@ function showHelp() {
  * @returns {Promise<{ id: string, display_name?: string }[]>}
  */
 async function fetchModels() {
+  if (!BIZAR_MODEL_ROUTER_URL) {
+    throw new Error(
+      'no gateway configured — set BIZAR_MODEL_ROUTER_URL or ANTHROPIC_BASE_URL',
+    );
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3_000);
 

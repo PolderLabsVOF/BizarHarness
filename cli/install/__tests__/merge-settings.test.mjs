@@ -53,12 +53,28 @@ function runProductionWriter({ existing, force = false, env = {} } = {}) {
 }
 
 describe('writeClaudeSettings gateway environment', () => {
-  it('production writer emits the complete project gateway contract', () => {
+  it('production writer is provider-agnostic and omits gateway keys when no env is set', () => {
     const settings = runProductionWriter();
     assert.equal(settings.env.BIZAR_HOME.endsWith('/.config/bizar'), true);
-    assert.equal(settings.env.ANTHROPIC_BASE_URL, 'http://localhost:20129/v1');
-    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'http://localhost:20129/v1');
-    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
+    // Bizar ships no default provider. The writer MUST NOT auto-inject
+    // ANTHROPIC_BASE_URL, BIZAR_MODEL_ROUTER_URL, or ANTHROPIC_AUTH_TOKEN.
+    // Operators configure those via their shell environment if they want
+    // a non-default gateway.
+    assert.equal(
+      settings.env.ANTHROPIC_BASE_URL,
+      undefined,
+      'no default gateway URL — operators MUST configure ANTHROPIC_BASE_URL',
+    );
+    assert.equal(
+      settings.env.BIZAR_MODEL_ROUTER_URL,
+      undefined,
+      'no default router URL — operators MUST configure BIZAR_MODEL_ROUTER_URL',
+    );
+    assert.equal(
+      settings.env.ANTHROPIC_AUTH_TOKEN,
+      undefined,
+      'no default auth token — operators MUST configure ANTHROPIC_AUTH_TOKEN',
+    );
     // F-163 + 10.17.4 (Option A): CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY
     // is operator-controlled and ABSENT from the shipped template + writer.
     assert.equal(
@@ -69,7 +85,7 @@ describe('writeClaudeSettings gateway environment', () => {
     assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
   });
 
-  it('normal updates preserve user values and align missing gateway keys', () => {
+  it('normal updates preserve user values and omit gateway keys that were never set', () => {
     const existing = {
       env: {
         MY_CUSTOM_VAR: 'kept',
@@ -84,8 +100,23 @@ describe('writeClaudeSettings gateway environment', () => {
     assert.equal(settings.env.MY_CUSTOM_VAR, 'kept');
     assert.equal(settings.env.BIZAR_HOME, '/custom/bizar');
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
-    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://gateway.example/v1');
-    assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'sk_9router');
+    // When the operator has configured a gateway URL via ANTHROPIC_BASE_URL,
+    // the writer mirrors it to BIZAR_MODEL_ROUTER_URL so downstream routers
+    // see a consistent gateway. The writer does NOT auto-inject either key
+    // when no operator URL is configured — see the
+    // "provider-agnostic and omits gateway keys" test above.
+    assert.equal(
+      settings.env.BIZAR_MODEL_ROUTER_URL,
+      'https://gateway.example/v1',
+      'router URL mirrors ANTHROPIC_BASE_URL when the operator has configured a gateway',
+    );
+    // ANTHROPIC_AUTH_TOKEN was never set in `existing.env` so the writer
+    // MUST NOT auto-inject one.
+    assert.equal(
+      settings.env.ANTHROPIC_AUTH_TOKEN,
+      undefined,
+      'no default auth token leaked into the writer output',
+    );
     assert.equal(
       settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY,
       undefined,
@@ -111,7 +142,7 @@ describe('writeClaudeSettings gateway environment', () => {
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'user-token');
   });
 
-  it('fresh installs use explicit gateway environment and keep URLs aligned', () => {
+  it('fresh installs use explicit gateway environment and align both URLs', () => {
     const settings = runProductionWriter({
       env: {
         ANTHROPIC_BASE_URL: 'https://router.example/v1',

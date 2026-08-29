@@ -5,20 +5,25 @@ allowed-tools: Bash
 
 # /use-premium — Run this session on claude-qwen/qwen3.8-max (premium)
 
-The local model router at `http://localhost:20128/v1` exposes
-`claude-qwen/qwen3.8-max` as the premium-tier reasoning model. Premium is
-expensive — use it intentionally, not by default.
+The provider gateway you have configured exposes `claude-qwen/qwen3.8-max`
+as the premium-tier reasoning model. Bizar is provider-agnostic — set
+`BIZAR_MODEL_ROUTER_URL` (or `ANTHROPIC_BASE_URL`) to whatever gateway
+URL your operator runs, then point the model at the premium tier. Premium
+is expensive — use it intentionally, not by default.
 
 ## What it does
 
-Sets `ANTHROPIC_MODEL=claude-qwen/qwen3.8-max` and `ANTHROPIC_BASE_URL=http://localhost:20128/v1` so the entire session loop runs on the premium model. The model-router is the same one your subagents (`@mike`, `@paul`, `@carl`) already hit.
+Sets `ANTHROPIC_MODEL=claude-qwen/qwen3.8-max` and forwards
+`ANTHROPIC_BASE_URL` from your operator-configured gateway so the entire
+session loop runs on the premium model. The model-router is the same
+one your subagents (`@mike`, `@paul`, `@carl`) already hit.
 
 ## Commands
 
 ### One-shot launch (recommended)
 
 ```bash
-ANTHROPIC_BASE_URL=http://localhost:20128/v1 \
+ANTHROPIC_BASE_URL="${BIZAR_MODEL_ROUTER_URL:-http://your-gateway/v1}" \
 ANTHROPIC_MODEL=claude-qwen/qwen3.8-max \
 claude
 ```
@@ -27,7 +32,7 @@ Or with the explicit `--model` flag (Claude Code forwards it to the
 router as the model id):
 
 ```bash
-ANTHROPIC_BASE_URL=http://localhost:20128/v1 \
+ANTHROPIC_BASE_URL="${BIZAR_MODEL_ROUTER_URL:-http://your-gateway/v1}" \
 claude --model claude-qwen/qwen3.8-max
 ```
 
@@ -38,7 +43,7 @@ Add to your local override `.claude/settings.local.json`:
 ```json
 {
   "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:20128/v1",
+    "ANTHROPIC_BASE_URL": "${BIZAR_MODEL_ROUTER_URL}",
     "ANTHROPIC_MODEL": "claude-qwen/qwen3.8-max"
   }
 }

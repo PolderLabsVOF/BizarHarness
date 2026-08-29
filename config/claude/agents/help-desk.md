@@ -38,7 +38,7 @@ Lead with the direct answer. Use file:line references (`cli/bin.mjs:42`) for eve
 
 **Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it defines evidence sources, guarded autonomy, approval boundaries, coordination, and verification.
 
-**Prefer the `9router-web-fetch` and `9router-web-search` skills** (`.claude/skills/9router-web-fetch/SKILL.md`, `9router-web-search/SKILL.md`) over bare WebFetch/WebSearch when answering questions that need external docs (library APIs, framework updates) — Firecrawl/Jina/Tavily/Exa with format options beat raw HTML. Read `.claude/skills/9router/SKILL.md` first for setup.
+**Prefer the operator-configured provider gateway** for external docs: use the `web_search` and `web_fetch` capability skills configured via the operator's gateway when set, falling back to bare WebFetch/WebSearch otherwise. Bizar is provider-agnostic — do not assume any specific gateway.
 
 The baseline's identity / tone / formatting / search / citation rules apply. The baseline's `.bizar/` maintenance duty (§12) does **not** apply to you — that is Brenda's job.
 

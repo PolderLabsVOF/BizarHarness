@@ -396,8 +396,8 @@ test('after force + sync*, agents/skills/commands/hooks/rules are re-synced from
     assert.equal(r.status, 0, `child failed: ${r.stderr || r.stdout}`);
     const counts = JSON.parse(r.stdout);
     assert.ok(counts.agents >= 16, `expected ≥16 agents, got ${counts.agents}`);
-    assert.ok(counts.skills >= 74, `expected ≥74 skills, got ${counts.skills}`);
-    assert.ok(counts.commands >= 39, `expected ≥39 commands, got ${counts.commands}`);
+    assert.ok(counts.skills >= 66, `expected ≥66 skills, got ${counts.skills}`);
+    assert.ok(counts.commands >= 38, `expected ≥38 commands, got ${counts.commands}`);
     assert.ok(counts.rules >= 7, `expected ≥7 rules, got ${counts.rules}`);
     assert.ok(counts.hooks >= 30, `expected ≥30 hooks, got ${counts.hooks}`);
 

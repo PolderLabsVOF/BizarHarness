@@ -25,7 +25,9 @@ skills add owner/repo -s "skill-name" -y
 - `agent-baseline` — rules inherited by every agent.
 - `self-improvement` — `.bizar/AGENTS_SELF_IMPROVEMENT.md` protocol.
 - `skills-cli` — skill discovery and installation.
-- `providers` / `9router` — model-provider configuration.
+- `providers` — model-provider configuration (provider-agnostic; ships
+  no default gateway; operators configure via $BIZAR_MODEL_ROUTER_URL
+  or $ANTHROPIC_BASE_URL).
 - `sdk` — Bizar typed SDK and MCP integration.
 - thinking skills — structured reasoning patterns loaded only when relevant.
 
