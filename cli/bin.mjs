@@ -109,6 +109,8 @@ function showHelp() {
     restore                Restore BizarHarness from a backup
     validate               Validate the Bizar install
     setup-provider         Configure a provider in ~/.claude/settings.json (since v6.2.2 installer doesn't touch providers)
+    release-provenance     Generate SBOM + provenance + minisig for a release (audit #83)
+    verify-release         Verify a release artifact set against the pinned allowlist
     team                   Run the office-manager orchestration agent
     subagent               Run a named agent in read-only plan mode
     run                    Run Claude Code once (optionally --bg)
@@ -444,6 +446,32 @@ async function main() {
         console.error(chalk.red(`  ✗ Usage: bizar evidence <subcommand> — run 'bizar evidence --help'`));
         process.exit(EXIT_USAGE);
       }
+      break;
+    }
+
+    case 'release-provenance': {
+      const mod = await importCommand('release-provenance');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load release-provenance command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'release-provenance');
+      const code = await mod.run(cmdArgs);
+      if (typeof code === 'number') process.exit(code);
+      break;
+    }
+
+    case 'verify-release': {
+      const mod = await importCommand('verify-release');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load verify-release command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'verify-release');
+      const code = await mod.run(cmdArgs);
+      if (typeof code === 'number') process.exit(code);
       break;
     }
 

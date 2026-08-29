@@ -128,4 +128,7 @@ export {
 // EvidenceBundle, OutcomeLearnerOutcome.
 export * from "./autonomy/index.js";
 
+// Audit #83 — Release provenance: SBOM, SLSA attestation, signature.
+export * from "./release/index.js";
+
 export { SDK_VERSION } from "./version.js";

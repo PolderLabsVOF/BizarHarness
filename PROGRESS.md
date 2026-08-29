@@ -185,11 +185,65 @@ in-memory scheduler per test for determinism):
 `npm run test:node`: 820/820 (was 815, +5). `npm run typecheck`:
 clean.
 
-### In progress — Audit P1.5: SBOM + release provenance + signed-known-good pointer
+### Complete — Audit P1.5: SBOM + release provenance + signed-known-good pointer
 
-Next deliverable: per-release CycloneDX SBOM, minisign signature,
-provenance attestation per tarball; `KNOWN_GOUL_RELEASES` pin in
-`cli/commands/install.mjs`. Track under #83.
+Audit #83 (Milestone 4 "Production operations" P1). Release
+provenance is the contract between the Bizar release pipeline and
+the operator's `npm install -g @polderlabs/bizar`. The audit's
+deliverable: every release ships a CycloneDX 1.5 SBOM, a SLSA v0.2
+provenance attestation, and a minisign ed25519 signature; the
+SDK pins a `KNOWN_GOOD_RELEASES` allowlist; the install path
+verifies the artifact set against that allowlist.
+
+**SDK surface (`packages/sdk/src/release/`):**
+
+| Module | Surface |
+|---|---|
+| `sbom.ts` | `buildSbom({ name, version, toolsVersion, runtimeDependencies, devDependencies?, timestamp? })` — CycloneDX 1.5 JSON with `bomFormat`, `specVersion`, `serialNumber: urn:uuid:...`, `metadata.timestamp`, `metadata.tools[bizar-sdk@<toolsVersion>]`, `metadata.component`, `components[]` (one per dep, with `purl` and `scope`), `dependencies[]` (root → runtime graph). |
+| `provenance.ts` | `buildProvenanceAttestation({ artifactName, artifactSha256, version, gitSha, builderId?, command?, env?, materialSha256?, materialUri? })` — intoto v0.1 wrapper around an SLSA v0.2 statement. Subject is the artifact; materials reference the git sha + optional source tarball. |
+| `signature.ts` | `parseMinisign(text)` — pure-JS minisig parser (no native `minisign` needed). `verifyMinisign(artifactBytes, sig, publicKeyPem, expectedTrustedComment?)` — pure-JS ed25519 verifier. `signWithEd25519(message, privateKeyPem, keyId)` — operator-side pure-JS signing helper. |
+| `known-good-releases.ts` | `KNOWN_GOOD_RELEASES` frozen allowlist; `lookupKnownGoodRelease(version)`; `listKnownGoodVersions()`; `verifyRelease({ version, tarballBytes, sbomJson, provenanceJsonl, minisigText })` returns `{ ok, version, gitSha, minisignKeyId }` or `{ ok: false, reason: 'UNKNOWN_RELEASE' \| 'TARBALL_HASH_MISMATCH' \| 'SBOM_HASH_MISMATCH' \| 'PROVENANCE_HASH_MISMATCH' \| 'RELEASE_REVOKED' \| 'SIGNATURE_INVALID', detail? }`. |
+| `index.ts` | Re-exports the entire release surface. |
+
+**CLI surface (`cli/commands/release-provenance.mjs`, `verify-release.mjs`):**
+
+```
+bizar release-provenance --version <X.Y.Z> [--out-dir <path>] [--private-key <path>]
+  Writes <out-dir>/<version>.sbom.cdx.json
+          <out-dir>/<version>.provenance.intoto.jsonl
+          <out-dir>/<version>.minisig
+  Prints both sha256 triples so the operator can append them to KNOWN_GOOD_RELEASES.
+
+bizar verify-release --version <X.Y.Z> --tarball <path> --sbom <path> \
+                      --provenance <path> --minisig <path> [--json]
+  Exit 0 on ok, 1 on verification failure (UNKNOWN_RELEASE / TARBALL_HASH_MISMATCH / etc.), 2 on CLI misuse.
+```
+
+**Verify gate semantics (`verifyRelease` order of checks):**
+
+1. Version is in `KNOWN_GOOD_RELEASES` (else `UNKNOWN_RELEASE`).
+2. Release is not `revokedAt` (else `RELEASE_REVOKED`).
+3. Tarball sha256 matches the pinned entry.
+4. SBOM sha256 matches the pinned entry.
+5. Provenance attestation sha256 matches the pinned entry.
+6. Provenance attestation's subject digest matches the tarball sha256 (defense in depth).
+7. Provenance attestation's material digest matches the pinned git sha.
+8. Minisig signature verifies against the pinned ed25519 public key.
+
+**Bootstrap pin (`KNOWN_GOOD_RELEASES`):** the 10.18.0 mega-release is the first entry. The sha256 fields are placeholder zeros until the real tarball sha is published at release-merge time. Future releases append below; the allowlist is append-only.
+
+**Tests (`scripts/__tests__/release-provenance.test.mjs`, 15 cases):**
+
+- `buildSbom` shape: `bomFormat/specVersion/serialNumber/metadata.tools/metadata.component/components[]/dependencies[]` match the CycloneDX 1.5 spec.
+- `buildProvenanceAttestation` shape: intoto v0.1 + SLSA v0.2; subject digest + materials correct.
+- `parseMinisign` + `verifyMinisign` round-trip: an ed25519 signature over a synthetic trusted-comment line verifies correctly; tampering the artifact → `SIGNATURE_MISMATCH`.
+- `KNOWN_GOOD_RELEASES` lookup: 10.18.0 returns the pinned entry; unknown returns `null`; `listKnownGoodVersions()` is newest-first.
+- `verifyRelease` happy path: synthetic artifacts match the pinned entry → `{ ok: true, version, gitSha, minisignKeyId }`.
+- `verifyRelease` rejection paths: unknown version, tampered subject digest, empty provenance, malformed minisig — all surface stable reason codes.
+- CLI wiring: `bin.mjs` registers `release-provenance` + `verify-release` cases; `cli/commands/{release-provenance,verify-release}.mjs` export `USAGE`, `run`, and (for `release-provenance`) `buildReleaseArtifacts`.
+- `buildReleaseArtifacts` writes files to disk with 0o700 outDir.
+
+`npm run test:node`: 835/835 (was 820, +15). `npm run typecheck`: clean. `make check-arch` and `make verify-removed-surfaces`: clean.
 
 ### Pending audit items (in priority order)
 
@@ -202,7 +256,7 @@ provenance attestation per tarball; `KNOWN_GOUL_RELEASES` pin in
 | 80 | P1: hierarchical budgets (objective/phase/task/agent/model) | ✅ shipped (this commit) |
 | 81 | P1: capability-segregated authority (worker/verifier/integrator) | ✅ shipped (this commit) |
 | 82 | P1: chaos testing / deterministic fault injection | ✅ shipped (this commit) |
-| 83 | P1: SBOM + release provenance + signed-known-good pointer | in progress |
+| 83 | P1: SBOM + release provenance + signed-known-good pointer | ✅ shipped (this commit) |
 | 84 | P2: spec sprawl reduction | pending |
 | 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | pending |
 
