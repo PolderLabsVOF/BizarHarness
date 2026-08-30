@@ -182,17 +182,14 @@ export async function runTestGate() {
 
 export async function run(name, args, isHelpRequest) {
   switch (name) {
-    case 'update':
-      // `bizar update` lives in commands/install.mjs (the install/update
-      // pair share a code path). Proxy to it.
-      if (isHelpRequest) {
-        const { showUpdateHelp } = await import('./install.mjs');
-        showUpdateHelp();
-      } else {
-        const { runUpdate } = await import('./install.mjs');
-        await runUpdate(args, {});
-      }
-      break;
+    // NOTE: 'update' is intentionally NOT routed through this dispatcher.
+    // `cli/bin.mjs` dispatches 'install' / 'update' directly to
+    // `cli/commands/install.mjs`, which owns both commands (they share
+    // the same code path). The legacy branch below used to import
+    // `runUpdate` from `./install.mjs`, but that module never exported
+    // `runUpdate` — the import would throw at runtime. The branch was
+    // dead code, deleted in v10.19.6 as part of the `bizar update` audit
+    // fix.
 
     case 'audit':
       if (isHelpRequest) showAuditHelp();

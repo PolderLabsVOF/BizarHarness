@@ -327,6 +327,35 @@ source for mirrored agent instructions and verify byte equality."
 | 84 | P2: spec-sprawl reduction (schema versions + policy doc ownership + mirror parity) | ✅ shipped (this commit) |
 | 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | ✅ shipped (this commit) |
 
+## Complete — 10.19.6 patch: `bizar update` is honest — flags do what they claim
+
+**Why:** while preparing the next audit, `bizar update --dry-run --force --yes` was discovered to be functionally identical to plain `bizar update`. `cli/commands/install.mjs#update` called a legacy `runUpdate(args)` alias that ignored every flag. The settings.json union-merge path (F-183) was unreachable, `runRepair` was skipped, and the post-update `bizar doctor` check never ran. The help text also advertised `--check`, `--channel=stable|beta`, and `--all`, none of which were wired into `parseFlags` or `runInstaller`. Audit callouts: A1 (no-op flags), A2 (union-merge unreachable), A5 (post-update doctor never runs), A6 (runRepair skipped after update), A7 (help-text drift).
+
+**Fix (this commit):**
+
+- **`cli/commands/install.mjs#update`** — routes through the same `parseFlags` + `runInstaller` + `runRepair` pipeline as `install()`. Forwarded flags: `--dry-run`, `--force|--deep`, `--yes|-y|--non-interactive`. The legacy `runUpdate` import was removed.
+- **`cli/commands/install.mjs#runUpdateWithFlags`** (new) — testable, dependency-injected core of `update()`. Signature: `runUpdateWithFlags({ args, runInstaller, parseFlags, runRepair })`. Default arguments bind to the real modules; tests inject stubs.
+- **`cli/commands/install.mjs#runPostInstallerRepair`** (new) — extracted shared teardown so `install()` and `update()` share the same bin-symlink repair block.
+- **`cli/commands/install.mjs#install`** — symmetric exit-code propagation added (`process.exit(1)` on `runInstaller` returning `{ ok: false }`).
+- **`cli/commands/install.mjs#showUpdateHelp`** — rewrote to advertise ONLY flags that actually work. Dropped `--check`, `--channel=stable|beta`, `--all` (none were wired up). Updated synopsis, behavior prose, and examples.
+- **`cli/commands/util.mjs`** — deleted the dead `case 'update':` branch in the dispatcher (it imported `runUpdate` from `./install.mjs`, which never exported it; the import would have thrown at runtime if reached).
+
+**Regression tests:**
+
+- **`cli/install/update-wrapper.test.mjs`** (new, 10 cases) — pins `runUpdateWithFlags` wiring: every documented flag is forwarded; `runRepair({})` runs once after `runInstaller` even under `--dry-run` (A6 regression); `runInstaller` returning `{ ok: false }` triggers `process.exit(1)` via `mock.method(process, 'exit', …)`. Uses `mock.fn` for dependency stubs.
+- **`cli/install/prune.test.mjs`** — extended `parseFlags` block with two new contract tests (exhaustive flag pin + defaults pin). Existing two tests stay.
+- **`cli/commands/__tests__/update-help-contract.test.mjs`** (new) — help-text fence test. Reads `cli/commands/install.mjs`, extracts the `showUpdateHelp` template literal, asserts every `--<word>` token is recognized by `parseFlags`, and asserts `--check` / `--channel` / `--all` are absent. Pairs with the parser-side pin in `cli/install/prune.test.mjs` to catch future help/parser drift.
+
+**Tests run (from this worktree, `agent-aa7aaff144286d39a`):**
+
+- `node --test --test-concurrency=1 cli/install/update-wrapper.test.mjs` — 10/10 pass (new file).
+- `node --test --test-concurrency=1 cli/install/prune.test.mjs` — all cases pass except the pre-existing `force=true accepted (no throw)` failure on `.git/hooks` mkdir (worktree-env limitation, unrelated to this change).
+- `node --test --test-concurrency=1 cli/install/force-clean.test.mjs` — passes.
+- `node --test --test-concurrency=1 cli/install/__tests__/merge-settings.test.mjs` — passes (union-merge path preserved).
+- `node --test --test-concurrency=1 cli/install/index.test.mjs` — passes (existing `runInstaller({ mode: 'update' })` test still green).
+- `node --test --test-concurrency=1 cli/commands/__tests__/update-help-contract.test.mjs` — passes (new file).
+- `tsc --noEmit` — clean (no SDK surface changes in this commit, but verified for completeness).
+
 ## Complete — 10.19.1 patch: `bin.mjs` help dispatcher routing
 
 **Why:** while verifying the installer for v10.19.0 features, `bizar bench --help` crashed with `subargs.find is not a function`. Root cause: `cli/bin.mjs`'s `--help` dispatcher (introduced pre-v10.18.0 to forward `--help` to `util.mjs` / `install.mjs` / `claude-cmd.mjs` / `migrate.mjs`) had a catch-all `else` branch that called `mod.run(cmd, cmdArgs, true)` for *every* command — including direct command modules like `bench`, `release-provenance`, `verify-release`, `spec-list` that export a single-arg `run(subargs)`. The dispatcher passed the literal command name (`"bench"`) as the first argument, and `subargs.includes('--help')` blew up.

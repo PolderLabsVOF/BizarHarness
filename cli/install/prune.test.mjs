@@ -181,6 +181,50 @@ describe('parseFlags() shared between install and provisioner', () => {
     assert.equal(parseFlags([]).mode, 'install');
     assert.equal(parseFlags(['--update']).mode, 'update');
   });
+
+  // v10.19.6 — exhaustive flag-contract pin. Every flag advertised
+  // anywhere in `bizar install` / `bizar update` help text MUST be
+  // recognized by parseFlags. If a future refactor drops a flag from
+  // the parser without also dropping it from the help text, one of
+  // these assertions will fail. Pairs with
+  // cli/commands/__tests__/update-help-contract.test.mjs which pins
+  // the help-text side.
+  test('exhaustive parseFlags contract — every advertised flag is recognized', async () => {
+    const { parseFlags } = await import('../provision.mjs');
+
+    // --dry-run (install + update)
+    assert.equal(parseFlags(['--dry-run']).dryRun, true, '--dry-run');
+
+    // --force and its --deep alias
+    const force = parseFlags(['--force']);
+    assert.equal(force.force, true, '--force');
+    assert.equal(parseFlags(['--deep']).force, true, '--deep (alias for --force)');
+
+    // --yes and its -y / --non-interactive aliases
+    assert.equal(parseFlags(['--yes']).yes, true, '--yes');
+    assert.equal(parseFlags(['-y']).yes, true, '-y');
+    assert.equal(parseFlags(['--non-interactive']).yes, true, '--non-interactive (alias for --yes)');
+
+    // --no-service
+    assert.equal(parseFlags(['--no-service']).start, false, '--no-service');
+
+    // --mode variants
+    assert.equal(parseFlags(['--mode=install']).mode, 'install', '--mode=install');
+    assert.equal(parseFlags(['--mode=update']).mode, 'update', '--mode=update');
+    assert.equal(parseFlags(['--mode=install-only-system']).mode, 'install-only-system', '--mode=install-only-system');
+
+    // --update legacy alias
+    assert.equal(parseFlags(['--update']).mode, 'update', '--update (legacy alias for --mode=update)');
+  });
+
+  test('parseFlags defaults match the help text', async () => {
+    const { parseFlags } = await import('../provision.mjs');
+    const opts = parseFlags([]);
+    assert.equal(opts.mode, 'install', 'default mode is install');
+    assert.equal(opts.dryRun, false, 'default dryRun is false');
+    assert.equal(opts.force, false, 'default force is false');
+    assert.equal(opts.yes, false, 'default yes is false');
+  });
 });
 
 console.log('  prune.test.mjs loaded — run with: node --test cli/install/prune.test.mjs');

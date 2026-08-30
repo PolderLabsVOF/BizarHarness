@@ -129,7 +129,8 @@ function showHelp() {
     bizar install
     bizar audit
     bizar doctor
-    bizar update --all --dry-run
+    bizar update --dry-run                   # Preview what would change
+    bizar update --force --yes               # Non-interactive full re-emit
 
   Run \`bizar <command> --help\` for per-command help.
 
