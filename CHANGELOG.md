@@ -28,6 +28,67 @@ refused to honour the malformed key.
   rewritten to assert `{ options: [{ model, label, description? }] }` shape.
   Added one new test covering `description` surfacing.
 
+## [10.19.5] - 2026-08-30
+
+`SessionStart` picker-sync hook — `/model` picker survives Claude Code rewrites.
+
+10.19.4 fixed the `modelPicker` schema, but the picker kept disappearing
+after every Claude Code session because Claude Code's `/model` picker
+rewrites `~/.claude/settings.json` on each user pick and the rewrite
+drops `modelPicker`, replaces `model` with the dead gateway alias
+(`claude-minimax/MiniMax-M3[1m]`), and leaves a single self-map in
+`modelOverrides`. The operator's picker therefore reset to the gateway
+default between every Claude Code session, and `model` was pinned to a
+model the gateway rejects with `model_not_found`.
+
+### Fixed
+
+- **`config/claude/hooks/sessionstart-model-sync.mjs`** (new) —
+  SessionStart hook that re-applies the operator's `userSelected.models`
+  block from `~/.config/bizar/config/claude/model-router.json` into
+  `~/.claude/settings.json` under three keys: `modelPicker` (rebuilt as
+  `{ options: [{ model, label }] }` in pick order), `modelOverrides`
+  (rebuilt as a self-map for every live pick), and `model` (reset to the
+  first live pick if and only if the current value starts with the dead
+  `claude-` namespace prefix). The hook is registered into the
+  `session-start` chain in `cli/commands/hook.mjs` so it runs once at
+  every Claude Code session start.
+- **`cli/commands/hook.mjs`** — `HOOK_PROGRAMS` now maps
+  `sessionstart-model-sync` to the new hook file; `EVENT_CHAINS.session-start`
+  fires the new leaf ahead of `sessionstart-prime` so the picker is
+  rebuilt before the briefing is built.
+- The new hook reads the operator's picks **dynamically** from
+  `~/.config/bizar/config/claude/model-router.json#userSelected` —
+  it never types out a model list, never hardcodes labels, and never
+  hardcodes live-vs-stale classification. It reuses the same
+  `deriveModelLabel` logic that powers `applyModelPicker` (drop the
+  leading provider segment, split on word boundaries) so picker labels
+  stay in lock-step with `bizar models`. Operator pick changes
+  automatically propagate on the next SessionStart — no SDK release
+  required.
+
+### Scope guarantee
+
+The hook ONLY touches `modelPicker`, `modelOverrides`, and `model`.
+Every other operator key (`env`, `mcpServers`, `permissions`, `hooks`,
+…) is left untouched, and the source-of-truth file
+(`~/.config/bizar/config/claude/model-router.json`) is also never
+written by the hook. Failure modes (corrupt router, missing router,
+unwritable settings, malformed JSON) are logged to
+`~/.config/bizar/hook-logs/model-sync-DATE.jsonl` and swallowed — the
+hook always exits 0, so a broken sync never blocks session start.
+
+### Added
+
+- **`config/claude/hooks/__tests__/sessionstart-model-sync.test.mjs`** —
+  9 new tests covering the happy path (3 picks → 3 picker options +
+  3 self-maps + dead-`claude-` alias reset to first pick), the
+  derived-label contract (`openrouter/nvidia/...:free` →
+  `nvidia nemotron 3 ultra 550b a55b free`), operator-key preservation
+  (`env` / `mcpServers` / `permissions` left verbatim), missing-router
+  noop, malformed-router swallow, missing-settings auto-create, and a
+  source-fence regression check on the contract strings.
+
 ## [10.19.3] - 2026-08-30
 
 `/model` picker now driven by operator picks, not gateway discovery.

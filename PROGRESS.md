@@ -347,6 +347,37 @@ source for mirrored agent instructions and verify byte equality."
 
 **Tests:** `npm run test:node`: 886/886 (was 879, +7). `npm run typecheck`: clean. `npm run test:sdk`: clean.
 
+## Complete — 10.19.5 patch: SessionStart picker-sync hook
+
+**Why:** right after 10.19.4 shipped the corrected `modelPicker = { options: [{ model, label }] }` schema, Claude Code's `/model` picker rewrote `~/.claude/settings.json` on the operator's next pick and the file ended up in a broken state: `model = "claude-minimax/MiniMax-M3[1m]"` (dead gateway alias, `model_not_found` at runtime), `modelPicker = null` (key deleted), `modelOverrides = { "claude-minimax/MiniMax-M3": "claude-minimax/MiniMax-M3[1m]" }` (only the dead self-map remained). The operator's picker therefore reset to the gateway default after every Claude Code session.
+
+**Fix (this commit):**
+
+- New `config/claude/hooks/sessionstart-model-sync.mjs` (149 lines) — SessionStart hook that re-applies the operator's `userSelected.models` block from `~/.config/bizar/config/claude/model-router.json` into `~/.claude/settings.json` under three keys: `modelPicker = { options: [...] }` (in pick order, with `deriveModelLabel`-style labels), `modelOverrides = { id: id }` (self-map for every live pick), and `model` (reset to the first live pick only if the current value starts with the dead `claude-` namespace prefix).
+- `cli/commands/hook.mjs` — `HOOK_PROGRAMS` adds `sessionstart-model-sync: 'sessionstart-model-sync.mjs'`; `EVENT_CHAINS.session-start` fires the new leaf before `sessionstart-prime` so the picker is rebuilt before the briefing is built.
+- The hook reads picks **dynamically** from `userSelected.models` — no hardcoded model list, no hardcoded label table, no hardcoded live-prefix set. Operator pick changes automatically propagate on the next SessionStart, with no SDK release required. The hook reuses the same drop-provider-segment / split-on-word-boundaries label rule that `cli/commands/models.mjs#deriveModelLabel` already implements for the picker.
+- Scope guarantee: the hook ONLY writes `modelPicker`, `modelOverrides`, and `model`. `env`, `mcpServers`, `permissions`, `hooks`, and every other operator key is left verbatim. The source-of-truth router file (`~/.config/bizar/config/claude/model-router.json`) is also never written by the hook.
+- Failure policy: advisory hook, always exits 0. Every failure mode (corrupt router, missing router, missing settings, malformed JSON) is logged to `~/.config/bizar/hook-logs/model-sync-DATE.jsonl` and swallowed. A broken sync must never block session start.
+
+**Regression test:** `config/claude/hooks/__tests__/sessionstart-model-sync.test.mjs` (new, 9 cases). Each test stages a temp HOME + `BIZAR_MODEL_ROUTER_CONFIG` so it never touches the real operator settings.json. Coverage:
+- 3 picks → 3 picker options + 3 self-maps + dead `claude-*` alias reset to first pick, with `env` / `mcpServers` / `permissions` preserved verbatim.
+- `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free` → `nvidia nemotron 3 ultra 550b a55b free` label (multi-segment derivation).
+- Operator-pinned live `model` (e.g. `minimax/MiniMax-M2.7`) is left alone — the hook only resets dead `claude-*` aliases.
+- Missing-router, malformed-router, missing-settings — all silently noop (exit 0, JSON payload).
+- Source-fence regression check pins `modelPicker = { options ... }`, `modelOverrides = Object.fromEntries(...)`, and `startsWith('claude-')` to the hook source so future refactors can't silently break the contract.
+
+**Tests run (from this worktree, `agent-a7e32c6d59f281505`):**
+
+- `node --test config/claude/hooks/__tests__/sessionstart-model-sync.test.mjs` — **9/9 pass** (new file).
+- `node --test --test-concurrency=1 cli/__tests__/models-namespace-sync.test.mjs` — **23/23 pass** (regression of the Part A `applyModelPicker`/`applyModelOverrides` contract).
+- `node --test --test-concurrency=1 cli/__tests__/models-{cli,picker,picker-tty,picker-context,persists-under-bizar-home,mirror-shipped}.test.mjs` — **73/73 pass**.
+- `node --test --test-concurrency=1 config/claude/hooks/__tests__/sessionstart-model-sync.test.mjs config/claude/hooks/__tests__/sessionstart-prime.test.mjs config/claude/hooks/__tests__/bizar-hook-wrapper.test.mjs` — **27/27 pass**.
+- `node --test --test-concurrency=1 cli/__tests__/hook-portability.test.mjs` — **7/7 pass** (ensures `EVENT_CHAINS` key set still matches the portability contract after the `sessionstart-model-sync` insertion).
+- `tsc --noEmit` against the worktree — clean.
+- `bash scripts/clean-state-check.sh` — **5/5 dimensions pass**.
+- VCR check (`bun -e '...feature_list.json...'`) — **74/74 passing** (1.000).
+- Part A end-to-end: `applyModelPicker` + `applyModelOverrides` wrote 9 picker options + 9 self-maps + `model = "minimax/MiniMax-M3"` to `/home/drb0rk/.claude/settings.json`; python3 verification (`model == 'minimax/MiniMax-M3'`, no `[1m]` suffix, `modelPicker.options.length === 9`, `modelOverrides` count === 9) — clean.
+
 ## Complete — 10.18.0 mega-release published to npm
 
 **Release:** `@polderlabs/bizar@10.18.0` is live on the public npm registry (shasum `f262363991df9927a0ec21e5703d3a57c9d1fe54`, 345 files, 652.9 kB tarball). Git tag `v10.18.0` pushed. Rollup commit `1c2cdfe chore(release): bump to v10.18.0 (mega-release rollup)` on origin/master.

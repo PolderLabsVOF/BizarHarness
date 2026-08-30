@@ -40,6 +40,7 @@ export const HOOK_PROGRAMS = Object.freeze({
   'pretooluse-bash': 'pretooluse-bash.mjs',
   'pretooluse-editwrite': 'pretooluse-editwrite.mjs',
   'sessionend-recall': 'sessionend-recall.mjs',
+  'sessionstart-model-sync': 'sessionstart-model-sync.mjs',
   'sessionstart-prime': 'sessionstart-prime.mjs',
   'simplify-guard': 'simplify-guard.mjs',
   telemetry: 'telemetry.mjs',
@@ -61,6 +62,7 @@ export const EVENT_CHAINS = Object.freeze({
   ]),
   'session-start': Object.freeze([
     'control-inbox',
+    'sessionstart-model-sync',
     'sessionstart-prime',
     'persistent-mode',
     'telemetry',
