@@ -299,7 +299,7 @@ test('deriveModelLabel: empty / invalid input returns ""', () => {
 
 // ── applyModelPicker (10.19.3 — drives /model without gateway discovery) ─
 
-test('applyModelPicker: writes a modelPicker array of {id,label} entries', () => {
+test('applyModelPicker: writes modelPicker as {options:[{model,label}]}', () => {
   const cwd = makeCwd();
   try {
     const settingsPath = tmpSettingsPath(cwd);
@@ -310,12 +310,14 @@ test('applyModelPicker: writes a modelPicker array of {id,label} entries', () =>
       liveIds: ['minimax/MiniMax-M3', 'codex/gpt-5.6-sol'],
     });
     assert.equal(result.wrote, true);
-    assert.deepEqual(result.entries, [
-      { id: 'minimax/MiniMax-M3', label: 'MiniMax M3' },
-      { id: 'codex/gpt-5.6-sol', label: 'gpt 5.6 sol' },
+    assert.deepEqual(result.options, [
+      { model: 'minimax/MiniMax-M3', label: 'MiniMax M3' },
+      { model: 'codex/gpt-5.6-sol', label: 'gpt 5.6 sol' },
     ]);
     const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
-    assert.deepEqual(back.modelPicker, result.entries);
+    // Per Claude Code schema: modelPicker MUST be an object with `options`,
+    // not a bare array — the runtime rejects top-level arrays.
+    assert.deepEqual(back.modelPicker, { options: result.options });
     assert.equal(back.env.ANTHROPIC_AUTH_TOKEN, 'tok');
   } finally {
     rmSync(cwd, { recursive: true, force: true });
@@ -332,25 +334,25 @@ test('applyModelPicker: filters out stale picks (live-only) and reports them', (
       pickedIds: ['minimax/MiniMax-M3', 'a/1'],
       liveIds: ['minimax/MiniMax-M3'],
     });
-    assert.deepEqual(result.entries, [{ id: 'minimax/MiniMax-M3', label: 'MiniMax M3' }]);
+    assert.deepEqual(result.options, [{ model: 'minimax/MiniMax-M3', label: 'MiniMax M3' }]);
     assert.deepEqual(result.skippedStale, ['a/1']);
     const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
-    assert.equal(back.modelPicker.length, 1);
+    assert.equal(back.modelPicker.options.length, 1);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
 });
 
-test('applyModelPicker: empty picks writes an empty array (preserves the key)', () => {
+test('applyModelPicker: empty picks writes {options:[]} (preserves the key)', () => {
   const cwd = makeCwd();
   try {
     const settingsPath = tmpSettingsPath(cwd);
-    writeFileSync(settingsPath, JSON.stringify({ modelPicker: [{ id: 'old', label: 'Old' }] }, null, 2));
+    writeFileSync(settingsPath, JSON.stringify({ modelPicker: { options: [{ model: 'old', label: 'Old' }] } }, null, 2));
     const result = applyModelPicker({ settingsJsonPath: settingsPath, pickedIds: [], liveIds: [] });
     assert.equal(result.wrote, true);
-    assert.deepEqual(result.entries, []);
+    assert.deepEqual(result.options, []);
     const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
-    assert.deepEqual(back.modelPicker, []);
+    assert.deepEqual(back.modelPicker, { options: [] });
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -370,10 +372,27 @@ test('applyModelPicker: uses profile.name when present (gateway-reported display
       },
       liveIds: ['minimax/MiniMax-M3', 'qct/qwen3.8-max-preview'],
     });
-    assert.deepEqual(result.entries, [
-      { id: 'minimax/MiniMax-M3', label: 'MiniMax M3 (operator)' },
-      { id: 'qct/qwen3.8-max-preview', label: 'Qwen3.8 Max Preview' },
+    assert.deepEqual(result.options, [
+      { model: 'minimax/MiniMax-M3', label: 'MiniMax M3 (operator)' },
+      { model: 'qct/qwen3.8-max-preview', label: 'Qwen3.8 Max Preview' },
     ]);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('applyModelPicker: surfaces profile.description when present', () => {
+  const cwd = makeCwd();
+  try {
+    const settingsPath = tmpSettingsPath(cwd);
+    writeFileSync(settingsPath, '{}');
+    const result = applyModelPicker({
+      settingsJsonPath: settingsPath,
+      pickedIds: ['minimax/MiniMax-M3'],
+      profiles: { 'minimax/MiniMax-M3': { description: 'Strongest reasoning on the gateway.' } },
+      liveIds: ['minimax/MiniMax-M3'],
+    });
+    assert.equal(result.options[0].description, 'Strongest reasoning on the gateway.');
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -398,7 +417,7 @@ test('applyModelPicker: refuses to overwrite a corrupt settings.json', () => {
   }
 });
 
-test('bizar models --set populates modelPicker in settings.json', async () => {
+test('bizar models --set populates modelPicker.options in settings.json', async () => {
   const srv = createServer((req, res) => {
     if (req.url.startsWith('/models')) {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -434,12 +453,15 @@ test('bizar models --set populates modelPicker in settings.json', async () => {
       );
       assert.equal(code, 0, `expected 0, got ${code}; stderr=${stderr}`);
       const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
-      // The modelPicker must list both picks with derived labels so Claude
-      // Code's /model picker surfaces them without gateway discovery.
-      assert.deepEqual(back.modelPicker, [
-        { id: 'minimax/MiniMax-M3', label: 'MiniMax M3' },
-        { id: 'codex/gpt-5.6-sol', label: 'gpt 5.6 sol' },
-      ]);
+      // The modelPicker MUST be an object with an `options` array, each
+      // entry using `model` (not `id`) — Claude Code's schema rejects the
+      // top-level array form.
+      assert.deepEqual(back.modelPicker, {
+        options: [
+          { model: 'minimax/MiniMax-M3', label: 'MiniMax M3' },
+          { model: 'codex/gpt-5.6-sol', label: 'gpt 5.6 sol' },
+        ],
+      });
       // Other settings.json fields are preserved.
       assert.equal(back.env.ANTHROPIC_AUTH_TOKEN, 'tok');
       // modelOverrides still carries the self-map for unrecognized_model

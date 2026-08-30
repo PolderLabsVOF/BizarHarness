@@ -1,5 +1,33 @@
 # Changelog
 
+## [10.19.4] - 2026-08-30
+
+`/model` picker schema fix — `modelPicker` is an OBJECT, not an array.
+
+10.19.3 wired the picker sync but got the `modelPicker` shape wrong. Claude
+Code's settings schema requires `modelPicker: { options: [{ model, label?,
+description? }] }`; 10.19.3 wrote a bare top-level array
+`[ { id, label } ]`. The result was a `"modelPicker" must be an object with
+an "options" array …; received array. This field was ignored.` diagnostic at
+startup and no picker contents. The sync itself worked — Claude Code just
+refused to honour the malformed key.
+
+### Fixed
+
+- **`cli/commands/models.mjs#applyModelPicker`** — now writes
+  `settings.modelPicker = { options: [...] }` (object, not array). Each row
+  uses `model` (not `id`) as the field name, matching Claude Code's `Settings
+  { model, label?, description? }` per-option schema. Adds optional
+  `description` rendering when the gateway profile carries one.
+- **`cli/commands/models.mjs#run`** — picker-sync log line now reports
+  `${picker.options.length}` rows (was `${picker.entries.length}`).
+
+### Changed
+
+- **`cli/__tests__/models-namespace-sync.test.mjs`** — 10 existing tests
+  rewritten to assert `{ options: [{ model, label, description? }] }` shape.
+  Added one new test covering `description` surfacing.
+
 ## [10.19.3] - 2026-08-30
 
 `/model` picker now driven by operator picks, not gateway discovery.

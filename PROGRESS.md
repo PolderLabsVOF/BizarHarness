@@ -3875,3 +3875,31 @@ help line are gone; `bin.mjs` no longer dispatches to `cli/commands/picker-proxy
 
 **Next:** A.2 (settings.json + model-router.json gateway-default strip) and A.3 (provision.mjs
 gateway-fallback strip) and A.4 (agent prompts + feature ledger strip) — same parallel/direct mode.
+
+## Complete — 10.19.4 hotfix: `modelPicker` schema shape
+
+`/model` picker was wired by 10.19.3 but used the wrong JSON shape. Claude
+Code's settings reference requires `modelPicker: { options: [{ model, label?,
+description? }] }`; the 10.19.3 write produced a bare top-level array
+`[ { id, label } ]`. Claude Code silently ignored the key and surfaced the
+diagnostic: `modelPicker: "modelPicker" must be an object with an "options"
+array …; received array. This field was ignored.`
+
+### What changed
+
+- `cli/commands/models.mjs#applyModelPicker` now writes
+  `settings.modelPicker = { options: [...] }` with each row keyed by `model`
+  (was `id`). `description` is added when the gateway profile carries one.
+- `cli/__tests__/models-namespace-sync.test.mjs` — all picker-shape tests
+  rewritten to assert the object/`options` schema; new description test added.
+- `~/.claude/settings.json` rewritten in-place with the corrected shape
+  (9 live IDs, derived labels) so the operator no longer sees the diagnostic.
+
+### Evidence
+
+- `node --test cli/__tests__/models-namespace-sync.test.mjs` → 23 pass / 0 fail.
+- `python3 -c "import json; d=json.load(open('/home/drb0rk/.claude/settings.json')); assert isinstance(d['modelPicker'], dict); assert isinstance(d['modelPicker']['options'], list); print(len(d['modelPicker']['options']))"`
+  → `9`.
+
+**Next:** standard release flow — `make check`, `make test`, `npm run typecheck`,
+tag `v10.19.4`, push `origin/master --follow-tags`, `npm publish --access public`.

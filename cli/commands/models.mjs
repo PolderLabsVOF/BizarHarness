@@ -634,23 +634,23 @@ export function deriveModelLabel(modelId, profile) {
 }
 
 /**
- * Sync `userSelected.models` into Claude Code's `modelPicker` array
+ * Sync `userSelected.models` into Claude Code's `modelPicker` setting
  * (settings.json). The picker is what populates `/model` — `modelOverrides`
  * alone only silences diagnostics, it does NOT add entries to the picker.
  *
- * Per Claude Code's settings reference: `modelPicker` is an array of
- * `{ id, label }` entries that replaces the gateway-discovered picker
- * contents. Scope is User-or-managed (settings.json is in scope). Each
- * entry preserves the operator's pick order from `userSelected.models`.
+ * Per Claude Code's settings reference: `modelPicker` is an OBJECT with an
+ * `options` array. Each option has `{ model, label?, description? }`.
+ * Scope is User-or-managed (settings.json is in scope). The `options`
+ * array preserves the operator's pick order from `userSelected.models`.
  *
  * Behavior:
  *   - Reads settings.json; preserves every other field (env, mcpServers,
  *     permissions, hooks, etc.).
- *   - Writes `modelPicker` as an array of `{ id, label }`.
+ *   - Writes `modelPicker = { options: [{ model, label }] }`.
  *   - Filters out picks the live gateway rejects (same stale-ID contract as
  *     `applyModelOverrides`); the surviving picks fill the picker.
- *   - Empty pick list → writes `modelPicker: []` so the picker falls back
- *     to whatever Claude Code's defaults surface.
+ *   - Empty pick list → writes `modelPicker: { options: [] }` so Claude
+ *     Code falls back to its built-in picker.
  *   - Atomic replace via temp-file + rename (matches `applyModels`).
  *   - Refuses to overwrite a corrupt settings.json.
  *   - When `settingsJsonPath === null`, returns a no-op (tests).
@@ -663,7 +663,7 @@ export function deriveModelLabel(modelId, profile) {
  * }} opts
  * @returns {{
  *   wrote: boolean,
- *   entries: Array<{id: string, label: string}>,
+ *   options: Array<{model: string, label: string, description?: string}>,
  *   skippedStale: string[],
  *   settingsPath: string|null,
  * }}
@@ -673,13 +673,20 @@ export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, l
     ? join(homedir(), '.claude', 'settings.json')
     : settingsJsonPath;
   if (path === null) {
-    return { wrote: false, entries: [], skippedStale: [], settingsPath: null };
+    return { wrote: false, options: [], skippedStale: [], settingsPath: null };
   }
   const live = new Set(Array.isArray(liveIds) ? liveIds : []);
   const picks = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
   const surviving = live.size === 0 ? picks : picks.filter((id) => live.has(id));
   const skipped = live.size === 0 ? [] : picks.filter((id) => !live.has(id));
-  const entries = surviving.map((id) => ({ id, label: deriveModelLabel(id, profiles?.[id]) }));
+  const options = surviving.map((id) => {
+    const profile = profiles?.[id];
+    const label = deriveModelLabel(id, profile);
+    const option = { model: id, label };
+    const description = profile && typeof profile.description === 'string' && profile.description.trim();
+    if (description) option.description = description.trim();
+    return option;
+  });
 
   let settings = {};
   if (existsSync(path)) {
@@ -687,12 +694,12 @@ export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, l
       const parsed = JSON.parse(readFileSync(path, 'utf8'));
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) settings = parsed;
     } catch {
-      return { wrote: false, entries: [], skippedStale: skipped, settingsPath: path };
+      return { wrote: false, options: [], skippedStale: skipped, settingsPath: path };
     }
   }
-  settings.modelPicker = entries;
+  settings.modelPicker = { options };
   writeAtomic(path, JSON.stringify(settings, null, 2) + '\n');
-  return { wrote: true, entries, skippedStale: skipped, settingsPath: path };
+  return { wrote: true, options, skippedStale: skipped, settingsPath: path };
 }
 
 // ── F-190 / IMP-017 refresh + operator-override preservation ────────────────
@@ -1654,7 +1661,7 @@ export async function run(name, args, isHelpRequest) {
       console.log(chalk.yellow(`    Settings sync skipped ${sync.skippedStale.length} stale id(s): ${sync.skippedStale.join(', ')}`));
     }
     if (picker.wrote) {
-      console.log(chalk.dim(`    /model picker populated with ${picker.entries.length} entr${picker.entries.length === 1 ? 'y' : 'ies'}`));
+      console.log(chalk.dim(`    /model picker populated with ${picker.options.length} entr${picker.options.length === 1 ? 'y' : 'ies'}`));
     }
   }
   return true;
