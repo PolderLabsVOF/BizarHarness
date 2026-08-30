@@ -22,6 +22,8 @@ import { join } from 'node:path';
 import {
   applyModels,
   applyModelOverrides,
+  applyModelPicker,
+  deriveModelLabel,
   partitionStalePicks,
   classifyKind,
 } from '../commands/models.mjs';
@@ -264,6 +266,185 @@ test('bizar models --set syncs picks to a temp settings.json', async () => {
       const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
       assert.equal(back.modelOverrides['minimax/MiniMax-M3'], 'minimax/MiniMax-M3');
       assert.equal(back.modelOverrides['codex/gpt-5.6-sol'], 'codex/gpt-5.6-sol');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  } finally {
+    await new Promise((r) => srv.close(r));
+  }
+});
+
+// ── deriveModelLabel ─────────────────────────────────────────────────────
+
+test('deriveModelLabel: drops the provider segment and joins word boundaries with spaces', () => {
+  assert.equal(deriveModelLabel('minimax/MiniMax-M3'), 'MiniMax M3');
+  assert.equal(deriveModelLabel('codex/gpt-5.6-sol'), 'gpt 5.6 sol');
+  assert.equal(deriveModelLabel('qct/qwen3.8-max-preview'), 'qwen3.8 max preview');
+  assert.equal(deriveModelLabel('openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'), 'nvidia nemotron 3 ultra 550b a55b free');
+  assert.equal(deriveModelLabel('a/1'), '1');
+});
+
+test('deriveModelLabel: profile.name wins over the ID-derived fallback', () => {
+  assert.equal(
+    deriveModelLabel('minimax/MiniMax-M3', { name: 'MiniMax M3 (preview)' }),
+    'MiniMax M3 (preview)',
+  );
+});
+
+test('deriveModelLabel: empty / invalid input returns ""', () => {
+  assert.equal(deriveModelLabel(''), '');
+  assert.equal(deriveModelLabel(null), '');
+  assert.equal(deriveModelLabel(undefined), '');
+});
+
+// ── applyModelPicker (10.19.3 — drives /model without gateway discovery) ─
+
+test('applyModelPicker: writes a modelPicker array of {id,label} entries', () => {
+  const cwd = makeCwd();
+  try {
+    const settingsPath = tmpSettingsPath(cwd);
+    writeFileSync(settingsPath, JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'tok' } }, null, 2));
+    const result = applyModelPicker({
+      settingsJsonPath: settingsPath,
+      pickedIds: ['minimax/MiniMax-M3', 'codex/gpt-5.6-sol'],
+      liveIds: ['minimax/MiniMax-M3', 'codex/gpt-5.6-sol'],
+    });
+    assert.equal(result.wrote, true);
+    assert.deepEqual(result.entries, [
+      { id: 'minimax/MiniMax-M3', label: 'MiniMax M3' },
+      { id: 'codex/gpt-5.6-sol', label: 'gpt 5.6 sol' },
+    ]);
+    const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.deepEqual(back.modelPicker, result.entries);
+    assert.equal(back.env.ANTHROPIC_AUTH_TOKEN, 'tok');
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('applyModelPicker: filters out stale picks (live-only) and reports them', () => {
+  const cwd = makeCwd();
+  try {
+    const settingsPath = tmpSettingsPath(cwd);
+    writeFileSync(settingsPath, '{}');
+    const result = applyModelPicker({
+      settingsJsonPath: settingsPath,
+      pickedIds: ['minimax/MiniMax-M3', 'a/1'],
+      liveIds: ['minimax/MiniMax-M3'],
+    });
+    assert.deepEqual(result.entries, [{ id: 'minimax/MiniMax-M3', label: 'MiniMax M3' }]);
+    assert.deepEqual(result.skippedStale, ['a/1']);
+    const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.equal(back.modelPicker.length, 1);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('applyModelPicker: empty picks writes an empty array (preserves the key)', () => {
+  const cwd = makeCwd();
+  try {
+    const settingsPath = tmpSettingsPath(cwd);
+    writeFileSync(settingsPath, JSON.stringify({ modelPicker: [{ id: 'old', label: 'Old' }] }, null, 2));
+    const result = applyModelPicker({ settingsJsonPath: settingsPath, pickedIds: [], liveIds: [] });
+    assert.equal(result.wrote, true);
+    assert.deepEqual(result.entries, []);
+    const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.deepEqual(back.modelPicker, []);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('applyModelPicker: uses profile.name when present (gateway-reported display name)', () => {
+  const cwd = makeCwd();
+  try {
+    const settingsPath = tmpSettingsPath(cwd);
+    writeFileSync(settingsPath, '{}');
+    const result = applyModelPicker({
+      settingsJsonPath: settingsPath,
+      pickedIds: ['minimax/MiniMax-M3', 'qct/qwen3.8-max-preview'],
+      profiles: {
+        'minimax/MiniMax-M3': { name: 'MiniMax M3 (operator)' },
+        'qct/qwen3.8-max-preview': { name: 'Qwen3.8 Max Preview' },
+      },
+      liveIds: ['minimax/MiniMax-M3', 'qct/qwen3.8-max-preview'],
+    });
+    assert.deepEqual(result.entries, [
+      { id: 'minimax/MiniMax-M3', label: 'MiniMax M3 (operator)' },
+      { id: 'qct/qwen3.8-max-preview', label: 'Qwen3.8 Max Preview' },
+    ]);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('applyModelPicker: null path skips the sync entirely', () => {
+  const result = applyModelPicker({ settingsJsonPath: null, pickedIds: ['minimax/MiniMax-M3'], liveIds: [] });
+  assert.equal(result.wrote, false);
+  assert.equal(result.settingsPath, null);
+});
+
+test('applyModelPicker: refuses to overwrite a corrupt settings.json', () => {
+  const cwd = makeCwd();
+  try {
+    const settingsPath = tmpSettingsPath(cwd);
+    writeFileSync(settingsPath, '{ not valid json');
+    const result = applyModelPicker({ settingsJsonPath: settingsPath, pickedIds: ['minimax/MiniMax-M3'], liveIds: ['minimax/MiniMax-M3'] });
+    assert.equal(result.wrote, false);
+    assert.equal(readFileSync(settingsPath, 'utf8'), '{ not valid json');
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('bizar models --set populates modelPicker in settings.json', async () => {
+  const srv = createServer((req, res) => {
+    if (req.url.startsWith('/models')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: [
+        { id: 'minimax/MiniMax-M3', owned_by: 'minimax', name: 'MiniMax M3' },
+        { id: 'codex/gpt-5.6-sol', owned_by: 'codex' },
+      ] }));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const port = srv.address().port;
+  try {
+    const cwd = makeCwd();
+    try {
+      const routerPath = writeBaseRouter(cwd);
+      const settingsDir = join(cwd, '.claude');
+      mkdirSync(settingsDir, { recursive: true });
+      const settingsPath = join(settingsDir, 'settings.json');
+      writeFileSync(settingsPath, JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'tok' } }, null, 2));
+      const { code, stderr } = await runBizar(
+        ['models', '--set=minimax/MiniMax-M3,codex/gpt-5.6-sol'],
+        {
+          cwd,
+          env: {
+            BIZAR_MODEL_ROUTER_CONFIG: routerPath,
+            HOME: cwd,
+            BIZAR_HOME: cwd,
+            BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${port}`,
+          },
+        },
+      );
+      assert.equal(code, 0, `expected 0, got ${code}; stderr=${stderr}`);
+      const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
+      // The modelPicker must list both picks with derived labels so Claude
+      // Code's /model picker surfaces them without gateway discovery.
+      assert.deepEqual(back.modelPicker, [
+        { id: 'minimax/MiniMax-M3', label: 'MiniMax M3' },
+        { id: 'codex/gpt-5.6-sol', label: 'gpt 5.6 sol' },
+      ]);
+      // Other settings.json fields are preserved.
+      assert.equal(back.env.ANTHROPIC_AUTH_TOKEN, 'tok');
+      // modelOverrides still carries the self-map for unrecognized_model
+      // diagnostics.
+      assert.equal(back.modelOverrides['minimax/MiniMax-M3'], 'minimax/MiniMax-M3');
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }

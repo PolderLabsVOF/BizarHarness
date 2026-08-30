@@ -1,5 +1,46 @@
 # Changelog
 
+## [10.19.3] - 2026-08-30
+
+`/model` picker now driven by operator picks, not gateway discovery.
+
+10.19.2 fixed the picked IDs reaching `settings.json#modelOverrides`, but
+`modelOverrides` only silences `[claude-code:unrecognized_model]`
+diagnostics — it does NOT populate the `/model` picker. Claude Code's
+picker is driven by a separate `modelPicker` array (User-or-managed
+scope), which 10.19.2 left untouched. After upgrading to 10.19.2, the
+operator still saw only the gateway's default Claude models in `/model`
+because nothing told Claude Code "use these specific IDs for the picker".
+
+### Fixed
+
+- **`cli/commands/models.mjs#applyModelPicker`** (new) — after every picker
+  save (interactive + `--set`), the picked IDs are written into
+  `~/.claude/settings.json#modelPicker` as an array of `{id, label}`
+  entries. `label` is derived from the gateway's `name` field when the
+  picker profile carries one, falling back to a simple "drop the provider
+  segment, split on word boundaries" rendering of the ID
+  (`minimax/MiniMax-M3` → `MiniMax M3`, `codex/gpt-5.6-sol` → `gpt 5.6 sol`).
+  Same atomic write + corrupt-settings refusal + `null`-skip contract as
+  `applyModelOverrides`. Filters out stale IDs (live-gateway gate) so the
+  picker stays in sync with what the orchestrator can actually dispatch.
+- **`cli/commands/models.mjs#deriveModelLabel`** (new) — the label
+  derivation helper. Profile-reported names win; ID-derived fallback
+  preserves brand casing verbatim (no invented Title-Case rules).
+- **`cli/commands/models.mjs#run`** — picker save flows (interactive
+  empty / interactive full / `--set`) now invoke `applyModelPicker` in
+  lock-step with `applyModelOverrides`, and the empty-pick path clears
+  both keys together.
+
+### Added
+
+- **`cli/__tests__/models-namespace-sync.test.mjs`** — 10 new tests
+  covering `deriveModelLabel` (provider-segment drop, brand-case
+  preservation, profile-name wins, empty / null), `applyModelPicker`
+  (write shape, stale-ID filtering, empty-array write, profile-name
+  precedence, `null` skip, corrupt-settings refusal, subprocess wiring
+  through `bizar models --set`).
+
 ## [10.19.2] - 2026-08-30
 
 Model router gateway-namespace alignment.

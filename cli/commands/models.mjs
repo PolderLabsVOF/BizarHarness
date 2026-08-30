@@ -592,6 +592,109 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [] 
   return { wrote: true, syncedIds: synced, skippedStale: skipped, settingsPath: path };
 }
 
+/**
+ * Derive a human-readable label for a model ID. Used to populate the
+ * `modelPicker` array in settings.json so Claude Code's `/model` picker
+ * displays picked models with something nicer than the raw `provider/name`
+ * string.
+ *
+ *   minimax/MiniMax-M3              → "MiniMax M3"
+ *   codex/gpt-5.6-sol               → "GPT 5.6 Sol"
+ *   qct/qwen3.8-max-preview         → "Qwen3.8 Max Preview"
+ *   openrouter/nvidia/foo:free      → "nvidia/foo:free"
+ *
+ * The gateway-reported `name` (when available on the picked profile) always
+ * wins. Falls back to a title-cased rendering of the model segment.
+ *
+ * @param {string} modelId
+ * @param {object} [profile] Optional profile with `name` or `displayName`
+ * @returns {string}
+ */
+export function deriveModelLabel(modelId, profile) {
+  const name = profile && typeof profile.name === 'string' && profile.name.trim();
+  if (name) return name.trim();
+  const displayName = profile && typeof profile.displayName === 'string' && profile.displayName.trim();
+  if (displayName) return displayName.trim();
+  const id = String(modelId || '').trim();
+  if (!id) return '';
+  // Drop the leading provider segment (`minimax/MiniMax-M3` → `MiniMax-M3`)
+  // so the operator sees the model name, not the namespace.
+  const slash = id.indexOf('/');
+  const tail = slash >= 0 ? id.slice(slash + 1) : id;
+  // Split on word boundaries (hyphens / underscores / dots / colons / path
+  // separators) and join with spaces. Case is preserved verbatim — `gpt`
+  // stays `gpt`, `MiniMax` stays `MiniMax`, `M2.7` stays `M2.7`. Brand
+  // casing belongs to the gateway (`name` field), not us.
+  return tail
+    .replace(/[\\/]+/g, ' ')
+    .replace(/[-_]+/g, ' ')
+    .replace(/:/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Sync `userSelected.models` into Claude Code's `modelPicker` array
+ * (settings.json). The picker is what populates `/model` — `modelOverrides`
+ * alone only silences diagnostics, it does NOT add entries to the picker.
+ *
+ * Per Claude Code's settings reference: `modelPicker` is an array of
+ * `{ id, label }` entries that replaces the gateway-discovered picker
+ * contents. Scope is User-or-managed (settings.json is in scope). Each
+ * entry preserves the operator's pick order from `userSelected.models`.
+ *
+ * Behavior:
+ *   - Reads settings.json; preserves every other field (env, mcpServers,
+ *     permissions, hooks, etc.).
+ *   - Writes `modelPicker` as an array of `{ id, label }`.
+ *   - Filters out picks the live gateway rejects (same stale-ID contract as
+ *     `applyModelOverrides`); the surviving picks fill the picker.
+ *   - Empty pick list → writes `modelPicker: []` so the picker falls back
+ *     to whatever Claude Code's defaults surface.
+ *   - Atomic replace via temp-file + rename (matches `applyModels`).
+ *   - Refuses to overwrite a corrupt settings.json.
+ *   - When `settingsJsonPath === null`, returns a no-op (tests).
+ *
+ * @param {{
+ *   settingsJsonPath?: string|null,
+ *   pickedIds: string[],
+ *   profiles?: Record<string, object>,
+ *   liveIds?: string[],
+ * }} opts
+ * @returns {{
+ *   wrote: boolean,
+ *   entries: Array<{id: string, label: string}>,
+ *   skippedStale: string[],
+ *   settingsPath: string|null,
+ * }}
+ */
+export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, liveIds = [] }) {
+  const path = settingsJsonPath === undefined
+    ? join(homedir(), '.claude', 'settings.json')
+    : settingsJsonPath;
+  if (path === null) {
+    return { wrote: false, entries: [], skippedStale: [], settingsPath: null };
+  }
+  const live = new Set(Array.isArray(liveIds) ? liveIds : []);
+  const picks = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  const surviving = live.size === 0 ? picks : picks.filter((id) => live.has(id));
+  const skipped = live.size === 0 ? [] : picks.filter((id) => !live.has(id));
+  const entries = surviving.map((id) => ({ id, label: deriveModelLabel(id, profiles?.[id]) }));
+
+  let settings = {};
+  if (existsSync(path)) {
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) settings = parsed;
+    } catch {
+      return { wrote: false, entries: [], skippedStale: skipped, settingsPath: path };
+    }
+  }
+  settings.modelPicker = entries;
+  writeAtomic(path, JSON.stringify(settings, null, 2) + '\n');
+  return { wrote: true, entries, skippedStale: skipped, settingsPath: path };
+}
+
 // ── F-190 / IMP-017 refresh + operator-override preservation ────────────────
 
 /**
@@ -1409,8 +1512,9 @@ export async function run(name, args, isHelpRequest) {
     // `[claude-code:unrecognized_model]` for any ID the gateway later
     // rejects; the operator can re-run `bizar models` to drop them.
     const sync = applyModelOverrides({ pickedIds: ids, liveIds: [] });
+    const picker = applyModelPicker({ pickedIds: ids, profiles: block.profiles || {}, liveIds: [] });
     if (wantJson) {
-      process.stdout.write(JSON.stringify({ applied: block, sync }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ applied: block, sync, picker }, null, 2) + '\n');
     } else {
       console.log(chalk.green(`  v ${block.models.length} model(s) saved to userSelected`));
       for (const id of block.models) {
@@ -1504,9 +1608,10 @@ export async function run(name, args, isHelpRequest) {
   const picked = await pickModels({ candidates, current });
   if (picked.length === 0) {
     const block = applyModels({ routerPath, models: [], source: 'live-pick' });
-    // Clear Claude Code modelOverrides when the picker is emptied so the
-    // session no longer claims to recognise removed IDs.
+    // Clear Claude Code modelOverrides + modelPicker when the picker is
+    // emptied so the session no longer claims to recognise removed IDs.
     applyModelOverrides({ pickedIds: [], liveIds: [] });
+    applyModelPicker({ pickedIds: [], liveIds: [] });
     if (wantJson) {
       process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource }, null, 2) + '\n');
     } else {
@@ -1533,8 +1638,11 @@ export async function run(name, args, isHelpRequest) {
     block.staleIds = partition.staleIds;
   }
   const sync = applyModelOverrides({ pickedIds: picked, liveIds });
+  // Sync the /model picker contents (`modelPicker` setting) so the user's
+  // picks drive the picker without relying on gateway discovery.
+  const picker = applyModelPicker({ pickedIds: picked, profiles, liveIds });
   if (wantJson) {
-    process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource, sync }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource, sync, picker }, null, 2) + '\n');
   } else {
     console.log(chalk.green(`\n  v Saved ${block.models.length} model(s) to ${routerPath}:`));
     console.log(chalk.dim(`    Models.dev profiles: ${Object.keys(block.profiles || {}).length}/${block.models.length}`));
@@ -1544,6 +1652,9 @@ export async function run(name, args, isHelpRequest) {
     }
     if (sync.wrote && sync.skippedStale.length > 0) {
       console.log(chalk.yellow(`    Settings sync skipped ${sync.skippedStale.length} stale id(s): ${sync.skippedStale.join(', ')}`));
+    }
+    if (picker.wrote) {
+      console.log(chalk.dim(`    /model picker populated with ${picker.entries.length} entr${picker.entries.length === 1 ? 'y' : 'ies'}`));
     }
   }
   return true;
