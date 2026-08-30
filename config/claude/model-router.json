@@ -20,48 +20,51 @@
   "tiers": {
     "premium": {
       "models": [
-        "claude-qwen/qwen3.8-max",
-        "cx/gpt-5.6-terra"
+        "qct/qwen3.8-max-preview",
+        "codex/gpt-5.6-sol",
+        "codex/gpt-5.6-luna"
       ],
       "purpose": "Architecture, high-risk planning, adversarial verification, and last-resort debugging where mistakes are expensive.",
       "effort": "high"
     },
     "high": {
       "models": [
-        "cx/gpt-5.6-terra",
-        "claude-qwen/qwen3.8-max"
+        "codex/gpt-5.6-sol",
+        "qct/qwen3.8-max-preview"
       ],
       "purpose": "Complex implementation, security review, and cross-cutting reasoning.",
       "effort": "high"
     },
     "mid-design": {
       "models": [
-        "cx/gpt-5.6-luna",
-        "claude-minimax/MiniMax-M3"
+        "codex/gpt-5.6-luna",
+        "minimax/MiniMax-M3"
       ],
       "purpose": "UI/UX design and product-quality implementation where visual judgment matters.",
       "effort": "medium"
     },
     "default": {
       "models": [
-        "claude-minimax/MiniMax-M3",
-        "claude-minimax/MiniMax-M2.7"
+        "minimax/MiniMax-M3",
+        "minimax/MiniMax-M2.7"
       ],
       "purpose": "Broad research, git operations, and ordinary engineering work.",
       "effort": "medium"
     },
     "mid": {
       "models": [
-        "claude-minimax/MiniMax-M2.7",
-        "claude-minimax/MiniMax-M3"
+        "minimax/MiniMax-M2.7",
+        "minimax/MiniMax-M2.7-highspeed",
+        "qct/deepseek-v4-pro",
+        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
       ],
       "purpose": "Bounded technical analysis, code search, and moderate implementation.",
       "effort": "medium"
     },
     "budget": {
       "models": [
-        "claude-minimax/MiniMax-M2.5",
-        "claude-minimax/MiniMax-M2.7"
+        "glm/glm-5.3-flash",
+        "minimax/MiniMax-M2.7-highspeed"
       ],
       "purpose": "Routine deterministic edits, targeted clarification, and scripted verification.",
       "effort": "low"

@@ -1,5 +1,66 @@
 # Changelog
 
+## [10.19.2] - 2026-08-30
+
+Model router gateway-namespace alignment.
+
+The shipped `config/claude/model-router.json#tiers` table and
+`cli/commands/models.mjs#classifyKind` both referenced a gateway namespace
+(`claude-minimax/*`, `claude-qwen/*`, `cx/*`, `oc/*`) that the live OmniRoute
+gateway at `route.polderlabs.io` no longer serves (every legacy ID returns
+`404 model_not_found`). Picker picks persisted into the user-selected pool
+worked at the dispatch layer only because `bizar models explain` ranks
+`userSelected.models` directly without intersecting the stale tier table.
+The remaining manual fix — self-mapping picks into
+`~/.claude/settings.json#modelOverrides` to silence Claude Code's
+`[claude-code:unrecognized_model]` diagnostic — is now built into the
+picker.
+
+### Fixed
+
+- **`config/claude/model-router.json#tiers`** — replaced six gateway-dead
+  IDs (`claude-qwen/qwen3.8-max`, `cx/gpt-5.6-terra`,
+  `claude-minimax/MiniMax-M3`, `claude-minimax/MiniMax-M2.7`,
+  `claude-minimax/MiniMax-M2.5`, `cx/gpt-5.6-luna`) with the live namespace
+  exposed by the gateway: `qct/qwen3.8-max-preview`, `codex/gpt-5.6-sol`,
+  `codex/gpt-5.6-luna`, `minimax/MiniMax-M3`, `minimax/MiniMax-M2.7`,
+  `minimax/MiniMax-M2.7-highspeed`, `glm/glm-5.3-flash`,
+  `qct/deepseek-v4-pro`, `openrouter/nvidia/nemotron-3-ultra-550b-a55b:free`.
+  Tier table now matches what the operator's picker actually selects, so a
+  fresh install with no `userSelected` block resolves each tier to a model
+  the gateway serves.
+- **`cli/commands/models.mjs#classifyKind`** — extended to recognize the
+  live provider prefixes (`minimax/`, `codex/`, `glm/`, `qct/`,
+  `openrouter/`, `a/`). The previous implementation only knew about the
+  six legacy prefixes and tagged every live ID as `kind: "other"`, hiding
+  them from any UI that grouped the picker by provider family.
+- **`cli/commands/models.mjs#applyModelOverrides`** (new) — after every
+  picker save (interactive + `--set`) the picked IDs are synced into
+  `~/.claude/settings.json#modelOverrides` using the self-map pattern
+  (`<id>` → `<id>`). This is the same workaround Claude Code documents for
+  silencing `[claude-code:unrecognized_model]` and turns the previous
+  one-time manual fix into part of the standard picker flow. When the
+  picker is emptied, `modelOverrides` is cleared in lock-step.
+- **`cli/commands/models.mjs#partitionStalePicks`** (new) — stale-ID
+  detection for the picker. Each pick is intersected against the live
+  gateway pool; IDs that were never returned (e.g. `a/1`) are persisted
+  under `userSelected.staleIds` for audit and excluded from the
+  settings.json sync so the unrecognized-model diagnostic still surfaces
+  them. Operators see `Settings sync skipped N stale id(s): ...` in the
+  picker banner and can re-run `bizar models` to drop them.
+- **`config/claude/commands/use-premium.md`** — example commands now
+  reference `qct/qwen3.8-max-preview` (premium) instead of the legacy
+  `claude-qwen/qwen3.8-max`; "when NOT to use premium" section references
+  `minimax/MiniMax-M3` (default) and `minimax/MiniMax-M2.7` (mid).
+
+### Added
+
+- **`cli/__tests__/models-namespace-sync.test.mjs`** (new) — regression
+  tests covering `partitionStalePicks`, `applyModelOverrides` (atomic
+  write + self-map pattern + corrupt-settings refusal + `null` skip),
+  `applyModels → applyModelOverrides` wiring, and picker `--set` flow
+  sync.
+
 ## [10.19.1] - 2026-08-30
 
 Installer verification + dispatcher fix.

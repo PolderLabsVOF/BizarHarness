@@ -418,14 +418,27 @@ export function defaultTierHint(modelId) {
   return 'mid';
 }
 
-function classifyKind(modelId) {
+export function classifyKind(modelId) {
   const id = String(modelId || '').toLowerCase();
+  // Order matters: more-specific legacy prefixes are checked BEFORE the
+  // generic `claude-` catch-all so `claude-qwen/...` and
+  // `claude-minimax/...` are tagged with their real family, not lumped
+  // into the generic `claude` bucket. Live gateway prefixes follow the
+  // same rule.
+  if (id.startsWith('claude-qwen/')) return 'claude-qwen';
+  if (id.startsWith('claude-minimax/')) return 'claude-minimax';
   if (id.startsWith('claude-')) return 'claude';
   if (id.startsWith('cx/')) return 'cx';
   if (id.startsWith('oc/')) return 'oc';
-  if (id.startsWith('claude-minimax/')) return 'claude-minimax';
-  if (id.startsWith('claude-qwen/')) return 'claude-qwen';
   if (id.startsWith('anthropic/')) return 'anthropic';
+  // Live gateway namespace (10.19.2+): bare provider/model forms exposed by
+  // OmniRoute at https://route.polderlabs.io/v1.
+  if (id.startsWith('minimax/')) return 'minimax';
+  if (id.startsWith('codex/')) return 'codex';
+  if (id.startsWith('glm/')) return 'glm';
+  if (id.startsWith('qct/')) return 'qct';
+  if (id.startsWith('openrouter/')) return 'openrouter';
+  if (id.startsWith('a/')) return 'a';
   return 'other';
 }
 
@@ -481,6 +494,102 @@ function writeAtomic(path, body) {
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(tmp, body, 'utf8');
   renameSync(tmp, path);
+}
+
+// ── F-191 / 10.19.2 sync to Claude Code settings.json + stale-ID gating ─────
+
+/**
+ * Detect model IDs that the live gateway does not serve. Picker picks
+ * survive gateway 404s only when the user is warned at save time. Stale
+ * IDs are written into `userSelected.staleIds` (audit trail) and excluded
+ * from the settings.json sync so Claude Code does not see a `[claude-code:
+ * unrecognized_model]` for a known-dead ID on every turn.
+ *
+ * @param {{ liveIds: string[], pickedIds: string[] }} opts
+ * @returns {{ liveIds: string[], staleIds: string[], unknownIds: string[] }}
+ *   - `liveIds` — picks that exist in the live gateway pool.
+ *   - `staleIds` — picks that were never returned by the gateway in this run.
+ *   - `unknownIds` — picks whose live status is unknown (no live pool yet).
+ */
+export function partitionStalePicks({ liveIds, pickedIds }) {
+  const live = Array.isArray(liveIds) ? new Set(liveIds) : null;
+  const picks = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  if (!live || live.size === 0) {
+    return { liveIds: [], staleIds: [], unknownIds: [...new Set(picks)] };
+  }
+  const liveOut = [];
+  const stale = [];
+  for (const id of picks) {
+    if (live.has(id)) liveOut.push(id);
+    else stale.push(id);
+  }
+  return { liveIds: liveOut, staleIds: stale, unknownIds: [] };
+}
+
+/**
+ * Sync `userSelected.models` into Claude Code's settings.json under
+ * `modelOverrides` using the self-map pattern (`<id>` → `<id>`). This
+ * suppresses `[claude-code:unrecognized_model]` diagnostics on every turn
+ * for any picked ID the gateway serves. Stale IDs (not returned by the
+ * gateway) are excluded so the diagnostic still surfaces them.
+ *
+ * Behavior:
+ *   - Reads `settings.json` if present; preserves every other field.
+ *   - Writes `modelOverrides` as a sparse object: only picked IDs that
+ *     are also in `liveIds`. Self-map pattern keeps dispatch behavior
+ *     identical (Claude Code dispatches the literal ID).
+ *   - Atomic replace via temp-file + rename (matches `applyModels`).
+ *   - When `settingsJsonPath` is provided (tests), uses that instead of
+ *     `~/.claude/settings.json`.
+ *   - When `settingsJsonPath` is `null`, skips the sync entirely — used
+ *     by tests that want to exercise the picker without touching Claude
+ *     Code's real settings file.
+ *
+ * @param {{
+ *   settingsJsonPath?: string|null,
+ *   pickedIds: string[],
+ *   liveIds?: string[],
+ * }} opts
+ * @returns {{
+ *   wrote: boolean,
+ *   syncedIds: string[],
+ *   skippedStale: string[],
+ *   settingsPath: string|null,
+ * }}
+ */
+export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [] }) {
+  const path = settingsJsonPath === undefined
+    ? join(homedir(), '.claude', 'settings.json')
+    : settingsJsonPath;
+  if (path === null) {
+    return { wrote: false, syncedIds: [], skippedStale: [], settingsPath: null };
+  }
+  const live = new Set(Array.isArray(liveIds) ? liveIds : []);
+  const picks = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  // Self-map only IDs the live gateway serves. Stale IDs intentionally stay
+  // out so the `[claude-code:unrecognized_model]` diagnostic still fires
+  // for them — the operator should re-run `bizar models` to drop them.
+  const synced = live.size === 0
+    ? picks
+    : picks.filter((id) => live.has(id));
+  const skipped = live.size === 0 ? [] : picks.filter((id) => !live.has(id));
+
+  let settings = {};
+  if (existsSync(path)) {
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) settings = parsed;
+    } catch {
+      // Corrupt settings.json — refuse to overwrite it; surface the sync
+      // as a no-op so `bizar models` still completes.
+      return { wrote: false, syncedIds: [], skippedStale: skipped, settingsPath: path };
+    }
+  }
+  // Self-map pattern — Claude Code uses modelOverrides to suppress
+  // `[claude-code:unrecognized_model]` for any ID that maps to itself.
+  settings.modelOverrides = Object.fromEntries(synced.map((id) => [id, id]));
+  writeAtomic(path, JSON.stringify(settings, null, 2) + '\n');
+  return { wrote: true, syncedIds: synced, skippedStale: skipped, settingsPath: path };
 }
 
 // ── F-190 / IMP-017 refresh + operator-override preservation ────────────────
@@ -1294,8 +1403,14 @@ export async function run(name, args, isHelpRequest) {
       process.exit(2);
     }
     const block = applyModels({ routerPath, models: ids, source: 'cli-set' });
+    // Sync to Claude Code's settings.json — picks survive stale-ID
+    // filtering only when an empty liveIds array disables it (no
+    // candidates fetched for `--set`). The orchestrator will surface
+    // `[claude-code:unrecognized_model]` for any ID the gateway later
+    // rejects; the operator can re-run `bizar models` to drop them.
+    const sync = applyModelOverrides({ pickedIds: ids, liveIds: [] });
     if (wantJson) {
-      process.stdout.write(JSON.stringify({ applied: block }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ applied: block, sync }, null, 2) + '\n');
     } else {
       console.log(chalk.green(`  v ${block.models.length} model(s) saved to userSelected`));
       for (const id of block.models) {
@@ -1389,6 +1504,9 @@ export async function run(name, args, isHelpRequest) {
   const picked = await pickModels({ candidates, current });
   if (picked.length === 0) {
     const block = applyModels({ routerPath, models: [], source: 'live-pick' });
+    // Clear Claude Code modelOverrides when the picker is emptied so the
+    // session no longer claims to recognise removed IDs.
+    applyModelOverrides({ pickedIds: [], liveIds: [] });
     if (wantJson) {
       process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource }, null, 2) + '\n');
     } else {
@@ -1403,15 +1521,29 @@ export async function run(name, args, isHelpRequest) {
     const profile = candidates.find((candidate) => candidate.id === id)?.profile;
     if (profile) profiles[id] = profile;
   }
+  // F-191 / 10.19.2 — stale-ID detection: the picker shows candidates
+  // filtered through the live gateway, but `--set` and the picker can both
+  // accept IDs the gateway later rejects (e.g. `a/1`). Persist them as
+  // `staleIds` for audit and skip them in the settings.json sync so Claude
+  // Code still surfaces the unrecognized_model diagnostic.
+  const liveIds = candidates.map((c) => c.id);
+  const partition = partitionStalePicks({ liveIds, pickedIds: picked });
   const block = applyModels({ routerPath, models: picked, tierHints, profiles, source: 'live-pick' });
+  if (partition.staleIds.length > 0) {
+    block.staleIds = partition.staleIds;
+  }
+  const sync = applyModelOverrides({ pickedIds: picked, liveIds });
   if (wantJson) {
-    process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource }, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource, sync }, null, 2) + '\n');
   } else {
     console.log(chalk.green(`\n  v Saved ${block.models.length} model(s) to ${routerPath}:`));
     console.log(chalk.dim(`    Models.dev profiles: ${Object.keys(block.profiles || {}).length}/${block.models.length}`));
     for (const id of block.models) {
       const tier = block.tierHints[id] || defaultTierHint(id);
       console.log(chalk.dim(`    ${id}  (${tier})`));
+    }
+    if (sync.wrote && sync.skippedStale.length > 0) {
+      console.log(chalk.yellow(`    Settings sync skipped ${sync.skippedStale.length} stale id(s): ${sync.skippedStale.join(', ')}`));
     }
   }
   return true;
