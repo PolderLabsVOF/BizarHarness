@@ -327,6 +327,26 @@ source for mirrored agent instructions and verify byte equality."
 | 84 | P2: spec-sprawl reduction (schema versions + policy doc ownership + mirror parity) | ✅ shipped (this commit) |
 | 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | ✅ shipped (this commit) |
 
+## Complete — 10.19.1 patch: `bin.mjs` help dispatcher routing
+
+**Why:** while verifying the installer for v10.19.0 features, `bizar bench --help` crashed with `subargs.find is not a function`. Root cause: `cli/bin.mjs`'s `--help` dispatcher (introduced pre-v10.18.0 to forward `--help` to `util.mjs` / `install.mjs` / `claude-cmd.mjs` / `migrate.mjs`) had a catch-all `else` branch that called `mod.run(cmd, cmdArgs, true)` for *every* command — including direct command modules like `bench`, `release-provenance`, `verify-release`, `spec-list` that export a single-arg `run(subargs)`. The dispatcher passed the literal command name (`"bench"`) as the first argument, and `subargs.includes('--help')` blew up.
+
+**Fix (this commit):** remove the catch-all `else` branch from the help dispatcher so direct command modules fall through to the existing `switch (cmd)` (which already calls `mod.run(cmdArgs)` correctly). Util-routed commands (`audit`, `doctor`, `backup`, …) and the install/update/team/subagent/run/migrate quartets still hit the dispatcher and keep their 3-arg calling convention.
+
+**Verified:**
+
+- `bizar bench --help` → prints `bizar bench — audit #85 efficiency benchmarks` usage (was: `subargs.find is not a function`).
+- `bizar bench --format=human --seed=42` → runs the synthetic harness and prints the four-config comparison.
+- `bizar release-provenance --help`, `bizar verify-release --help`, `bizar spec-list --help` → all print usage banners.
+- `bizar audit --help`, `bizar doctor --help` → still routed through the help dispatcher (unchanged behavior).
+
+**Regression test:** `cli/__tests__/bin-help-dispatch.test.mjs` (new, 7 cases). Spawns `cli/bin.mjs <cmd> --help` for each direct and util-routed command and asserts:
+- exit status is `0` or `2` (clean exit, never crash with `is not a function`),
+- stdout/stderr contains the expected usage banner,
+- the original regression signature `subargs.find is not a function` never appears in stderr.
+
+**Tests:** `npm run test:node`: 886/886 (was 879, +7). `npm run typecheck`: clean. `npm run test:sdk`: clean.
+
 ## Complete — 10.18.0 mega-release published to npm
 
 **Release:** `@polderlabs/bizar@10.18.0` is live on the public npm registry (shasum `f262363991df9927a0ec21e5703d3a57c9d1fe54`, 345 files, 652.9 kB tarball). Git tag `v10.18.0` pushed. Rollup commit `1c2cdfe chore(release): bump to v10.18.0 (mega-release rollup)` on origin/master.

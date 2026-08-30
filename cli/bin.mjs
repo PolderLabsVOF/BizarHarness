@@ -192,6 +192,9 @@ async function main() {
     // Pass --help to the command. Commands dispatched through util.mjs
     // (audit, init, export, doctor, backup, restore, etc.) don't have
     // their own cli/commands/<name>.mjs — they all live in util.mjs.
+    // Direct command modules (bench, release-provenance, verify-release,
+    // spec-list, …) have their own --help handling and accept
+    // run(cmdArgs); they fall through to the switch below.
     const UTIL_COMMANDS = new Set([
       'audit', 'init', 'export', 'test-gate',
       'doctor', 'repair', 'heads-up', 'backup', 'restore',
@@ -208,8 +211,6 @@ async function main() {
       const { runMigrate } = await import('./migrate.mjs');
       await runMigrate(['--help']);
       return;
-    } else {
-      mod = await importCommand(cmd);
     }
     if (mod && typeof mod.run === 'function') {
       await mod.run(cmd, cmdArgs, true);

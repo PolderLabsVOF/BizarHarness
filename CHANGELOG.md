@@ -1,5 +1,14 @@
 # Changelog
 
+## [10.19.1] - 2026-08-30
+
+Installer verification + dispatcher fix.
+
+### Fixed
+
+- **`cli/bin.mjs` help dispatch routing**: the `--help` dispatcher routed every command — including direct command modules like `bench`, `release-provenance`, `verify-release`, `spec-list` — through `mod.run(cmd, cmdArgs, true)`, a 3-arg signature reserved for `util.mjs` / `install.mjs` / `claude-cmd.mjs` / `migrate.mjs`. Direct command modules export `run(subargs)` and threw `subargs.find is not a function` when their first arg became the literal command name (`"bench"`) instead of the args array. The catch-all `else` branch is removed; direct commands now fall through to the switch statement (which already calls `mod.run(cmdArgs)` correctly). `bizar bench --help`, `bizar release-provenance --help`, `bizar verify-release --help`, and `bizar spec-list --help` now print their usage banner instead of crashing.
+- **`cli/__tests__/bin-help-dispatch.test.mjs`** (new): 7 regression tests cover both the direct-command fall-through (bench / release-provenance / verify-release / spec-list) and the legacy util-routed commands (audit / doctor).
+
 ## [10.19.0] - 2026-08-29
 
 Production-autonomy audit chain (Milestones 3-4 of `docs/audits/production-autonomy-improvements-2026-08-28.md`). Ships the remaining three audit recommendations (#83 SBOM + provenance + signed-known-good, #84 spec-sprawl reduction, #85 efficiency benchmarks + auto-fan-out rule) as additive public surface.
