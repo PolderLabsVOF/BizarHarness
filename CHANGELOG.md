@@ -1,5 +1,38 @@
 # Changelog
 
+## [10.19.0] - 2026-08-29
+
+Production-autonomy audit chain (Milestones 3-4 of `docs/audits/production-autonomy-improvements-2026-08-28.md`). Ships the remaining three audit recommendations (#83 SBOM + provenance + signed-known-good, #84 spec-sprawl reduction, #85 efficiency benchmarks + auto-fan-out rule) as additive public surface.
+
+### Added — 10.19.0-A (release provenance, audit #83)
+
+- `packages/sdk/src/release/sbom.ts`: CycloneDX 1.5 SBOM builder (`buildSbom`).
+- `packages/sdk/src/release/provenance.ts`: SLSA v0.2 provenance attestation (`buildProvenanceAttestation`).
+- `packages/sdk/src/release/signature.ts`: minisign ed25519 verify / sign (`parseMinisign`, `verifyMinisign`, `signWithEd25519`).
+- `packages/sdk/src/release/known-good-releases.ts`: frozen `KNOWN_GOOD_RELEASES` allowlist + `verifyRelease()` (UNKNOWN_RELEASE → RELEASE_REVOKED → TARBALL_HASH_MISMATCH → SBOM_HASH_MISMATCH → PROVENANCE_HASH_MISMATCH × 2 → SIGNATURE_INVALID).
+- `cli/commands/release-provenance.mjs`: `bizar release-provenance` writes `<version>.sbom.cdx.json`, `<version>.provenance.intoto.jsonl`, `<version>.minisig` with 0o700 `outDir`.
+- `cli/commands/verify-release.mjs`: `bizar verify-release` checks a release artifact set against the pinned allowlist.
+- 15 regression tests in `scripts/__tests__/release-provenance.test.mjs`.
+
+### Added — 10.19.0-B (spec-sprawl reduction, audit #84)
+
+- Three SDK schemas export `<NAME>_SCHEMA_VERSION` constants:
+  - `OBJECTIVE_RUN_SCHEMA_VERSION = "1.0.0"` (`autonomy/objective-run.ts`)
+  - `EVIDENCE_BUNDLE_SCHEMA_VERSION = "1.0.0"` (`autonomy/evidence-bundle.ts`)
+  - `OUTCOME_LEARNER_SCHEMA_VERSION = "1.0.0"` (`autonomy/outcome-record.ts`)
+- Each factory stamps `schemaVersion` on new records.
+- `docs/decisions/AUTONOMY_CONTRACT.md` carries YAML frontmatter (`owner: orchestrator`, `review-cadence: release-cut`, `schema-version: autonomy-contract/v1`).
+- `cli/commands/spec-list.mjs`: `bizar spec-list` emits a JSON / human inventory of every schema, every canonical doc, and every `AGENTS.md` mirror sync status.
+- 17 regression tests in `scripts/__tests__/spec-sprawl.test.mjs` (mirror parity, frontmatter presence, `bizar spec-list` shape).
+
+### Added — 10.19.0-C (efficiency benchmarks + auto-fan-out rule, audit #85)
+
+- `packages/sdk/src/bench/efficiency.ts` (`EFFICIENCY_BENCH_SCHEMA_VERSION = "1.0.0"`): synthetic harness with `runBench`, `compareConfigurations`, `efficiencyFromRealRuns`. Headline metrics: `costPerVerifiedUsd`, `wallClockPerVerifiedMs` (the audit's "verified outcomes per euro and per wall-clock minute" axes). Deterministic Mulberry32 PRNG keyed by `seed`.
+- `packages/sdk/src/bench/auto-reduction.ts` (`AUTO_REDUCTION_SCHEMA_VERSION = "1.0.0"`): `recommendFanOut` / `recommendFanOutBatch` — the audit's "automatically reduce fan-out when coordination overhead exceeds expected benefit" rule, as a pure function. Three stable reasons: `verifier-cannot-certify`, `coordination-overhead-exceeds-benefit`, `single-worker-fan-out`, `keep-current`.
+- `cli/commands/bench.mjs`: `bizar bench` with five subcommands (`single-vs-multi`, `sequential-vs-parallel`, `reviewers`, `worktree`, `recommend-fan-out`) and JSON / human output.
+- SDK `package.json` gains `./bench` → `./dist/bench/index.js` export.
+- 22 regression tests in `scripts/__tests__/efficiency-bench.test.mjs`.
+
 ## [10.18.0] - 2026-08-29
 
 Mega-release: 9Router removal + evidence/learning ledger + bounded self-edit + worker-suggest write side.
