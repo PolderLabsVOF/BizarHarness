@@ -3,10 +3,15 @@
  *
  * install + update command families.
  * v4.4.11+ — 'bizar install' and 'bizar update' share the same code path.
+ *
+ * v10.19.6 — `bizar update` now honors `--dry-run` / `--force` / `--yes`
+ * the same way `bizar install` does. The previous implementation called
+ * a legacy `runUpdate(args)` that swallowed every flag; this version
+ * routes update through `parseFlags` + `runInstaller` + `runRepair` so
+ * the documented flags actually do what they claim.
  */
 import chalk from 'chalk';
 import { runInstaller } from '../install.mjs';
-import { runUpdate } from '../update.mjs';
 import { runRepair } from '../repair.mjs';
 import { parseFlags } from '../provision.mjs';
 
@@ -61,35 +66,53 @@ export function showInstallHelp() {
 
 export function showUpdateHelp() {
   console.log(`
-  bizar update — Update @anthropic-ai/claude-code + @polderlabs/bizar
-  (which bundles the CLI, SDK, agents, skills, hooks, and commands). Detects what's
-  installed and only touches what's missing or out of date.
+  bizar update — Update @polderlabs/bizar (CLI + SDK + agents +
+  skills + hooks + commands). Refreshing Claude Code itself is also
+  handled when the bundled install.sh runs under --force.
+
   Usage:
-    bizar update                       Update all installed Bizar components
-    bizar update --check               Only print current vs. latest; do not update
-    bizar update --channel=stable|beta Pick the npm dist-tag (default: stable)
+    bizar update                       Refresh every Bizar-managed surface
     bizar update --dry-run             Print what would happen, change nothing
-    bizar update --force               Override .bizar/PRE_PUSH_NOTES.md blockers
-    bizar update --yes                 Same as --force, but named for one-line scripts
+    bizar update --force | --deep      Full clean re-emit: wipe Bizar-managed
+                                        dirs, back up settings env vars,
+                                        re-sync everything from the repo
+    bizar update --yes | -y            Assume yes for any non-destructive prompt
+    bizar update --non-interactive     Alias for --yes
     bizar update --help                Show this help
-  Components updated:
-    @anthropic-ai/claude-code   the Claude Code CLI itself
-    @polderlabs/bizar            CLI + SDK + agents + skills + hooks
-  Behavior (v4.4.7+):
-    • Single unified provisioner. 'bizar install' and 'bizar update' are
-      the same code path with different mode flags. Every step is
-      idempotent — re-running is safe.
-    • Re-runs the provisioner so installed Claude Code surfaces match
-      the just-upgraded npm version.
-    • Runs 'bizar doctor' after a successful update to catch config
-      regressions before claude tries to start.
-    • With --check: prints the version matrix and release-notes excerpt
-      between current and latest, exits non-zero if an update is available.
+
+  Behavior (v10.19.6+):
+    Single unified provisioner — the same code path as 'bizar install'
+    with mode=update. Every step is idempotent; re-running is safe.
+
+    1. Re-emits skills, commands, rules, hooks, agents, and workflows
+       from the repo source into ~/.claude/ (or $CLAUDE_CONFIG_DIR),
+       overwriting only the Bizar-managed surface and pruning stale
+       entries (F-141).
+    2. Writes the install marker so subsequent runs short-circuit when
+       nothing has changed.
+    3. With --force, re-runs the F-183 clean-install flow: wipes
+       ~/.claude/{agents,skills,commands,hooks,rules,workflows,plugins}/
+       and ~/.agents/, stashes the prior settings.json env block into
+       BIZAR_SAVED_ENV, then re-emits settings.json with the operator's
+       ANTHROPIC_* and BIZAR_* keys union-merged back in (so gateway
+       URL, auth token, and BIZAR_HOME are preserved across the wipe).
+    4. Runs 'bizar doctor' after a successful update so config
+       regressions surface before the next Claude Code session.
+    5. Repairs stale bin symlinks so the operator picks up the new code
+       on the next shell prompt.
+
+  Idempotency note:
+    When the SDK on disk matches the published npm version, every step
+    above is a no-op — settings.json is rewritten only if its hash
+    drifted, sync targets are skipped when the file set is unchanged,
+    and the bin symlink repair short-circuits. A clean re-run is fast.
+
   Examples:
-    bizar update                       Full auto-update (recommended)
-    bizar update --check               Show version matrix + notes, do nothing
-    bizar update --channel=beta        Upgrade to latest beta build
-    bizar update --dry-run             Preview what would change
+    bizar update                       Refresh the managed surface
+    bizar update --dry-run             Preview every step
+    bizar update --force               Full clean re-emit, preserved env
+    bizar update --force --yes         Same, no prompts (script-friendly)
+
   Errors:
     Network failures (registry offline / DNS) and npm permission issues
     are surfaced with the raw npm output. The provisioner never silently
@@ -97,7 +120,34 @@ export function showUpdateHelp() {
   `);
 }
 
+// ── Shared post-install teardown ────────────────────────────────────────────────
+
+/**
+ * Run `runRepair({})` after install/update and surface any repointed
+ * bin symlinks to the operator. Both `install()` and `update()` share
+ * this block; the previous `bizar update` skipped it entirely (audit
+ * A6), so a freshly-upgraded Bizar left stale bin symlinks pointing at
+ * the prior install until the operator manually re-sourced their shell.
+ *
+ * @param {object} [opts]
+ * @param {(opts: object) => Promise<{ ok: boolean, fixed: string[], notes?: string[] }>} [opts.runRepair]
+ *   Dependency-injected for tests; defaults to the real `runRepair`.
+ */
+async function runPostInstallerRepair({ runRepair: runRepairDep = runRepair } = {}) {
+  try {
+    const r = await runRepairDep({});
+    if (r.fixed.length > 0) {
+      console.log(chalk.cyan('\n  Repair: repointed stale bin symlinks:'));
+      for (const f of r.fixed) console.log(`    ${f}`);
+      console.log(chalk.dim('    Re-run your shell or `hash -r` to pick up the new path.'));
+    }
+  } catch (err) {
+    console.log(chalk.dim(`  Repair skipped: ${err.message}`));
+  }
+}
+
 // ── Command runners ────────────────────────────────────────────────────────────
+
 export async function install(args, isHelpRequest) {
   if (isHelpRequest) {
     showInstallHelp();
@@ -122,16 +172,10 @@ export async function install(args, isHelpRequest) {
   }
   // v4.4.3 — After install, repair any stale bin symlinks so the
   // user picks up the new code.
-  try {
-    const r = await runRepair({});
-    if (r.fixed.length > 0) {
-      console.log(chalk.cyan('\n  Repair: repointed stale bin symlinks:'));
-      for (const f of r.fixed) console.log(`    ${f}`);
-      console.log(chalk.dim('    Re-run your shell or `hash -r` to pick up the new path.'));
-    }
-  } catch (err) {
-    console.log(chalk.dim(`  Repair skipped: ${err.message}`));
-  }
+  await runPostInstallerRepair();
+  // v10.19.6 — propagate install failure to the parent shell so
+  // `bizar install && bizar doctor` short-circuits on install errors.
+  if (!result?.ok) process.exit(1);
 }
 
 export async function update(args, isHelpRequest) {
@@ -139,7 +183,46 @@ export async function update(args, isHelpRequest) {
     showUpdateHelp();
     return;
   }
-  await runUpdate(args);
+  // v10.19.6 — route update through the same flag-parsing + installer
+  // pipeline as install so `--dry-run`, `--force`, `--yes`, etc. do
+  // what they claim. See `runUpdateWithFlags` for the testable
+  // dependency-injected core.
+  await runUpdateWithFlags({ args });
+}
+
+/**
+ * Testable core of `update()`. Default arguments bind to the real
+ * `runInstaller` / `parseFlags` / `runRepair` from this module; tests
+ * inject stubs to assert the wiring without touching disk.
+ *
+ * Sequence (mirrors install() so the audit's documented "Runs doctor +
+ * runs repair" promises become true):
+ *   1. `parseFlags(args)` → `{ mode, dryRun, force, yes }`
+ *   2. `runInstaller({ mode, dryRun, force, yes })` — runs the
+ *      provisioner, then post-install `runDoctor({ silent: true })`.
+ *   3. `runRepair({})` — repoint stale bin symlinks.
+ *   4. If `runInstaller` returned `{ ok: false }`, exit(1) so scripts
+ *      that gate on the exit code (`bizar update && bizar doctor`) see
+ *      the failure.
+ *
+ * @param {object} [opts]
+ * @param {string[]} [opts.args]
+ * @param {(opts: { mode: string, dryRun: boolean, force: boolean, yes: boolean }) => Promise<{ ok?: boolean }>} [opts.runInstaller]
+ * @param {(argv: string[]) => { mode: string, dryRun: boolean, force: boolean, yes: boolean }} [opts.parseFlags]
+ * @param {(opts: { dryRun?: boolean }) => Promise<{ ok: boolean, fixed: string[] }>} [opts.runRepair]
+ * @returns {Promise<{ ok?: boolean }>}
+ */
+export async function runUpdateWithFlags({
+  args = [],
+  runInstaller: runInstallerDep = runInstaller,
+  parseFlags: parseFlagsDep = parseFlags,
+  runRepair: runRepairDep = runRepair,
+} = {}) {
+  const { mode, dryRun, force, yes } = parseFlagsDep(args);
+  const result = await runInstallerDep({ mode, dryRun, force, yes });
+  await runPostInstallerRepair({ runRepair: runRepairDep });
+  if (!result?.ok) process.exit(1);
+  return result;
 }
 
 // ── run() entry point (used by bin.mjs dispatcher) ──────────────────────────────

@@ -1431,10 +1431,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-// Back-compat alias — `bizar update` historically
-// called `runUpdate(args)`; we collapsed install + update onto
-// `runProvision({ mode: 'update', ... })`. Keep `runUpdate` importable so
-// `cli/commands/install.mjs` (which still uses the historical signature)
-// works without modification.
+// Back-compat alias — `bizar update` historically called `runUpdate(args)`;
+// install + update now share `runProvision({ mode: 'update', ... })`.
+// `runUpdate` is retained as an importable export for external SDK
+// consumers (re-exported from `cli/update.mjs`); `cli/commands/install.mjs`
+// no longer imports it — its `update()` command routes through `parseFlags`
+// → `runInstaller({ mode: 'update', ... })` instead.
 export const runUpdate = (subargs, opts = {}) =>
   runProvision({ ...opts, mode: 'update', subargs });

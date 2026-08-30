@@ -1,32 +1,33 @@
 # Changelog
 
-## [10.19.4] - 2026-08-30
+## [10.19.6] - 2026-08-30
 
-`/model` picker schema fix — `modelPicker` is an OBJECT, not an array.
+`bizar update` is honest now — every documented flag actually does what it claims.
 
-10.19.3 wired the picker sync but got the `modelPicker` shape wrong. Claude
-Code's settings schema requires `modelPicker: { options: [{ model, label?,
-description? }] }`; 10.19.3 wrote a bare top-level array
-`[ { id, label } ]`. The result was a `"modelPicker" must be an object with
-an "options" array …; received array. This field was ignored.` diagnostic at
-startup and no picker contents. The sync itself worked — Claude Code just
-refused to honour the malformed key.
+10.19.5 closed the `/model` picker-sync loop, but `bizar update` itself was still broken: `cli/commands/install.mjs#update` called a legacy `runUpdate(args)` alias that ignored every flag. `bizar update --dry-run --force --yes` was functionally identical to plain `bizar update`. The settings.json union-merge path (F-183) was unreachable, `runRepair` was skipped, and the post-update `bizar doctor` check never ran. The help text also advertised `--check`, `--channel=stable|beta`, and `--all`, none of which were ever wired into `parseFlags` or `runInstaller`.
 
 ### Fixed
 
-- **`cli/commands/models.mjs#applyModelPicker`** — now writes
-  `settings.modelPicker = { options: [...] }` (object, not array). Each row
-  uses `model` (not `id`) as the field name, matching Claude Code's `Settings
-  { model, label?, description? }` per-option schema. Adds optional
-  `description` rendering when the gateway profile carries one.
-- **`cli/commands/models.mjs#run`** — picker-sync log line now reports
-  `${picker.options.length}` rows (was `${picker.entries.length}`).
+- **`cli/commands/install.mjs#update`** — now routes through the same `parseFlags` + `runInstaller` + `runRepair` pipeline as `install()`. Every documented flag (`--dry-run`, `--force|--deep`, `--yes|-y|--non-interactive`) is forwarded. The post-update `bizar doctor` check (run by `runInstaller`) and the bin-symlink repair (run by `runRepair`) both fire after every successful update. The previous `runUpdate(args)` import was removed.
+- **`cli/commands/install.mjs#install`** — symmetric exit-code propagation added: `bizar install` and `bizar update` now both call `process.exit(1)` when `runInstaller` returns `{ ok: false }`, so `bizar update && bizar doctor` short-circuits on install errors.
+- **`cli/commands/install.mjs#runUpdateWithFlags`** (new) — testable, dependency-injected core of `update()`. Signature: `runUpdateWithFlags({ args, runInstaller, parseFlags, runRepair })`. Default arguments bind to the real `runInstaller` / `parseFlags` / `runRepair` from the module; tests inject stubs to assert the wiring without touching disk.
+- **`cli/commands/install.mjs#runPostInstallerRepair`** (new) — extracted shared teardown so `install()` and `update()` share the same bin-symlink repair block.
+- **`cli/commands/util.mjs`** — deleted the dead `case 'update':` branch in the dispatcher. The branch imported `runUpdate` from `./install.mjs`, which never exported it; the import would have thrown at runtime if it were ever reached. `cli/bin.mjs` routes `update` directly to `cli/commands/install.mjs`, so the deletion is a no-op for callers.
+- **`cli/commands/install.mjs#showUpdateHelp`** — rewrote to advertise ONLY the flags that actually work after this fix: `--dry-run`, `--force|--deep`, `--yes|-y|--non-interactive`, `--help`. Dropped `--check`, `--channel=stable|beta`, and `--all` (none of which were wired up; will return when implemented). Updated synopsis, behavior prose, and examples to match `runInstaller({ mode: 'update' })`.
 
 ### Changed
 
-- **`cli/__tests__/models-namespace-sync.test.mjs`** — 10 existing tests
-  rewritten to assert `{ options: [{ model, label, description? }] }` shape.
-  Added one new test covering `description` surfacing.
+- **`cli/install/prune.test.mjs`** — added two new `parseFlags` contract tests (exhaustive flag pin + defaults pin). The existing two tests stay.
+- **`cli/install/update-wrapper.test.mjs`** (new, 10 cases) — pins the `runUpdateWithFlags` wiring: every documented flag is forwarded to `runInstaller`; `runRepair({})` runs once after `runInstaller` even under `--dry-run` (A6 regression); `runInstaller` returning `{ ok: false }` triggers `process.exit(1)`. Uses `mock.method(process, 'exit')` from `node:test/mock` for the exit-code assertion and `mock.fn` for the dependency stubs.
+- **`cli/commands/__tests__/update-help-contract.test.mjs`** (new) — help-text fence test. Reads `cli/commands/install.mjs`, extracts the `showUpdateHelp` template literal, asserts every `--<word>` token in the help body is recognized by `parseFlags`, and asserts `--check` / `--channel` / `--all` are absent. Pairs with the `parseFlags` contract in `cli/install/prune.test.mjs` to catch future help/parser drift.
+
+### Audit references
+
+- A1 (no-op flags) — fixed by routing update through parseFlags + runInstaller.
+- A2 (settings.json union-merge unreachable) — fixed (under `--force`).
+- A5 (post-update doctor never runs) — fixed (runInstaller calls runDoctor at `cli/install/index.mjs:77-95`).
+- A6 (runRepair skipped after update) — fixed (runUpdateWithFlags calls runPostInstallerRepair after runInstaller).
+- A7 (help-text drift) — fixed by showUpdateHelp rewrite + update-help-contract.test.mjs pin.
 
 ## [10.19.5] - 2026-08-30
 
@@ -88,6 +89,34 @@ hook always exits 0, so a broken sync never blocks session start.
   (`env` / `mcpServers` / `permissions` left verbatim), missing-router
   noop, malformed-router swallow, missing-settings auto-create, and a
   source-fence regression check on the contract strings.
+
+## [10.19.4] - 2026-08-30
+
+`/model` picker schema fix — `modelPicker` is an OBJECT, not an array.
+
+10.19.3 wired the picker sync but got the `modelPicker` shape wrong. Claude
+Code's settings schema requires `modelPicker: { options: [{ model, label?,
+description? }] }`; 10.19.3 wrote a bare top-level array
+`[ { id, label } ]`. The result was a `"modelPicker" must be an object with
+an "options" array …; received array. This field was ignored.` diagnostic at
+startup and no picker contents. The sync itself worked — Claude Code just
+refused to honour the malformed key.
+
+### Fixed
+
+- **`cli/commands/models.mjs#applyModelPicker`** — now writes
+  `settings.modelPicker = { options: [...] }` (object, not array). Each row
+  uses `model` (not `id`) as the field name, matching Claude Code's `Settings
+  { model, label?, description? }` per-option schema. Adds optional
+  `description` rendering when the gateway profile carries one.
+- **`cli/commands/models.mjs#run`** — picker-sync log line now reports
+  `${picker.options.length}` rows (was `${picker.entries.length}`).
+
+### Changed
+
+- **`cli/__tests__/models-namespace-sync.test.mjs`** — 10 existing tests
+  rewritten to assert `{ options: [{ model, label, description? }] }` shape.
+  Added one new test covering `description` surfacing.
 
 ## [10.19.3] - 2026-08-30
 
