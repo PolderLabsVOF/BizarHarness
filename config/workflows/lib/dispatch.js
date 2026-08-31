@@ -28,7 +28,7 @@
  */
 
 import { randomUUID, createHash } from 'node:crypto';
-import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, renameSync, openSync, closeSync, fsyncSync, constants as fsConstants } from 'node:fs';
+import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, renameSync, openSync, closeSync, fsyncSync, rmSync, readdirSync, statSync, constants as fsConstants } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
@@ -857,3 +857,428 @@ export async function dispatchAgent(agentFn, agentName, prompt, opts = {}, conte
 export async function dispatchAgentDryRun(agentName, prompt, opts = {}) {
   return dispatchAgent(undefined, agentName, prompt, { ...opts, dryRun: true });
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*              Phase B (v10.21.0) artifact-on-disk barrier store             */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * WorkflowStateError — fail-soft error class used by the artifact store.
+ * Duplicated as a 3-line class to avoid a `cli/` ↔ `config/workflows/`
+ * import cycle. Mirrors `cli/core/workflow-state.mjs:62-66`.
+ */
+export class WorkflowStateError extends Error {
+  constructor(code, message, details) {
+    super(message);
+    this.name = 'WorkflowStateError';
+    this.code = code;
+    if (details !== undefined) this.details = details;
+  }
+}
+
+/**
+ * Schema version for the artifact store. Bump on any breaking change to
+ * `manifest.json` or the per-phase payload envelope.
+ */
+export const ARTIFACT_SCHEMA_VERSION = 1;
+
+/**
+ * Maximum bytes for a barrier reference summary (the `summary:` field
+ * passed by the workflow script — the human-readable one-liner that
+ * replaces the inline JSON in the next agent's prompt). Default 200 chars
+ * per Phase B plan §4.1. The 3-line barrier block itself is bounded by
+ * `MAX_BARRIER_BYTES = 3072` (B.2 budget).
+ */
+export const MAX_SUMMARY_BYTES = 200;
+export const MAX_BARRIER_BYTES = 3072;
+
+/**
+ * Reduce any string to a kebab-case slug, capped at 64 chars. Used to
+ * derive `phase-slug` and `label-slug` from runtime data
+ * (`meta.phases[i].title` + the `label:` field passed to `dispatchAgent`)
+ * — no hardcoded phase or workflow lists.
+ */
+export function slugify(input, maxLen = 64) {
+  if (typeof input !== 'string') return 'unknown';
+  const slug = input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!slug) return 'unknown';
+  return slug.length > maxLen ? slug.slice(0, maxLen).replace(/-+$/g, '') : slug;
+}
+
+/**
+ * Resolve the artifact root directory for a run. Defaults to
+ * `<cwd>/.bizar/runs` but can be overridden by `BIZAR_RUNS_DIR` for
+ * tests and for sessions where `.bizar/` lives elsewhere.
+ */
+export function resolveRunRoot({ cwd, env } = {}) {
+  const root = cwd || process.cwd();
+  const override = (env || process.env).BIZAR_RUNS_DIR;
+  if (override && typeof override === 'string' && override.trim()) {
+    return resolve(override);
+  }
+  return join(root, '.bizar', 'runs');
+}
+
+/**
+ * Resolve the directory for a single run-id.
+ */
+function runDirFor(runRoot, runId) {
+  return join(runRoot, runId);
+}
+
+/**
+ * Manifest file co-located with artifacts in `.bizar/runs/<run-id>/`.
+ * Schema: `{ schemaVersion, runId, createdAt, updatedAt, phases: [...] }`
+ * where each entry is `{ phase, label, artifactPath, summaryHash, stale }`.
+ */
+function manifestPathFor(runDir) {
+  return join(runDir, 'manifest.json');
+}
+
+/**
+ * Load a manifest if present. Returns `null` when missing or corrupt.
+ */
+function readManifest(runDir) {
+  const p = manifestPathFor(runDir);
+  if (!existsSync(p)) return null;
+  try {
+    const raw = readFileSync(p, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist the manifest atomically (tmp + rename). Best-effort: a manifest
+ * write failure does NOT abort the artifact write — the next read
+ * reconciles via the directory listing.
+ */
+function writeManifest(runDir, manifest) {
+  const p = manifestPathFor(runDir);
+  const tmp = `${p}.tmp-${randomUUID()}`;
+  writeFileSync(tmp, JSON.stringify(manifest, null, 2));
+  try {
+    fsyncSync(openSync(tmp, 'r+'));
+  } catch {
+    // fsync is best-effort; tolerate filesystems that don't support it.
+  }
+  renameSync(tmp, p);
+}
+
+/**
+ * Compute a stable summary hash. The summary is the human-readable
+ * one-liner the workflow script passes; the hash lets a future audit
+ * prove the summary was not retroactively edited.
+ */
+function summaryHashHex(summary) {
+  return createHash('sha256').update(String(summary ?? '')).digest('hex').slice(0, 16);
+}
+
+/**
+ * Write a phase artifact atomically (tmp file → `rename(2)`). Atomic so
+ * a mid-write crash never leaves a half-written artifact on disk; the
+ * GC tool and the read site can both rely on "every file in the dir is
+ * either complete or absent."
+ *
+ * Naming is data-driven: `<phase-slug>__<label-slug>.json` where slugs
+ * derive from runtime `meta.phases[i].title` + `label:` field via
+ * `slugify()`. No hardcoded phase or workflow lists.
+ *
+ * @param {object} args
+ * @param {string} args.runId      - run identifier (typically `randomUUID()`)
+ * @param {string} args.phase      - phase title (e.g. "Research", "Plan")
+ * @param {string} args.label      - dispatch label (e.g. "plan", "implement:1:foo")
+ * @param {*}      args.payload    - serializable artifact body
+ * @param {string} [args.summary]  - human-readable one-liner (≤200 chars)
+ * @param {string} [args.agent]    - agent name (e.g. "plan-author")
+ * @param {string} [args.role]     - role name from dispatch opts
+ * @param {string} [args.runRoot]  - override artifact root (test only)
+ * @returns {{ runDir: string, artifactPath: string, slug: string, manifestPath: string }}
+ */
+export function writeArtifact(args) {
+  if (!args || typeof args !== 'object') {
+    throw new WorkflowStateError('ARTIFACT_ARGS_REQUIRED', 'writeArtifact requires an args object');
+  }
+  const { runId, phase, label, payload, summary, agent, role } = args;
+  if (!runId || typeof runId !== 'string') {
+    throw new WorkflowStateError('RUN_ID_REQUIRED', 'writeArtifact requires a non-empty runId');
+  }
+  if (!phase || typeof phase !== 'string') {
+    throw new WorkflowStateError('PHASE_REQUIRED', 'writeArtifact requires a non-empty phase');
+  }
+  if (!label || typeof label !== 'string') {
+    throw new WorkflowStateError('LABEL_REQUIRED', 'writeArtifact requires a non-empty label');
+  }
+  if (payload === undefined) {
+    throw new WorkflowStateError('PAYLOAD_REQUIRED', 'writeArtifact requires a payload');
+  }
+
+  const runRoot = args.runRoot || resolveRunRoot();
+  const runDir = runDirFor(runRoot, runId);
+  mkdirSync(runDir, { recursive: true });
+
+  const phaseSlug = slugify(phase);
+  const labelSlug = slugify(label);
+  const slug = `${phaseSlug}__${labelSlug}`;
+  const artifactPath = join(runDir, `${slug}.json`);
+
+  const now = new Date().toISOString();
+  const finalSummary = (() => {
+    if (typeof summary === 'string' && summary.length > 0) {
+      return summary.length > MAX_SUMMARY_BYTES ? summary.slice(0, MAX_SUMMARY_BYTES) : summary;
+    }
+    // Safe default: first 200 chars of canonical payload. Deterministic
+    // so re-running the same upstream agent produces the same summary
+    // and the manifest hash is stable.
+    const text = JSON.stringify(payload) ?? '';
+    return text.length > MAX_SUMMARY_BYTES ? text.slice(0, MAX_SUMMARY_BYTES) : text;
+  })();
+
+  const envelope = {
+    schemaVersion: ARTIFACT_SCHEMA_VERSION,
+    runId,
+    phase,
+    label,
+    agent: typeof agent === 'string' ? agent : undefined,
+    role: typeof role === 'string' ? role : undefined,
+    wroteAt: now,
+    summary: finalSummary,
+    summaryHash: summaryHashHex(finalSummary),
+    payload,
+  };
+
+  // Atomic write: tmp file then rename. fsync before rename so the
+  // file's contents hit disk before the directory entry does. If the
+  // process dies between writeFileSync and renameSync, the tmp file is
+  // orphaned and ignored by readArtifact (which only sees complete files
+  // via the directory listing + manifest).
+  const tmpPath = `${artifactPath}.tmp-${randomUUID()}`;
+  writeFileSync(tmpPath, JSON.stringify(envelope, null, 2));
+  try {
+    fsyncSync(openSync(tmpPath, 'r+'));
+  } catch {
+    // best-effort
+  }
+  renameSync(tmpPath, artifactPath);
+
+  // Manifest update — append/replace the entry for this (phase, label).
+  // Best-effort: if the manifest write fails the artifact is still on
+  // disk and recoverable via readArtifact (which reads the file directly).
+  const prev = readManifest(runDir) || {
+    schemaVersion: ARTIFACT_SCHEMA_VERSION,
+    runId,
+    createdAt: now,
+    updatedAt: now,
+    phases: [],
+  };
+  const entry = {
+    phase,
+    label,
+    artifactPath: `${slug}.json`,
+    summaryHash: envelope.summaryHash,
+    wroteAt: now,
+    stale: false,
+  };
+  const phases = Array.isArray(prev.phases) ? prev.phases.slice() : [];
+  const idx = phases.findIndex((p) => p && p.phase === phase && p.label === label);
+  if (idx >= 0) phases[idx] = entry;
+  else phases.push(entry);
+  const manifest = {
+    schemaVersion: ARTIFACT_SCHEMA_VERSION,
+    runId,
+    createdAt: prev.createdAt || now,
+    updatedAt: now,
+    phases,
+  };
+  try {
+    writeManifest(runDir, manifest);
+  } catch {
+    // Manifest write is best-effort; the artifact itself is durable.
+  }
+
+  return { runDir, artifactPath, slug, manifestPath: manifestPathFor(runDir) };
+}
+
+/**
+ * Read a phase artifact by (runId, phase, label). Returns
+ * `{ payload, summary, manifest, stale, missing }`.
+ *
+ * Fail-soft: a missing or stale artifact returns `{ missing: true }`
+ * or `{ stale: true, ... }`. The reader decides whether to re-render
+ * the upstream phase. This is the Q4 audit recommendation.
+ *
+ * @param {object} args
+ * @param {string} args.runId
+ * @param {string} args.phase
+ * @param {string} args.label
+ * @param {string} [args.runRoot]
+ */
+export function readArtifact(args) {
+  const { runId, phase, label } = args || {};
+  if (!runId || !phase || !label) {
+    throw new WorkflowStateError('ARTIFACT_KEY_REQUIRED', 'readArtifact requires { runId, phase, label }');
+  }
+  const runRoot = args.runRoot || resolveRunRoot();
+  const runDir = runDirFor(runRoot, runId);
+  if (!existsSync(runDir)) {
+    return { missing: true, payload: null, summary: null, manifest: null, stale: false };
+  }
+  const phaseSlug = slugify(phase);
+  const labelSlug = slugify(label);
+  const artifactPath = join(runDir, `${phaseSlug}__${labelSlug}.json`);
+  if (!existsSync(artifactPath)) {
+    return { missing: true, payload: null, summary: null, manifest: readManifest(runDir), stale: false };
+  }
+  let envelope;
+  try {
+    envelope = JSON.parse(readFileSync(artifactPath, 'utf8'));
+  } catch {
+    const manifest = readManifest(runDir);
+    return { stale: true, payload: null, summary: null, manifest, missing: false };
+  }
+  // Stale detection: summary hash mismatch with the manifest entry, or
+  // envelope is missing required fields.
+  const manifest = readManifest(runDir);
+  let stale = false;
+  if (!envelope || typeof envelope !== 'object') stale = true;
+  else if (envelope.summaryHash !== summaryHashHex(envelope.summary)) stale = true;
+  else if (Array.isArray(manifest?.phases)) {
+    const entry = manifest.phases.find((p) => p && p.phase === phase && p.label === label);
+    if (entry && entry.stale === true) stale = true;
+    if (entry && entry.summaryHash && entry.summaryHash !== envelope.summaryHash) stale = true;
+  }
+  return {
+    missing: false,
+    stale,
+    payload: stale ? null : envelope.payload,
+    summary: stale ? null : envelope.summary,
+    wroteAt: envelope.wroteAt,
+    manifest,
+    artifactPath,
+  };
+}
+
+/**
+ * List artifacts for a run. Used by the GC tool (B.3) and by tests that
+ * want to introspect the directory shape.
+ *
+ * @param {object} args
+ * @param {string} args.runId
+ * @param {string} [args.runRoot]
+ * @returns {Array<{ phase: string, label: string, slug: string, path: string, size: number, mtimeMs: number }>}
+ */
+export function listArtifacts(args) {
+  const { runId } = args || {};
+  if (!runId || typeof runId !== 'string') {
+    throw new WorkflowStateError('RUN_ID_REQUIRED', 'listArtifacts requires runId');
+  }
+  const runRoot = args.runRoot || resolveRunRoot();
+  const runDir = runDirFor(runRoot, runId);
+  if (!existsSync(runDir)) return [];
+  const out = [];
+  for (const name of readdirSync(runDir)) {
+    if (!name.endsWith('.json')) continue;
+    if (name === 'manifest.json') continue;
+    if (name.includes('.tmp-')) continue; // orphaned tmp from a crashed write
+    const fullPath = join(runDir, name);
+    let stat;
+    try {
+      stat = statSync(fullPath);
+    } catch {
+      continue;
+    }
+    const sep = name.indexOf('__');
+    if (sep < 0) continue;
+    const phase = name.slice(0, sep);
+    const label = name.slice(sep + 2, -('.json'.length));
+    out.push({ phase, label, slug: name.slice(0, -'.json'.length), path: fullPath, size: stat.size, mtimeMs: stat.mtimeMs });
+  }
+  return out;
+}
+
+/**
+ * List all runs (subdirectories of `.bizar/runs/`). Used by GC.
+ *
+ * @param {object} [args]
+ * @param {string} [args.runRoot]
+ * @returns {Array<{ runId: string, path: string, mtimeMs: number, size: number }>}
+ */
+export function listRuns(args = {}) {
+  const runRoot = args.runRoot || resolveRunRoot();
+  if (!existsSync(runRoot)) return [];
+  const out = [];
+  for (const name of readdirSync(runRoot)) {
+    const fullPath = join(runRoot, name);
+    let stat;
+    try {
+      stat = statSync(fullPath);
+    } catch {
+      continue;
+    }
+    if (!stat.isDirectory()) continue;
+    let size = 0;
+    for (const inner of readdirSync(fullPath)) {
+      try {
+        size += statSync(join(fullPath, inner)).size;
+      } catch {
+        // best-effort size tally
+      }
+    }
+    out.push({ runId: name, path: fullPath, mtimeMs: stat.mtimeMs, size });
+  }
+  return out;
+}
+
+/**
+ * Build the 3-line barrier reference block (B.2). Replaces the inline
+ * `JSON.stringify(priorOutput)` in the next agent's prompt with a
+ * compact reference that points at the on-disk artifact.
+ *
+ *   prior phase: <phase>
+ *   prior label: <label>
+ *   summary:     <≤200 chars>
+ *   path:        <absolute path to .bizar/runs/<id>/<slug>.json>
+ *
+ * Block is bounded by `MAX_BARRIER_BYTES`; if the script passes a
+ * `summary` larger than the budget, it is truncated and the call is
+ * noted via `truncated: true` in the return value.
+ *
+ * @param {object} args
+ * @param {string} args.runId
+ * @param {string} args.phase
+ * @param {string} args.label
+ * @param {string} [args.summary]
+ * @param {string} [args.runRoot]
+ * @returns {{ promptBlock: string, path: string, truncated: boolean, bytes: number }}
+ */
+export function barrierRef(args) {
+  const { runId, phase, label, summary } = args || {};
+  if (!runId || !phase || !label) {
+    throw new WorkflowStateError('BARRIER_KEY_REQUIRED', 'barrierRef requires { runId, phase, label }');
+  }
+  const runRoot = args.runRoot || resolveRunRoot();
+  const runDir = runDirFor(runRoot, runId);
+  const slug = `${slugify(phase)}__${slugify(label)}`;
+  const path = join(runDir, `${slug}.json`);
+
+  let boundedSummary = typeof summary === 'string' ? summary : '';
+  let truncated = false;
+  if (boundedSummary.length > MAX_SUMMARY_BYTES) {
+    boundedSummary = boundedSummary.slice(0, MAX_SUMMARY_BYTES);
+    truncated = true;
+  }
+  const promptBlock = [
+    `prior phase: ${phase}`,
+    `prior label: ${label}`,
+    `summary:     ${boundedSummary}`,
+    `path:        ${path}`,
+  ].join('\n');
+  return { promptBlock, path, truncated: truncated || promptBlock.length > MAX_BARRIER_BYTES, bytes: Buffer.byteLength(promptBlock, 'utf8') };
+}
+

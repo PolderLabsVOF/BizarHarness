@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "10.20.1",
+  "version": "10.21.0",
   "description": "Autonomous, human-in-the-loop multi-agent harness for Claude Code with guarded workflows, typed SDK primitives, and MCP tools.",
   "type": "module",
   "bin": {
@@ -42,7 +42,9 @@
     "test": "npm run build:sdk && npm run test:sdk && npm run test:node",
     "build": "npm run build:sdk",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "workflow:gc": "node cli/commands/workflow-gc.mjs",
+    "workflow:gc:dry": "node cli/commands/workflow-gc.mjs --dry-run"
   },
   "keywords": [
     "claude-code",

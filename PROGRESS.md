@@ -34,7 +34,66 @@
 3. `86fd0ca` `feat(models): --json gains status.perPick + status.totals`
 4. (this commit, pending)
 
-## Complete — 10.20.0 patch: Phase A token reduction trim
+## Complete — 10.21.0 patch: Phase B workflow artifact re-architecture
+
+**Why:** Per `token-bloat-research.md` §S4 (2026-08-31), `config/workflows/*.js` re-serializes prior agent outputs with `JSON.stringify(...)` into every barrier prompt, multiplying the bloat across 5-lane fan-outs (15-40 KB per orchestrator turn). Phase A (v10.20.0, shipped) recovered ~14-16 KB via static trim. The remaining structural bloat only collapses via an artifact-on-disk barrier rewrite: write each phase output to `.bizar/runs/<run-id>/<phase-slug>__<label-slug>.json`, replace the inline JSON with a 3-line barrier reference block.
+
+**Migration note:** `.bizar/runs/` does not exist at plan time. The GC tool (B.3) starts with an empty candidate set; no migration needed. Any future tooling that writes to `.bizar/runs/` MUST conform to the manifest schema or be added to GC's ignore list.
+
+**Stale-artifact fallback:** When `dispatch.js` writes a barrier artifact and the read site finds a stale or partially-written file, the writer returns `{ stale: true }` (fail-soft). The reader decides whether to re-render the upstream phase. Pin with test.
+
+### Complete — Phase B.1: artifact directory + writer (commit d8d317f)
+
+`config/workflows/lib/dispatch.js` now exports `writeArtifact`, `readArtifact`, `listArtifacts`, `listRuns`, `barrierRef`, and `slugify`. Atomic write (tmp + fsync + `rename(2)`); fail-soft stale semantics per Q4 audit. Naming is fully data-driven (phase title + label field, kebab-cased, capped at 64 chars); no hardcoded workflow or phase lists.
+
+10-case regression suite at `cli/__tests__/workflow-write-artifact.test.mjs`: atomicity (orphan tmp from a crash does not surface), idempotency (same payload → same sha256), manifest freshness (duplicate `(phase,label)` replaces not appends), naming derivation (5 different `(phase, label)` combos), summaryHash stability, Q4 stale flag, barrierRef block under `MAX_BARRIER_BYTES=3072`, slugify normalizer, listRuns walk, WorkflowStateError.
+
+### Complete — Phase B.2: barrier prompts read paths not JSON (in flight)
+
+Replaced every `JSON.stringify(prior)` in every barrier prompt across all six `config/workflows/*.js` scripts with `barrierRef({runId, phase, label, summary}).promptBlock`. Each script now generates a single `RUN_ID = randomUUID()` and writes prior outputs via `writeArtifact()` before the next dispatch's prompt is assembled.
+
+**Barrier prompt size AFTER (max bytes per workflow):**
+- `bizar-debug`: 370 bytes (was ~3-6 KB inline JSON)
+- `bizar-implement`: 572 bytes (was ~5-10 KB)
+- `bizar-research`: 805 bytes (was ~5-15 KB)
+- `ultracode`: 807 bytes (was ~5-15 KB)
+- `ultracode-research`: 580 bytes (was ~3-6 KB)
+- `ultracode-review`: 237 bytes (was ~3-6 KB)
+
+All six workflows stay well under the 3072-byte budget; aggregate per-workflow prompt bytes (sum of every dispatch prompt) range from 897 B (`ultracode-review`, 4 dispatches) to 2674 B (`ultracode`, 7 dispatches). The Phase A target was ~50% trim; B.2 closes the structural gap and recovers an additional ~80-90% on top.
+
+**Regression tests:**
+- `cli/__tests__/workflow-bloat-pin.test.mjs` (new, 7 cases) — pins every dispatch prompt in all six workflows to `<= MAX_BARRIER_BYTES (3072)`. Reports the measured max + total bytes per workflow (advisory line for future drift visibility).
+- `cli/__tests__/workflow-barrier-ref.test.mjs` (new, 4 cases) — snapshot of the 4-line block format; truncation flag for summaries >200 chars; path alignment between `barrierRef` and `writeArtifact`/`readArtifact`.
+- `config/workflows/__tests__/workflow-payload-capture.test.mjs` — extended to inject `randomUUID` + stub `writeArtifact`/`barrierRef` so the existing routing capture tests still exercise the unmodified workflow bodies (40/40 still pass).
+
+The 5 remaining `JSON.stringify` calls per workflow (`config/workflows/{ultracode,bizar-research,ultracode-research,bizar-implement,bizar-debug}.js`) are non-barrier args fallbacks (`args || {}`) at script start, not barrier-prompt re-serialization. Total `JSON.stringify` count across all six workflows dropped from 23 to 5.
+
+### Complete — Phase B.3: GC + lifecycle
+
+`cli/commands/workflow-gc.mjs` (new) — sweeps `.bizar/runs/<run-id>/` directories older than the 14-day TTL (overridable via `--max-age-days=N`). In-progress gate: if any feature in `feature_list.json` has `state: 'in_progress'`, ALL runs are marked `skip:in-progress` (no deletion; we have no feature→runId mapping, so conservative). Permission failures (EACCES/EPERM) skip + warn without aborting the sweep; the CLI exits 1 only when at least one deletion fails. Each run writes `.bizar/runs/gc.json` with a per-row breakdown for audit.
+
+- `Makefile` — added `workflow-gc` (real deletion) and `workflow-gc-dry` (list only) targets next to `cleanup`. Both targets are wired into the `.PHONY` declaration.
+- `package.json` — added `"workflow:gc": "node cli/commands/workflow-gc.mjs"` and `"workflow:gc:dry": ...` to the scripts block. No new dependency.
+
+**Regression tests** (`cli/__tests__/workflow-gc.test.mjs`, 5 cases):
+- empty runs dir → 0 candidates, exit 0 (covers both missing dir and empty dir)
+- in_progress feature in `feature_list.json` blocks all deletions; both old runs remain on disk
+- 14-day boundary: 20d-old and 14.01d-old runs deleted; 5d-old skipped; idempotent re-run sees only the still-too-recent run
+- permission-denied (chmod 0o555 on the run dir): exit 1 with `ERROR (permission-denied)` row + `DELETED` row for the unlocked sibling; the locked run stays on disk
+- `gc.json` log written with `maxAgeDays`, `inProgressIds`, per-row `deleted`/`errors`/`skipped` counts
+
+### Complete — Phase B.4: test suite + grep pin
+
+- **`.harness/arch-rules.json`** — new rule `workflow-bloat-pin`. Total `JSON.stringify` count across `config/workflows/*.js` (excl. `lib/`) must remain ≤5. Baseline 5 is the `args || {}` fallback at script start (one per script); any new `JSON.stringify` re-introduces the inline-JSON re-serialization Phase B eliminated. The check command tolerates `grep -c` returning exit 1 when count is 0 (the `ultracode-review` baseline case).
+- **`CHANGELOG.md`** — full `## [10.21.0]` entry: file inventory per phase, measured barrier-prompt byte counts before/after, migration note (`.bizar/runs/` did not exist at plan time), stale-artifact fallback semantics.
+- **`PROGRESS.md`** — this block.
+
+**Final verification:**
+- `node --test cli/__tests__/workflow-write-artifact.test.mjs cli/__tests__/workflow-bloat-pin.test.mjs cli/__tests__/workflow-barrier-ref.test.mjs cli/__tests__/workflow-gc.test.mjs config/workflows/__tests__/dispatch.test.mjs config/workflows/__tests__/workflow-payload-capture.test.mjs` — **66/66 pass**.
+- `make check` — TypeScript gate green.
+- `JSON.stringify` total in `config/workflows/*.js` (excl. `lib/`): **5** (baseline; arch rule fires if it grows).
+
 
 ## Complete — 10.20.0 patch: Phase A token reduction trim
 

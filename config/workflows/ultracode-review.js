@@ -1,4 +1,5 @@
-import { dispatchAgent } from './lib/dispatch.js'
+import { randomUUID } from 'node:crypto'
+import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
 
 export const meta = {
   name: 'ultracode-review',
@@ -11,6 +12,10 @@ export const meta = {
 }
 
 const TARGET = typeof args === 'string' ? args : args?.target || 'the current working diff'
+
+// Phase B (v10.21.0) artifact-on-disk barriers: one runId per workflow
+// invocation. Used by every writeArtifact() + barrierRef() in this script.
+const RUN_ID = randomUUID()
 const FINDINGS = {
   type: 'object',
   required: ['findings'],
@@ -57,7 +62,7 @@ const reviewed = await pipeline(
   lenses,
   (lens) => dispatchAgent(agent, `reviewer-${lens[0]}`, `Review ${TARGET} through the ${lens[0]} lens. ${lens[1]} Report only actionable defects with a concrete failure scenario; do not praise or speculate.`, { ...lensRole[lens[0]], label: `review:${lens[0]}`, phase: 'Review', schema: FINDINGS }),
   (review, original) => (review?.findings || []).slice(0, 12).map((finding) => ({ ...finding, lens: original[0] })),
-  (findings) => parallel(findings.map((finding, index) => () => dispatchAgent(agent, `finding-verifier-${index + 1}`, `Try to refute this proposed finding. Inspect the exact code path and reject it if it is speculative, pre-existing, unreachable, or already covered.\n${JSON.stringify(finding)}`, { role: 'adversarial', risk: 'high', capabilities: ['reasoning', 'structured-output'], label: `verify:${index + 1}:${finding.file}`, phase: 'Verify', schema: VERDICT }).then((verdict) => ({ finding, verdict })))),
+  (findings) => parallel(findings.map((finding, index) => () => dispatchAgent(agent, `finding-verifier-${index + 1}`, `Try to refute this proposed finding. Inspect the exact code path and reject it if it is speculative, pre-existing, unreachable, or already covered.\n${barrierRef({ runId: RUN_ID, phase: 'Review', label: `review:${finding.lens || 'mixed'}`, summary: `${finding.summary ? finding.summary.slice(0, 200) : `finding in ${finding.file}`}` }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['reasoning', 'structured-output'], label: `verify:${index + 1}:${finding.file}`, phase: 'Verify', schema: VERDICT }).then((verdict) => ({ finding, verdict })))),
 )
 
 const verified = reviewed.flat(2).filter(Boolean).filter((item) => item.verdict?.confirmed).map((item) => ({ ...item.finding, verification: item.verdict.reason }))

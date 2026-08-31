@@ -29,11 +29,21 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const workflowsDir = resolve(here, '..');
 const dispatchPath = resolve(workflowsDir, 'lib', 'dispatch.js');
 const dispatch = await import(pathToFileURL(dispatchPath).href);
+
+// Phase B (v10.21.0): route every writeArtifact()/barrierRef() side effect
+// to a tmp dir so the test does not pollute the worktree.
+const TEST_RUN_ROOT = mkdtempSync(join(tmpdir(), 'bizar-capture-runs-'));
+process.env.BIZAR_RUNS_DIR = TEST_RUN_ROOT;
+globalThis.__BIZAR_TEST_RUN_ROOT__ = TEST_RUN_ROOT;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -186,11 +196,17 @@ async function runCapturedWorkflow(file, args, captured, ctx) {
   const fakePhase = () => {};
   const fakeLog = () => {};
 
+  // Phase B: stub writeArtifact + barrierRef so the test doesn't perform
+  // real fs side effects. Both are no-ops that return shape-compatible
+  // values for any caller that uses them in the workflow body.
+  const stubWriteArtifact = () => ({ runDir: '/tmp/stub', artifactPath: '/tmp/stub.json', slug: 'stub', manifestPath: '/tmp/manifest.json' });
+  const stubBarrierRef = ({ phase, label, summary }) => ({ promptBlock: `prior phase: ${phase}\nprior label: ${label}\nsummary:     ${summary || ''}\npath:        /tmp/stub.json`, path: '/tmp/stub.json', truncated: false, bytes: 100 });
+
   const fn = new Function(
-    'args', 'agent', 'pipeline', 'parallel', 'phase', 'log', 'dispatchCaptured',
+    'args', 'agent', 'pipeline', 'parallel', 'phase', 'log', 'dispatchCaptured', 'randomUUID', 'writeArtifact', 'barrierRef',
     `return (async () => { ${body.trim()} })();`,
   );
-  return fn(args, fakeAgent, fakePipeline, fakeParallel, fakePhase, fakeLog, makeCaptureDispatch(captured, ctx));
+  return fn(args, fakeAgent, fakePipeline, fakeParallel, fakePhase, fakeLog, makeCaptureDispatch(captured, ctx), randomUUID, stubWriteArtifact, stubBarrierRef);
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
