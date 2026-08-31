@@ -37,6 +37,20 @@ All six workflows stay well under the 3072-byte budget; aggregate per-workflow p
 
 The 5 remaining `JSON.stringify` calls per workflow (`config/workflows/{ultracode,bizar-research,ultracode-research,bizar-implement,bizar-debug}.js`) are non-barrier args fallbacks (`args || {}`) at script start, not barrier-prompt re-serialization. Total `JSON.stringify` count across all six workflows dropped from 23 to 5.
 
+### Complete — Phase B.3: GC + lifecycle
+
+`cli/commands/workflow-gc.mjs` (new) — sweeps `.bizar/runs/<run-id>/` directories older than the 14-day TTL (overridable via `--max-age-days=N`). In-progress gate: if any feature in `feature_list.json` has `state: 'in_progress'`, ALL runs are marked `skip:in-progress` (no deletion; we have no feature→runId mapping, so conservative). Permission failures (EACCES/EPERM) skip + warn without aborting the sweep; the CLI exits 1 only when at least one deletion fails. Each run writes `.bizar/runs/gc.json` with a per-row breakdown for audit.
+
+- `Makefile` — added `workflow-gc` (real deletion) and `workflow-gc-dry` (list only) targets next to `cleanup`. Both targets are wired into the `.PHONY` declaration.
+- `package.json` — added `"workflow:gc": "node cli/commands/workflow-gc.mjs"` and `"workflow:gc:dry": ...` to the scripts block. No new dependency.
+
+**Regression tests** (`cli/__tests__/workflow-gc.test.mjs`, 5 cases):
+- empty runs dir → 0 candidates, exit 0 (covers both missing dir and empty dir)
+- in_progress feature in `feature_list.json` blocks all deletions; both old runs remain on disk
+- 14-day boundary: 20d-old and 14.01d-old runs deleted; 5d-old skipped; idempotent re-run sees only the still-too-recent run
+- permission-denied (chmod 0o555 on the run dir): exit 1 with `ERROR (permission-denied)` row + `DELETED` row for the unlocked sibling; the locked run stays on disk
+- `gc.json` log written with `maxAgeDays`, `inProgressIds`, per-row `deleted`/`errors`/`skipped` counts
+
 ## Complete — 10.20.0 patch: Phase A token reduction trim
 
 **Why:** Bizar harness prompt surface had grown to ~70 KB / ~17.5 K tokens per multi-dispatch orchestrator turn (Opus cost ~$0.26/turn). The growth was mechanical: duplicated tool-shape pointers on every agent file, a 700-char grounding payload, 6 KB advisor-context dumps, verbose Mike self-improvement walkthroughs, and Skill-delegate command bodies that grew past their budget. Per `docs/plans/2026-08-31-prompt-token-reduction.md` Phase A, ship the pure trim (zero behavior change) to recover ~50% per turn.

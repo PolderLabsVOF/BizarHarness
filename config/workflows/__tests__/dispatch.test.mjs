@@ -305,8 +305,11 @@ test('dispatch: every dispatchAgent call site has a non-empty role OR a document
     let withRole = 0;
     while ((match = callRegex.exec(source)) !== null) {
       total += 1;
-      // Look at the surrounding 800 chars for `role: '<something>'` or a bypass comment
-      const tail = source.slice(match.index, match.index + 800);
+      // Look at the surrounding 1600 chars for `role: '<something>'` or a bypass comment.
+      // Phase B (v10.21.0) barrierRef() calls expand the prompt template
+      // significantly; the old 800-char window was too narrow to reach the
+      // trailing options object.
+      const tail = source.slice(match.index, match.index + 1600);
       const hasRole = /role\s*:\s*['"][^'"]+['"]/.test(tail);
       const hasBypass = bypassPattern.test(tail);
       if (hasRole || hasBypass) withRole += 1;
