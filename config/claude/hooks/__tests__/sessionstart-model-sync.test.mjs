@@ -234,7 +234,7 @@ test('model-sync: leaves model alone when it is already a live id', () => {
     writeFileSync(stage.routerPath, JSON.stringify({
       userSelected: { models: ['minimax/MiniMax-M3', 'codex/gpt-5.6-sol'] },
     }));
-    writeFileSync(stage.settingsPath, JSON.stringify({ model: 'minimax/MiniMax-M2.7' }));
+    writeFileSync(stage.settingsPath, JSON.stringify({ model: 'minimax/MiniMax-M3' }));
     const result = runHook(
       { hook_event_name: 'SessionStart', source: 'startup' },
       { HOME: stage.dir, BIZAR_MODEL_ROUTER_CONFIG: stage.routerPath },
@@ -242,7 +242,7 @@ test('model-sync: leaves model alone when it is already a live id', () => {
     assert.equal(result.status, 0);
     const after = JSON.parse(readFileSync(stage.settingsPath, 'utf8'));
     // Operator pinned a specific live id; leave it alone.
-    assert.equal(after.model, 'minimax/MiniMax-M2.7');
+    assert.equal(after.model, 'minimax/MiniMax-M3');
   } finally {
     rmSync(stage.dir, { recursive: true, force: true });
   }
@@ -307,6 +307,6 @@ test('model-sync: hook source mentions contract (regression fence)', () => {
   const src = readFileSync(HOOK_PATH, 'utf8');
   assert.match(src, /settings\.modelPicker\s*=\s*\{\s*options/);
   assert.match(src, /settings\.modelOverrides\s*=\s*Object\.fromEntries/);
-  assert.match(src, /settings\.model\.startsWith\('claude-'\)/);
+  assert.match(src, /!liveIds\.includes\(settings\.model\)/);
   assert.match(src, /atomicWriteJson/);
 });

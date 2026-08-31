@@ -226,7 +226,7 @@ function syncOnce() {
   settings.modelOverrides = Object.fromEntries(liveIds.map((id) => [id, id]));
 
   let modelChanged = false;
-  if (typeof settings.model === 'string' && settings.model.startsWith('claude-')) {
+  if (typeof settings.model === 'string' && !liveIds.includes(settings.model)) {
     settings.model = liveIds[0];
     modelChanged = true;
   }
