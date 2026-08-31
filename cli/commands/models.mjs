@@ -2003,6 +2003,12 @@ export async function run(name, args, isHelpRequest, deps = {}) {
 
   const router = loadRouter(routerPath);
   const { models: current } = currentSelection(router);
+  // 10.19.9 Phase 3: capture a snapshot of userSelected.models BEFORE
+  // applyModels overwrites the block, so the post-confirm status screen
+  // can classify re-confirmed picks as `preexisting` (⤳) instead of
+  // `fresh` (✔). `current` is read once and shared with pickModelsFn;
+  // we wrap it in a Set so classifyPickStatus can use `.has(id)`.
+  const preExisting = new Set(current);
   const picked = await pickModelsFn({ candidates, current });
 
   // Phase 2 (10.19.8): the Models.dev catalog fetch moves HERE — only
@@ -2069,6 +2075,18 @@ export async function run(name, args, isHelpRequest, deps = {}) {
     // Phase 2 the array equals the picks list (no filtering); Phase 4
     // will filter to only the IDs that actually received a profile.
     const enriched = picked.slice();
+    // 10.19.9 Phase 3: --json gains `status.perPick` + `status.totals`.
+    // The renderer writes nothing to stdout in --json mode (out is a
+    // no-op writable; isTTY=false keeps the single-line collapse from
+    // leaking into the JSON stream). The JSON envelope carries the
+    // equivalent data shape.
+    const statusResult = renderPickStatusScreen({
+      picked,
+      profiles: profilesMap,
+      preExisting,
+      out: { write: () => true },
+      isTTY: false,
+    });
     process.stdout.write(JSON.stringify({
       applied: block,
       endpoint,
@@ -2078,6 +2096,7 @@ export async function run(name, args, isHelpRequest, deps = {}) {
       modelsDev: modelsDevStatus,
       sync,
       picker,
+      status: { perPick: statusResult.perPick, totals: statusResult.totals },
     }, null, 2) + '\n');
   } else {
     console.log(chalk.green(`\n  v Saved ${block.models.length} model(s) to ${routerPath}:`));
@@ -2092,6 +2111,19 @@ export async function run(name, args, isHelpRequest, deps = {}) {
     if (picker.wrote) {
       console.log(chalk.dim(`    /model picker populated with ${picker.options.length} entr${picker.options.length === 1 ? 'y' : 'ies'}`));
     }
+    // 10.19.9 Phase 3: post-confirm status screen. Prints one ✔ / ✖ / ⤳
+    // row per picked id + an `N passed, M failed, K skipped` footer when
+    // stdout is a TTY, or a single collapsed line when piped. Empty-pick
+    // (the `picked.length === 0` branch above) intentionally skips the
+    // screen — the chalk.yellow "No models selected" line is the only
+    // operator feedback there.
+    renderPickStatusScreen({
+      picked,
+      profiles: profilesMap,
+      preExisting,
+      out: process.stdout,
+      isTTY: !!process.stdout.isTTY,
+    });
   }
   return true;
 }
