@@ -24,6 +24,7 @@ import {
   formatContextTokens,
   enrichModelsWithCapabilities,
   pickModels,
+  toCapabilityProfile,
 } from '../commands/models.mjs';
 
 test('formatContextTokens: 1M renders as "1M ctx"', () => {
@@ -129,4 +130,22 @@ test('pickModels: line-mode render shows "1M ctx" for MiniMax-M3', async () => {
   const buf = stdout.buffer();
   assert.match(buf, /1M ctx/, 'MiniMax-M3 row must show "1M ctx"');
   assert.match(buf, /200k ctx/, '200k row must show "200k ctx"');
+});
+
+// ── Phase 1 (v10.19.7): description / summary plumbing ───────────────────────
+
+test('toCapabilityProfile: propagates Models.dev description and summary', () => {
+  // Phase 1 plumbing — `toCapabilityProfile` must surface Models.dev's
+  // `description` and `summary` so Phase 3's status screen (10.19.9) can
+  // render the description without re-querying the catalog. Pin both
+  // fields so a future refactor cannot silently drop one.
+  const match = {
+    id: 'minimax/MiniMax-M3',
+    name: 'MiniMax M3',
+    description: 'Fast and cheap.',
+    summary: 'minimax/MiniMax-M3 is a fast M3 tier',
+  };
+  const profile = toCapabilityProfile('minimax/MiniMax-M3', match, 'exact-id', 0.9);
+  assert.equal(profile.description, 'Fast and cheap.');
+  assert.equal(profile.summary, 'minimax/MiniMax-M3 is a fast M3 tier');
 });

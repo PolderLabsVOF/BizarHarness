@@ -24,6 +24,9 @@ import {
   applyModelOverrides,
   applyModelPicker,
   deriveModelLabel,
+  enrichModelsWithCapabilities,
+  loadRouter,
+  normalizeModels,
   partitionStalePicks,
   classifyKind,
 } from '../commands/models.mjs';
@@ -473,4 +476,104 @@ test('bizar models --set populates modelPicker.options in settings.json', async 
   } finally {
     await new Promise((r) => srv.close(r));
   }
+});
+
+// ── Phase 1 (v10.19.7): _gateway plumbing ───────────────────────────────────
+
+test('normalizeModels: preserves gateway name/display_name/description under _gateway', () => {
+  const result = normalizeModels({
+    data: [
+      {
+        id: 'anthropic/claude-3-5-sonnet',
+        owned_by: 'anthropic',
+        name: 'Claude 3.5 Sonnet',
+        display_name: 'Sonnet 3.5',
+        description: 'Helpful assistant',
+      },
+    ],
+  });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'anthropic/claude-3-5-sonnet');
+  assert.equal(result[0].owned_by, 'anthropic');
+  assert.equal(result[0]._gateway.name, 'Claude 3.5 Sonnet');
+  assert.equal(result[0]._gateway.display_name, 'Sonnet 3.5');
+  assert.equal(result[0]._gateway.description, 'Helpful assistant');
+});
+
+test('normalizeModels: omits _gateway sub-keys when gateway omits them', () => {
+  const result = normalizeModels({
+    data: [{ id: 'minimax/MiniMax-M3', owned_by: 'minimax' }],
+  });
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0]._gateway, {});
+  // No `name` / `display_name` / `description` keys leak into the candidate.
+  assert.equal(result[0]._gateway.name, undefined);
+  assert.equal(result[0]._gateway.display_name, undefined);
+  assert.equal(result[0]._gateway.description, undefined);
+});
+
+test('normalizeModels: does not persist _gateway into userSelected on round-trip', () => {
+  // `_gateway` is in-memory only. Build a router with `userSelected` plus
+  // a non-empty `_gateway` candidate pool, normalize it, write through
+  // `applyModels`, read it back via `loadRouter`, and assert no `_gateway`
+  // key on the persisted profile. This pins the schema-migration boundary
+  // so `applyModels` cannot accidentally start serializing the new field.
+  const cwd = makeCwd();
+  try {
+    const routerPath = tmpRouterPath(cwd);
+    writeFileSync(routerPath, JSON.stringify({
+      version: '13.0.0',
+      endpoint: 'http://stub/v1',
+      tiers: [],
+      userSelected: { models: ['anthropic/claude-3-5-sonnet'] },
+    }, null, 2));
+
+    // Normalize a candidate pool with rich gateway metadata.
+    const normalized = normalizeModels({
+      data: [
+        {
+          id: 'anthropic/claude-3-5-sonnet',
+          owned_by: 'anthropic',
+          name: 'Claude 3.5 Sonnet',
+          description: 'Helpful assistant',
+        },
+      ],
+    });
+    assert.equal(normalized[0]._gateway.name, 'Claude 3.5 Sonnet');
+    assert.equal(normalized[0]._gateway.description, 'Helpful assistant');
+
+    // Round-trip: write through applyModels and read back.
+    applyModels({
+      routerPath,
+      models: ['anthropic/claude-3-5-sonnet'],
+      profiles: {},
+      source: 'test',
+    });
+    const loaded = loadRouter(routerPath);
+    const persistedProfile = loaded.profiles?.['anthropic/claude-3-5-sonnet'] || null;
+    if (persistedProfile) {
+      assert.equal(persistedProfile._gateway, undefined,
+        'persisted profile must NOT carry _gateway');
+    }
+    for (const id of (loaded.userSelected?.models || [])) {
+      assert.equal(typeof id, 'string',
+        `userSelected.models entries must be plain ids, got ${typeof id}`);
+    }
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('enrichModelsWithCapabilities: promotes _gateway.name into profile.name on Models.dev miss', () => {
+  // Phase 1 plumbing — when Models.dev has no row, the gateway-supplied
+  // `_gateway.name` becomes `profile.name` so the picker row renderer can
+  // read a label without dereferencing `_gateway` directly.
+  const candidates = [
+    { id: 'anthropic/claude-3-5-haiku', _gateway: { name: 'Claude 3.5 Haiku' } },
+  ];
+  const [out] = enrichModelsWithCapabilities(candidates, {});
+  assert.ok(out.profile, 'Models.dev miss with _gateway data must build a profile');
+  assert.equal(out.profile.name, 'Claude 3.5 Haiku');
+  assert.equal(out.profile.description, null); // gateway didn't have description either
+  assert.equal(out.profile.metadata.source, 'gateway-fallback');
 });

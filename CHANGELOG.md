@@ -1,5 +1,31 @@
 # Changelog
 
+## [10.19.7] - 2026-08-31
+
+`bizar models` picker rows carry richer label/description metadata — operator-visible behaviour unchanged.
+
+10.19.6 closed the `bizar update` flag-wiring gap, but the picker metadata plumbing was still lossy: `normalizeModels` stripped the gateway's `name` / `display_name` / `description` payload, and `toCapabilityProfile` only surfaced `name` / `family` / `capabilities` / `limits` — never `description` or `summary`. When the Models.dev catalog missed (or the gateway payload was sparse), the picker had no name to fall back to. 10.19.7 plumbs those fields through without changing any operator-visible behaviour.
+
+### Added
+
+- **`cli/commands/models.mjs#normalizeModels`** — preserves gateway `name` / `display_name` / `description` under a new `_gateway` sub-object on each candidate. Field is in-memory only; `applyModels` does NOT persist it to `model-router.json`. Pinned by `cli/__tests__/models-namespace-sync.test.mjs#normalizeModels does not persist _gateway into userSelected on round-trip`.
+- **`cli/commands/models.mjs#toCapabilityProfile`** — propagates `match.description` (Models.dev) and `match.summary` (Models.dev) onto the returned profile. Both fields default to `null` when the source row omits them. Pinned by `cli/__tests__/models-picker-context.test.mjs#toCapabilityProfile propagates Models.dev description and summary`.
+- **`cli/commands/models.mjs#enrichModelsWithCapabilities`** — on Models.dev miss with gateway-supplied `_gateway.name` or `_gateway.description`, builds a minimal `profile` so the picker row renderer can read `profile.name` / `profile.description` without dereferencing `_gateway`. Candidates whose `normalizeModels` output had no `_gateway` data keep the legacy `profile === null` contract so `capabilityLabel(null)` still returns `'metadata unavailable'`. Pinned by `cli/__tests__/models-namespace-sync.test.mjs#enrichModelsWithCapabilities promotes _gateway.name into profile.name on Models.dev miss`.
+- **`cli/commands/models.mjs#normalizeModels`** and **`#toCapabilityProfile`** — exported so the test files can import them directly (previously module-local).
+
+### Changed
+
+- **`cli/__tests__/models-namespace-sync.test.mjs`** — added 4 new cases pinning the `_gateway` plumbing: preserves name/display_name/description, omits sub-keys when gateway omits them, does not persist `_gateway` into `userSelected` on round-trip, and promotes `_gateway.name` into `profile.name` on Models.dev miss.
+- **`cli/__tests__/models-picker-context.test.mjs`** — added 1 new case pinning `toCapabilityProfile`'s propagation of Models.dev `description` and `summary`.
+
+### Risks
+
+- The `_gateway` field is intentionally in-memory only. `applyModels` writes `models`, `tierHints`, `profiles`, `lastUpdated`, `source` — NOT `_gateway`. Operators on 10.19.7 will see zero behavioural difference in `bizar models` until Phase 2 (10.19.8) starts reading the new field.
+
+### Audit references
+
+- F-192 (context-window plumbing) — extension for label / description metadata.
+
 ## [10.19.6] - 2026-08-30
 
 `bizar update` is honest now — every documented flag actually does what it claims.

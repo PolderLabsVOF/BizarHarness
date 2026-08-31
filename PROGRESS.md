@@ -327,6 +327,43 @@ source for mirrored agent instructions and verify byte equality."
 | 84 | P2: spec-sprawl reduction (schema versions + policy doc ownership + mirror parity) | ✅ shipped (this commit) |
 | 85 | P2: efficiency benchmarks (single vs multi-agent, sequential vs parallel DAG) | ✅ shipped (this commit) |
 
+## Complete — 10.19.7 patch: gateway `name` / `display_name` / `description` plumbing (Plan phase 1)
+
+**Why:** the `bizar models` picker label renderer reads `profile.name` and `profile.description`, but neither field was reliably populated. `normalizeModels` stripped the gateway's `name` / `display_name` / `description` payload entirely; `toCapabilityProfile` only surfaced `name` / `family` / `capabilities` / `limits`. When the Models.dev catalog missed (or the gateway payload was sparse), the picker had no name to fall back to. Plan phase 1 of `docs/plans/2026-08-31-models-picker-ux.md` plumbs these fields through without changing any operator-visible behaviour.
+
+**Fix (this commit):**
+
+- **`cli/commands/models.mjs#normalizeModels`** — preserves gateway `name` / `display_name` / `description` under a new in-memory `_gateway` sub-object on each candidate. Field is NOT persisted; `applyModels` writes `models` / `tierHints` / `profiles` / `lastUpdated` / `source` only. Exported for test imports.
+- **`cli/commands/models.mjs#toCapabilityProfile`** — propagates `match.description` (Models.dev) and `match.summary` (Models.dev) onto the returned profile. Both default to `null` when the source row omits them. Exported for test imports.
+- **`cli/commands/models.mjs#enrichModelsWithCapabilities`** — on Models.dev miss with gateway-supplied `_gateway.name` or `_gateway.description`, builds a minimal `profile` (with `metadata.source === 'gateway-fallback'`) so the picker row renderer can read `profile.name` / `profile.description` without dereferencing `_gateway`. Candidates whose `normalizeModels` output had no `_gateway` data keep the legacy `profile === null` contract so `capabilityLabel(null)` still returns `'metadata unavailable'` (Phase 2 owns the rewrite).
+- **`cli/commands/models.mjs#capabilityLabel`** — unchanged. Phase 1 only ensures the data is available; the renderer rewrite is Phase 2 (10.19.8).
+
+**Regression tests (+5):**
+
+- **`cli/__tests__/models-namespace-sync.test.mjs`** — 4 new cases:
+  - `normalizeModels preserves gateway name/display_name/description under _gateway`
+  - `normalizeModels omits _gateway sub-keys when gateway omits them`
+  - `normalizeModels does not persist _gateway into userSelected on round-trip` (round-trip through `applyModels` + `loadRouter`; asserts no `_gateway` key on the persisted profile and that `userSelected.models` entries are plain strings).
+  - `enrichModelsWithCapabilities promotes _gateway.name into profile.name on Models.dev miss`
+- **`cli/__tests__/models-picker-context.test.mjs`** — 1 new case:
+  - `toCapabilityProfile propagates Models.dev description and summary`
+
+**Tests run (from this worktree, `worktree-agent-a8f029241a78580c8`):**
+
+- `node --test cli/__tests__/models-namespace-sync.test.mjs` — 27/27 pass (23 original + 4 new).
+- `node --test cli/__tests__/models-picker-context.test.mjs` — 10/10 pass (9 original + 1 new).
+- `node --test cli/__tests__/models-picker.test.mjs` — 35/35 pass (no edits; sanity check).
+- `node --test cli/__tests__/models-picker-tty.test.mjs` — passes (no edits; sanity check).
+- `node --test cli/__tests__/models-cli.test.mjs` — passes (no edits; sanity check).
+- `node --test cli/__tests__/models-refresh.test.mjs` — passes (no edits; sanity check).
+- `node --test cli/__tests__/models-persists-under-bizar-home.test.mjs` — passes (no edits; sanity check).
+- `node --test cli/__tests__/models-mirror-shipped.test.mjs` — passes (no edits; sanity check).
+- `make check` — passes.
+- `make check-arch` — passes.
+- `make verify-removed-surfaces` — passes.
+- `make verify-repo-structure` — passes.
+- `make test` — 941/942 pass; one pre-existing failure (`cli/install/prune.test.mjs#force=true accepted (no throw)`) is the worktree-env `.git/hooks` mkdir limitation, unrelated to this commit; the test passes on master (12/12); the worktree-env failure is environmental (`.git/hooks` is a file-pointer in worktrees, not a directory).
+
 ## Complete — 10.19.6 patch: `bizar update` is honest — flags do what they claim
 
 **Why:** while preparing the next audit, `bizar update --dry-run --force --yes` was discovered to be functionally identical to plain `bizar update`. `cli/commands/install.mjs#update` called a legacy `runUpdate(args)` alias that ignored every flag. The settings.json union-merge path (F-183) was unreachable, `runRepair` was skipped, and the post-update `bizar doctor` check never ran. The help text also advertised `--check`, `--channel=stable|beta`, and `--all`, none of which were wired into `parseFlags` or `runInstaller`. Audit callouts: A1 (no-op flags), A2 (union-merge unreachable), A5 (post-update doctor never runs), A6 (runRepair skipped after update), A7 (help-text drift).
