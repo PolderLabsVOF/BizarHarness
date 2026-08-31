@@ -9,6 +9,8 @@
 import { createServer } from 'node:http';
 import assert from 'node:assert';
 import { spawn } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // Absolute paths so the subprocess can find the module
@@ -24,15 +26,23 @@ function makeTmpEnv(overrides = {}) {
 
 /**
  * Spawn `bizar model list` against a given port. Resolves with { stdout, stderr, code }.
+ *
+ * 10.22.0 / Phase 4: redirect BIZAR_HOME to a tmp dir so the subprocess
+ * never reads the operator's real `disabledProviders` list. The fixture
+ * router file lives under that tmp dir and starts with no disabled
+ * providers; the test asserts the full sample survives.
  */
 function runModelList(port, extraArgs = []) {
   return new Promise((resolve) => {
+    const tmpHome = mkdtempSync(join(tmpdir(), 'bizar-model-test-'));
     const child = spawn(process.execPath, [BIN, 'model', 'list', ...extraArgs], {
       cwd: process.cwd(),
       env: makeTmpEnv({
         PORT: String(port),
         BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${port}/v1`,
         ANTHROPIC_AUTH_TOKEN: 'test-token',
+        BIZAR_HOME: tmpHome,
+        HOME: tmpHome,
       }),
       timeout: 10_000,
     });
@@ -104,15 +114,20 @@ describe('bizar model list', { concurrency: 1 }, () => {
 
     const { stdout, stderr, code } = await runModelList(serverPort);
     assert.strictEqual(code, 0, `expected 0, got ${code}. stderr: ${stderr}`);
-    assert.ok(stdout.includes('cx/'), 'table should contain cx/ group');
+    // 10.22.0 / Phase 4: `bizar model list` groups by the canonical
+    // `classifyKind` family name (no hardcoded prefix list in the file).
+    // Family buckets are bare names ('cx', 'anthropic', 'claude', etc.) —
+    // see `cli/commands/models.mjs#classifyKind`.
+    assert.ok(stdout.includes('cx'), 'table should contain cx family group');
     assert.ok(stdout.includes('claude-qwen/qwen3.8-max'), 'table should contain claude-qwen/qwen3.8-max');
-    assert.ok(stdout.includes('claude-minimax/'), 'table should contain claude-minimax/ group');
-    assert.ok(stdout.includes('oc/'), 'table should contain oc/ group');
-    assert.ok(stdout.includes('(no prefix)'), 'table should contain (no prefix) group');
-    assert.ok(stdout.includes('anthropic/'), 'table should contain anthropic/ group');
-    // Note: claude/ appears in PROVIDER_GROUPS but no sample model matches
-    // that prefix; the slash-less "claude-3-5-sonnet-20241022" lands under
-    // "(no prefix)" instead, which is asserted above.
+    assert.ok(stdout.includes('claude-minimax/'), 'table should contain claude-minimax/ id');
+    assert.ok(stdout.includes('oc'), 'table should contain oc family group');
+    assert.ok(stdout.includes('anthropic/sonnet-4-20251120'), 'table should contain anthropic id (no operators disabled list in this test)');
+    // `no-prefix-model` has no recognized provider prefix → family='other'
+    // → bucket key '(unclassified)'. `claude-3-5-sonnet-20241022` (no
+    // slash, claude- prefix) → family='claude'.
+    assert.ok(stdout.includes('(unclassified)') || stdout.includes('other'), 'table should contain unclassified bucket for unprefixed id');
+    assert.ok(stdout.includes('claude-3-5-sonnet-20241022'), 'table should contain claude id');
   });
 
   it('--json exits 0 and emits valid JSON', async () => {
@@ -126,7 +141,16 @@ describe('bizar model list', { concurrency: 1 }, () => {
     let parsed;
     assert.doesNotThrow(() => { parsed = JSON.parse(stdout); }, 'stdout should be valid JSON');
     assert.ok(parsed.providers, 'JSON should have providers key');
-    assert.ok(Array.isArray(parsed.providers['cx/']), 'cx/ should be an array');
+    // 10.22.0 / Phase 4: providers keys are classifyKind family names
+    // ('cx', 'claude-minimax', 'claude-qwen', 'oc', 'anthropic', 'claude',
+    // 'other') — no hardcoded prefix list.
+    assert.ok(Array.isArray(parsed.providers.cx), 'cx should be an array');
+    assert.ok(Array.isArray(parsed.providers['claude-minimax']), 'claude-minimax should be an array');
+    assert.ok(Array.isArray(parsed.providers['claude-qwen']), 'claude-qwen should be an array');
+    assert.ok(Array.isArray(parsed.providers.oc), 'oc should be an array');
+    assert.ok(Array.isArray(parsed.providers.anthropic), 'anthropic should be an array (no operators disabled list in this test)');
+    // The total counts everything that survived the (empty) disabled
+    // filter — i.e. the full sample.
     assert.strictEqual(parsed.total, SAMPLE_MODELS.length, 'total should match model count');
   });
 

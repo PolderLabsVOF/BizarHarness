@@ -3,7 +3,7 @@
  *
  * `bizar model` subcommands:
  *   list  — fetch all models from the configured provider gateway and group
- *           by provider prefix.
+ *           by provider family.
  *
  * The gateway URL is read from `BIZAR_MODEL_ROUTER_URL` or
  * `ANTHROPIC_BASE_URL`. If neither is set, the command errors out with a
@@ -14,17 +14,23 @@
  * makes the /model picker surface only IDs prefixed with "claude" or
  * "anthropic". This command shows the FULL set including cx/, oc/, and
  * unprefixed IDs.
+ *
+ * 10.22.0 / Phase 4 spirit-of-constraint fix: this command used to carry a
+ * hardcoded `PROVIDER_GROUPS` prefix list that duplicated the canonical
+ * provider family detection in `cli/commands/models.mjs#classifyKind`.
+ * It now imports `classifyKind` from there (single source of truth) and
+ * filters the operator's `disabledProviders` list using the same
+ * case-sensitive prefix match as every other read site — adding a new
+ * provider family no longer requires touching this file.
  */
 import chalk from 'chalk';
+
+import { classifyKind, filterCandidatesByDisabledProviders, readDisabledProviders } from './models.mjs';
 
 const BIZAR_MODEL_ROUTER_URL = process.env.BIZAR_MODEL_ROUTER_URL
   || process.env.ANTHROPIC_BASE_URL
   || null;
 const ANTHROPIC_AUTH_TOKEN = process.env.ANTHROPIC_AUTH_TOKEN || null;
-
-const PROVIDER_GROUPS = [
-  'cx/', 'claude-minimax/', 'claude-qwen/', 'oc/', 'claude/', 'anthropic/',
-];
 
 function showHelp() {
   const gatewayDisplay = BIZAR_MODEL_ROUTER_URL ?? '(not configured)';
@@ -41,13 +47,17 @@ function showHelp() {
     The /model picker inside Claude Code shows only "claude"/"anthropic" prefixed
     IDs. This command exposes the full set (cx/, claude-minimax/, claude-qwen/, oc/, etc.).
 
+    The list honours the operator's \`disabledProviders\` list from
+    model-router.json (10.22.0 / Phase 4) — same source of truth as
+    \`bizar models\`.
+
   Gateway configuration:
     Set BIZAR_MODEL_ROUTER_URL or ANTHROPIC_BASE_URL to your provider gateway
     (e.g. https://router.example.com/v1). If neither is set, this command
     exits with a configuration error.
 
   Flags:
-    --json   Emit { providers: { "cx/": [...], ... }, total: N }
+    --json   Emit { providers: { "<family>": [...], ... }, total: N }
   `);
 }
 
@@ -94,19 +104,28 @@ async function fetchModels() {
 }
 
 function groupByProvider(models) {
+  // 10.22.0 / Phase 4: filter the operator's `disabledProviders` first,
+  // then group by the canonical `classifyKind` family name. No
+  // hardcoded prefix list lives in this file.
+  const ids = models.map((m) => (typeof m?.id === 'string' ? m.id : ''));
+  const disabled = readDisabledProviders();
+  const { kept } = filterCandidatesByDisabledProviders(ids, disabled);
+  const keptSet = new Set(kept);
+
   const groups = {};
   for (const m of models) {
-    const id = m.id ?? '';
-    const prefix = PROVIDER_GROUPS.find(p => id.startsWith(p)) || null;
-    const key = prefix !== null ? prefix : '(no prefix)';
+    const id = typeof m?.id === 'string' ? m.id : '';
+    if (!id || !keptSet.has(id)) continue;
+    const family = classifyKind(id);
+    const key = family || '(unclassified)';
     if (!groups[key]) groups[key] = [];
-    groups[key].push({ id, display_name: m.display_name ?? m.id });
+    groups[key].push({ id, display_name: m.display_name ?? id });
   }
   return groups;
 }
 
 function printTable(groups) {
-  const colWidths = { provider: 14, id: 50, display_name: 30 };
+  const colWidths = { provider: 16, id: 50, display_name: 30 };
 
   const header = [
     'provider'.padEnd(colWidths.provider),
