@@ -51,6 +51,17 @@ The 5 remaining `JSON.stringify` calls per workflow (`config/workflows/{ultracod
 - permission-denied (chmod 0o555 on the run dir): exit 1 with `ERROR (permission-denied)` row + `DELETED` row for the unlocked sibling; the locked run stays on disk
 - `gc.json` log written with `maxAgeDays`, `inProgressIds`, per-row `deleted`/`errors`/`skipped` counts
 
+### Complete — Phase B.4: test suite + grep pin
+
+- **`.harness/arch-rules.json`** — new rule `workflow-bloat-pin`. Total `JSON.stringify` count across `config/workflows/*.js` (excl. `lib/`) must remain ≤5. Baseline 5 is the `args || {}` fallback at script start (one per script); any new `JSON.stringify` re-introduces the inline-JSON re-serialization Phase B eliminated. The check command tolerates `grep -c` returning exit 1 when count is 0 (the `ultracode-review` baseline case).
+- **`CHANGELOG.md`** — full `## [10.21.0]` entry: file inventory per phase, measured barrier-prompt byte counts before/after, migration note (`.bizar/runs/` did not exist at plan time), stale-artifact fallback semantics.
+- **`PROGRESS.md`** — this block.
+
+**Final verification:**
+- `node --test cli/__tests__/workflow-write-artifact.test.mjs cli/__tests__/workflow-bloat-pin.test.mjs cli/__tests__/workflow-barrier-ref.test.mjs cli/__tests__/workflow-gc.test.mjs config/workflows/__tests__/dispatch.test.mjs config/workflows/__tests__/workflow-payload-capture.test.mjs` — **66/66 pass**.
+- `make check` — TypeScript gate green.
+- `JSON.stringify` total in `config/workflows/*.js` (excl. `lib/`): **5** (baseline; arch rule fires if it grows).
+
 ## Complete — 10.20.0 patch: Phase A token reduction trim
 
 **Why:** Bizar harness prompt surface had grown to ~70 KB / ~17.5 K tokens per multi-dispatch orchestrator turn (Opus cost ~$0.26/turn). The growth was mechanical: duplicated tool-shape pointers on every agent file, a 700-char grounding payload, 6 KB advisor-context dumps, verbose Mike self-improvement walkthroughs, and Skill-delegate command bodies that grew past their budget. Per `docs/plans/2026-08-31-prompt-token-reduction.md` Phase A, ship the pure trim (zero behavior change) to recover ~50% per turn.

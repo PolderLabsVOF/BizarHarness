@@ -45,6 +45,15 @@
       "what": "A shipped agent can bypass the shared evidence policy or cannot call WebSearch.",
       "why": "Mandatory routing is only reliable when every delegated role has the same no-guess documentation contract and the tool access to follow it.",
       "fix": "Reference AGENT_BASELINE in the agent body and include WebSearch in its tools frontmatter."
+    },
+    {
+      "id": "workflow-bloat-pin",
+      "description": "Workflow scripts MUST NOT re-serialize prior outputs as inline JSON into barrier prompts (Phase B.2 / v10.21.0).",
+      "check": "node -e \"const cp=require('node:child_process');const fs=require('node:fs');const dir='config/workflows';const scripts=fs.readdirSync(dir).filter(f=>f.endsWith('.js')&&!['lib'].includes(f));let total=0;for(const f of scripts){let out;try{out=cp.execSync('grep -c JSON.stringify '+dir+'/'+f,{encoding:'utf8'});}catch(e){out=e.stdout||'0';}total+=parseInt((out||'0').trim(),10);}console.log('JSON.stringify total in config/workflows/*.js (excl. lib/):',total);process.exit(total<=5?0:1);\"",
+      "expect": "pass",
+      "what": "A new JSON.stringify(...) call re-introduces inline-JSON re-serialization into a barrier prompt — the structural bloat Phase B eliminated.",
+      "why": "Phase A (v10.20.0) trimmed static prompt surface; Phase B (v10.21.0) collapsed the remaining structural bloat by writing prior outputs to .bizar/runs/<id>/ and passing a 4-line barrierRef() block to the next agent. Inline JSON re-serialization multiplies the per-turn spend on every fan-out.",
+      "fix": "Write the prior result with writeArtifact({runId, phase, label, payload}) and pass barrierRef({runId, phase, label, summary}).promptBlock into the prompt template instead of JSON.stringify(prior). The 5 remaining baseline uses are the args || {} fallback at script start (one per script) — these are not barrier re-serialization."
     }
   ]
 }

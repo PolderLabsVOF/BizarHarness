@@ -1,5 +1,47 @@
 # Changelog
 
+## [10.21.0] - 2026-08-31
+
+Phase B workflow re-architecture: artifact-on-disk barriers. Every Claude-Code-native workflow script (`config/workflows/*.js`) now writes prior agent outputs to `.bizar/runs/<run-id>/<phase-slug>__<label-slug>.json` and passes a 4-line `barrierRef()` block to the next agent instead of re-inlining the full JSON. Phase A (v10.20.0) recovered ~14-16 KB of static prompt bloat per orchestrator turn; Phase B collapses the remaining 15-40 KB of structural workflow bloat.
+
+### Added
+
+- **`config/workflows/lib/dispatch.js`** — new exports: `writeArtifact`, `readArtifact`, `listArtifacts`, `listRuns`, `barrierRef`, `slugify`, `WorkflowStateError`. Atomic write (`tmp` + `fsync` + `rename(2)`); fail-soft stale semantics per Q4 audit recommendation; manifest schema `{schemaVersion, runId, createdAt, updatedAt, phases:[{phase, label, artifactPath, summaryHash, stale, wroteAt}]}`. Naming is fully data-driven (`meta.phases[i].title` + `label:` field, kebab-cased, capped at 64 chars) — no hardcoded workflow or phase lists.
+- **`cli/commands/workflow-gc.mjs`** (new) — sweeps `.bizar/runs/<run-id>/` directories older than the 14-day TTL. In-progress gate (`feature_list.json#in_progress`) blocks all deletions. Permission failures skip + warn without aborting. Emits `.bizar/runs/gc.json` audit log per sweep.
+- **`cli/__tests__/workflow-write-artifact.test.mjs`** (new, 10 cases) — atomicity (orphan tmp from a crash does not surface), idempotency (same payload → same sha256), manifest freshness, naming derivation across 5 (phase, label) combos, summaryHash stability, Q4 stale flag, barrierRef block under `MAX_BARRIER_BYTES=3072`, slugify normalizer, listRuns walk, WorkflowStateError.
+- **`cli/__tests__/workflow-bloat-pin.test.mjs`** (new, 7 cases) — pins every dispatch prompt in all six workflows to ≤3072 bytes. Reports measured max + total bytes per workflow.
+- **`cli/__tests__/workflow-barrier-ref.test.mjs`** (new, 4 cases) — snapshots the 4-line block format; truncation flag for summaries >200 chars; path alignment between `barrierRef` and `writeArtifact`/`readArtifact`.
+- **`cli/__tests__/workflow-gc.test.mjs`** (new, 5 cases) — empty runs dir, in-progress exclusion, 14-day boundary, permission-denied handling, gc.json audit log shape.
+- **`Makefile`** — `workflow-gc` and `workflow-gc-dry` targets added next to `cleanup`.
+- **`package.json`** — `scripts.workflow:gc` and `scripts.workflow:gc:dry` entries (no new dependency).
+- **`.harness/arch-rules.json`** — `workflow-bloat-pin` rule: total `JSON.stringify` count across `config/workflows/*.js` (excl. `lib/`) must remain ≤5. Baseline of 5 is the `args || {}` fallback at script start (one per script); any new `JSON.stringify` re-introduces the inline-JSON re-serialization Phase B eliminated.
+
+### Changed
+
+- **`config/workflows/{bizar-debug,bizar-implement,bizar-research,ultracode,ultracode-research,ultracode-review}.js`** — every barrier prompt's `JSON.stringify(prior)` replaced with `barrierRef({runId, phase, label, summary}).promptBlock`. Each script now generates a single `RUN_ID = randomUUID()` and writes prior results via `writeArtifact()` before the next dispatch's prompt is assembled. Total `JSON.stringify` calls across the six scripts dropped from 23 to 5 (the 5 are the `args || {}` fallback at script start — not barrier re-serialization).
+- **`config/workflows/__tests__/workflow-payload-capture.test.mjs`** — extended to inject `randomUUID` + stub `writeArtifact`/`barrierRef` so the existing routing capture harness still exercises the workflow bodies without performing real fs side effects.
+- **`config/workflows/__tests__/dispatch.test.mjs`** — role-grep search window expanded from 800 to 1600 chars so the Phase B `barrierRef()` expansion inside prompt templates does not push the trailing options object beyond the regex reach.
+
+### Measured impact
+
+Barrier prompt size AFTER Phase B (max bytes per workflow, was inline JSON):
+- `bizar-debug`: 370 bytes (was ~3-6 KB)
+- `bizar-implement`: 572 bytes (was ~5-10 KB)
+- `bizar-research`: 805 bytes (was ~5-15 KB)
+- `ultracode`: 807 bytes (was ~5-15 KB)
+- `ultracode-research`: 580 bytes (was ~3-6 KB)
+- `ultracode-review`: 237 bytes (was ~3-6 KB)
+
+All six stay under the 3072-byte `MAX_BARRIER_BYTES` budget. Aggregate per-workflow prompt bytes (sum of every dispatch prompt) range from 897 B (`ultracode-review`, 4 dispatches) to 2674 B (`ultracode`, 7). Phase A recovered ~50% via static trim; Phase B recovers an additional ~80-90% on top by closing the structural gap.
+
+### Migration note
+
+`.bizar/runs/` did not exist at plan time. The GC tool starts with an empty candidate set; no migration needed. Any future tooling that writes to `.bizar/runs/` MUST conform to the manifest schema or be added to GC's ignore list.
+
+### Stale-artifact fallback
+
+When `dispatch.js` writes a barrier artifact and the read site finds a stale or partially-written file, the writer returns `{ stale: true }` (fail-soft). The reader decides whether to re-render the upstream phase. Pinned by `cli/__tests__/workflow-write-artifact.test.mjs#6. Q4 stale flag`.
+
 ## [10.20.0] - 2026-08-31
 
 Phase A token-reduction trim of the Bizar harness prompt surface. Mechanical, zero behavior change. ~50% reduction in per-orchestrator-turn token spend.
