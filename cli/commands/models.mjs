@@ -1473,6 +1473,168 @@ async function pickModelsInteractive({ ordered, candidates, selected, lastOrder,
   }
 }
 
+// ── 10.19.9 Phase 3: post-confirm status screen ──────────────────────────────
+//
+// After the operator confirms a picker selection, `bizar models` prints a
+// status screen showing one row per picked ID with a ✔ / ✖ / ⤳ icon. The
+// shape mirrors `cli/doctor.mjs#runDoctor` (per-row ✔ / ✖ pattern) so
+// operators see a familiar surface. The renderer is CLI-only — the
+// SessionStart hook has no TTY and no outbound HTTP and must NOT import
+// these helpers.
+
+const STATUS_ICON = Object.freeze({
+  fresh: '✔',       // ✔
+  refreshed: '✔',   // ✔
+  unavailable: '✖', // ✖
+  preexisting: '⤳', // ⤳
+});
+
+/**
+ * Classify one picked id into the four status states the renderer can
+ * print. Pure: no I/O, no side effects.
+ *
+ *   'preexisting'  — the operator-confirmed pick already lived in
+ *                    userSelected.models BEFORE this run. Wins over every
+ *                    other branch (the operator explicitly re-selected
+ *                    a known-good pick).
+ *   'unavailable'  — the post-confirm Models.dev enrichment returned
+ *                    profile === null AND no _gateway.name fallback was
+ *                    available. Surface as ✖.
+ *   'refreshed'    — profile exists with metadata.source === 'gateway-
+ *                    fallback' (Phase 1 contract). Models.dev missed but
+ *                    the gateway's name field rescued the row. Surface
+ *                    as ✔ (refreshed).
+ *   'fresh'        — profile exists with metadata.source === 'models.dev'
+ *                    (the Phase 2 enrichment succeeded). Surface as ✔.
+ *
+ * @param {string} id            the picked id (e.g. 'anthropic/claude-3-5-sonnet')
+ * @param {object|null} profile  the Phase 2 enrichment result for that id
+ *                               (null when both Models.dev AND _gateway.name missed)
+ * @param {Set<string>} [preExisting]  snapshot of userSelected.models BEFORE applyModels
+ *                                      overwrote the block; undefined is treated as empty
+ * @returns {'fresh'|'refreshed'|'unavailable'|'preexisting'}
+ */
+export function classifyPickStatus(id, profile, preExisting) {
+  if (preExisting instanceof Set && preExisting.has(id)) return 'preexisting';
+  if (!profile) return 'unavailable';
+  if (profile.metadata && profile.metadata.source === 'gateway-fallback') return 'refreshed';
+  return 'fresh';
+}
+
+/**
+ * Resolve the profile object from the heterogeneous shapes Phase 2 hands
+ * us: a `Map<string, object|null>` when called from `run()`, a plain
+ * object when called from a fixture, or `undefined` for "the enrichment
+ * step never ran for this id".
+ */
+function resolveProfile(profiles, id) {
+  if (!profiles) return null;
+  if (profiles instanceof Map) {
+    return profiles.has(id) ? profiles.get(id) : null;
+  }
+  if (typeof profiles === 'object') {
+    return Object.prototype.hasOwnProperty.call(profiles, id) ? profiles[id] : null;
+  }
+  return null;
+}
+
+function formatStatusRow({ id, profile, status }) {
+  const icon = STATUS_ICON[status];
+  if (status === 'preexisting') {
+    return chalk.dim(`  ${icon} ${id}  (already in userSelected)`);
+  }
+  if (status === 'unavailable') {
+    // Profile is null AND no _gateway.name fallback. The renderer never
+    // reaches this branch when Phase 2's _gateway.name plumbing survived.
+    return chalk.red(`  ${icon} ${id}  (metadata unavailable)`);
+  }
+  // 'fresh' or 'refreshed' — both render as ✔ with the model name.
+  // For 'refreshed' the only label available is the Phase 1 _gateway.name;
+  // for 'fresh' we prefer Models.dev's name and fall back to _gateway.name.
+  const label = (profile && profile.name)
+    || (profile && profile._gateway && profile._gateway.name)
+    || id;
+  return chalk.green(`  ${icon} ${id}  (${label})`);
+}
+
+/**
+ * Render the post-confirm status screen for one picker run.
+ *
+ * CLI-only surface — do NOT import from the SessionStart hook (no TTY,
+ * no outbound HTTP). The helper writes to `out` based on `isTTY`:
+ *   - isTTY=true  → one `  <icon> <id>  (<label>)` line per picked id
+ *                   plus a footer `N passed, M failed, K skipped`.
+ *   - isTTY=false → one collapsed line `  v N passed, M failed, K skipped`
+ *                   appended to the existing "Saved" block (so piped
+ *                   callers see one summary line, not a flood of rows).
+ *
+ * Always returns `{ perPick, totals, exitCode }` so `--json` callers can
+ * embed the data in the JSON envelope without re-implementing the
+ * classification:
+ *   - status.perPick = [{ id, status, hasProfile }]
+ *   - status.totals  = { passed, failed, skipped }
+ *   - exitCode       = 0 when at least one ✔; 2 when EVERY row is ✖;
+ *                      0 otherwise (mixed picks, or every pick ⤳).
+ *
+ * The caller decides whether to call `process.exit(exitCode)`; the
+ * renderer never exits on its own.
+ *
+ * @param {object} opts
+ * @param {string[]} opts.picked            ids the operator confirmed
+ * @param {Map<string, object|null>|object} [opts.profiles]  Phase 2 enrichment map
+ * @param {Set<string>} [opts.preExisting]  userSelected.models snapshot BEFORE applyModels
+ * @param {object} [opts.fetchSummary]      unused today; reserved for Phase 4 disable surfacing
+ * @param {NodeJS.WritableStream} [opts.out] defaults to process.stdout (test fixtures inject a stub)
+ * @param {boolean} [opts.isTTY=true]       when false, print the single-line collapse
+ * @returns {{ perPick: Array<{id:string, status:string, hasProfile:boolean}>, totals: {passed:number, failed:number, skipped:number}, exitCode: 0|2 }}
+ */
+export function renderPickStatusScreen({
+  picked = [],
+  profiles,
+  preExisting,
+  fetchSummary = null,
+  out = process.stdout,
+  isTTY = true,
+} = {}) {
+  const perPick = [];
+  let passed = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const id of picked) {
+    const profile = resolveProfile(profiles, id);
+    const status = classifyPickStatus(id, profile, preExisting);
+    const hasProfile = !!profile;
+    perPick.push({ id, status, hasProfile });
+    if (status === 'preexisting') skipped += 1;
+    else if (status === 'unavailable') failed += 1;
+    else passed += 1;
+  }
+  const totals = { passed, failed, skipped };
+
+  if (isTTY) {
+    for (const entry of perPick) {
+      const profile = resolveProfile(profiles, entry.id);
+      out.write(formatStatusRow({ id: entry.id, profile, status: entry.status }) + '\n');
+    }
+    const summary = chalk.dim(`  ${passed} passed, ${failed} failed, ${skipped} skipped`);
+    out.write(summary + '\n');
+  } else {
+    const summary = chalk.dim(`  v ${passed} passed, ${failed} failed, ${skipped} skipped`);
+    out.write(summary + '\n');
+  }
+
+  // Exit-code contract: 0 when at least one ✔; 2 only when EVERY row is ✖.
+  // Mixed picks and all-⤳ picks both exit 0 (the operator got a usable
+  // confirmation, even if some picks couldn't be enriched).
+  const exitCode = (passed > 0)
+    ? 0
+    : (failed === picked.length && picked.length > 0)
+      ? 2
+      : 0;
+
+  return { perPick, totals, exitCode };
+}
+
 /**
  * Build a small async iterator over `stdin` lines.
  * Returns null from `next()` when the stream ends.

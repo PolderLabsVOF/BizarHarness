@@ -2,6 +2,20 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — 10.19.9 patch: `bizar models` post-confirm status screen (Phase 3)
+
+**Why:** `bizar models` (interactive) confirms a picker selection and prints a "Saved N model(s)" block but gives the operator no per-pick visibility into whether each ID's Models.dev metadata was retrieved (✔), unavailable (✖), or carried over from a prior `userSelected` (⤳). Phase 3 ships the renderer + classifier from `docs/plans/2026-08-31-models-picker-ux.md` lines 481-594; the underlying data flow is already correct from Phase 1 (gateway `name` plumbing) and Phase 2 (lazy metadata fetch).
+
+**Plan (4 commits, in this order):**
+1. `feat(models): add renderPickStatusScreen + classifyPickStatus (exported)` — adds the two helpers; no wire-in yet.
+2. `feat(models): wire status screen into interactive picker` — calls `renderPickStatusScreen` after the "Saved" block; empty-pick branch preserved.
+3. `feat(models): --json gains status.perPick + status.totals` — non-TTY single-line collapse, JSON shape, exit-code propagation. Adds the 5 picker tests.
+4. `feat(models): document status screen in showHelp + CHANGELOG + PROGRESS (v10.19.9)` — showHelp paragraph, CHANGELOG v10.19.9 entry, PROGRESS 10.19.9 patch entry. Plus the 1 subprocess test. Adds grep-fence rule to `make check-arch`.
+
+**Test count target:** +6 (models-picker +5, models-namespace-sync +1 subprocess).
+
+**Out of scope:** SDK changes, `config/claude/hooks/sessionstart-model-sync.mjs`, `disabledProviders` (Phase 4), the deprecated `bizar model` alias surface.
+
 ## Complete — 10.20.0 patch: Phase A token reduction trim
 
 **Why:** Bizar harness prompt surface had grown to ~70 KB / ~17.5 K tokens per multi-dispatch orchestrator turn (Opus cost ~$0.26/turn). The growth was mechanical: duplicated tool-shape pointers on every agent file, a 700-char grounding payload, 6 KB advisor-context dumps, verbose Mike self-improvement walkthroughs, and Skill-delegate command bodies that grew past their budget. Per `docs/plans/2026-08-31-prompt-token-reduction.md` Phase A, ship the pure trim (zero behavior change) to recover ~50% per turn.
