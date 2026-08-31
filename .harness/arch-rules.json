@@ -45,6 +45,15 @@
       "what": "A shipped agent can bypass the shared evidence policy or cannot call WebSearch.",
       "why": "Mandatory routing is only reliable when every delegated role has the same no-guess documentation contract and the tool access to follow it.",
       "fix": "Reference AGENT_BASELINE in the agent body and include WebSearch in its tools frontmatter."
+    },
+    {
+      "id": "arch-status-icons",
+      "description": "The ✔ / ✖ / ⤳ status-screen glyphs must only appear in cli/commands/models.mjs#renderPickStatusScreen and cli/doctor.mjs#runDoctor",
+      "check": "bash -c 'set -e; HITS=$(grep -rEn \"✔|✖|⤳\" --include=\"*.mjs\" --include=\"*.js\" --include=\"*.ts\" --include=\"*.md\" cli packages config scripts 2>/dev/null | grep -v -E \"(cli/commands/models\\.mjs|cli/doctor\\.mjs|__tests__/models-picker\\.test\\.mjs|__tests__/models-namespace-sync\\.test\\.mjs|CHANGELOG\\.md|PROGRESS\\.md|phase3-plan\\.md|models-picker-ux\\.md)\" || true); if [ -n \"$HITS\" ]; then echo \"$HITS\"; exit 1; fi; exit 0'",
+      "expect": "pass",
+      "what": "A source file printed ✔ / ✖ / ⤳ outside the two designated surfaces.",
+      "why": "Phase 3 (v10.20.1) reserves the per-row status-screen glyphs to renderPickStatusScreen and runDoctor so operators see one familiar shape across the CLI. The SessionStart hook has no TTY and no outbound HTTP and must NOT import the renderer; tests stub the `out` Writable instead. Drift here means the hook or another surface is leaking the renderer, which would break headless runs.",
+      "fix": "Move the icon usage into cli/commands/models.mjs#renderPickStatusScreen or cli/doctor.mjs#runDoctor, or replace the literal glyphs with a chalk-ticked marker that does not match the grep fence."
     }
   ]
 }
