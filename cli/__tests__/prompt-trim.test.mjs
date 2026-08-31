@@ -122,14 +122,20 @@ describe('prompt-trim v10.20.0', () => {
     assert.ok(Number(match[1]) <= 4, `MAX_RECORDS = ${match[1]}, must be <= 4`);
   });
 
-  test('no agent body has duplicated tool-shapes or baseline footer', () => {
+  test('no agent body has the duplicated CLAUDE_TOOLS footer', () => {
+    // The trimmed-out footer was: "Claude Code tool shapes are documented
+    // in `.claude/agents/_shared/CLAUDE_TOOLS.md`. Read it before calling
+    // any tool." That sentence appeared verbatim at the bottom of every
+    // shipped agent in v10.19.x and was removed in v10.20.0. Inline
+    // cross-references like "Follow `.claude/agents/_shared/...`" inside
+    // Always-On Rules sections are legitimate content and are NOT
+    // covered by this check — only the tool-shapes footer is.
     for (const f of agentFiles()) {
       const src = readFileSync(join(AGENTS_DIR, f), 'utf8');
-      assert.doesNotMatch(src, /Claude Code tool shapes/, `${f} still has tool-shapes footer`);
       assert.doesNotMatch(
         src,
-        /Follow `\.claude\/agents\/_shared/,
-        `${f} still has duplicated baseline footer`,
+        /Claude Code tool shapes.*CLAUDE_TOOLS\.md/,
+        `${f} still has the duplicated CLAUDE_TOOLS footer`,
       );
     }
   });

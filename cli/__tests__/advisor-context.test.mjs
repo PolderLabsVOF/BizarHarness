@@ -14,7 +14,7 @@
  *     user prompts) into the new session's subagents.
  *
  * The fix (this hook + the narrowed agent list in `cli/commands/hook.mjs`)
- * limits the dump to 8 records, 6kB total, drops non-substantive record
+ * limits the dump to 4 records, 2kB total, drops non-substantive record
  * types entirely, and falls back to a "could not be reconstructed"
  * message when the dump is too short to be useful.
  */
@@ -129,8 +129,9 @@ test('advisor-context: hard cap on recent body', () => {
   }
 });
 
-test('advisor-context: takes only the last 8 substantive records', () => {
-  // 15 substantive records; only the last 8 should appear.
+test('advisor-context: takes only the last 4 substantive records', () => {
+  // v10.20.0: MAX_RECORDS trimmed from 8 to 4 (TOTAL_CAP 6 KB → 2 KB).
+  // 15 substantive records; only the last 4 should appear.
   const records = [];
   for (let i = 0; i < 15; i++) {
     records.push({
@@ -142,10 +143,10 @@ test('advisor-context: takes only the last 8 substantive records', () => {
   try {
     assert.equal(result.status, 0);
     const ctx = JSON.parse(result.stdout).hookSpecificOutput.additionalContext;
-    // The last 8 records are 7..14.
-    for (let i = 7; i <= 14; i++) assert.match(ctx, new RegExp(`marker-${i} turn`));
-    // Records 0..6 must NOT appear.
-    for (let i = 0; i <= 6; i++) assert.doesNotMatch(ctx, new RegExp(`marker-${i} turn`));
+    // The last 4 records are 11..14.
+    for (let i = 11; i <= 14; i++) assert.match(ctx, new RegExp(`marker-${i} turn`));
+    // Records 0..10 must NOT appear.
+    for (let i = 0; i <= 10; i++) assert.doesNotMatch(ctx, new RegExp(`marker-${i} turn`));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

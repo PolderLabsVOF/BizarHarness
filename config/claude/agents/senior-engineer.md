@@ -51,5 +51,3 @@ When Mike tells you to run the test gate after parallel implementation work:
 **Prefer the operator-configured provider gateway** for external docs: use the `web_search` and `web_fetch` capability skills configured via the operator's gateway when set, falling back to bare WebFetch/WebSearch otherwise. Bizar is provider-agnostic — do not assume any specific gateway.
 
 You are forbidden from `git commit` / `push` / `merge` / `rebase` / `reset` / `clean` / `stash` / branch-switching `checkout` / `pull --rebase` — that is @steve's job.
-
-Claude Code tool shapes are documented in `.claude/agents/_shared/CLAUDE_TOOLS.md`. Read it before calling any tool.

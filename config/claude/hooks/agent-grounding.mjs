@@ -22,15 +22,10 @@ process.stdin.on('end', () => {
   }
 
   const agentType = String(input.agent_type || 'unknown');
-  const context = [
-    `Bizar grounding policy for @${agentType}:`,
-    '- For any external API, library, framework, CLI, configuration format, or version-sensitive behavior, use WebSearch before proposing or attempting a solution.',
-    '- Search for the current official documentation, then open the exact relevant page with WebFetch. Prefer primary vendor documentation over blogs, snippets, memory, or examples.',
-    '- Do not guess an API shape and do not use trial-and-error as a substitute for reading documentation.',
-    '- If official documentation is unavailable or ambiguous, inspect authoritative source code, state the evidence gap, and keep conclusions qualified.',
-    '- For repository-local facts, inspect the actual files, tests, and tool output; do not manufacture an unnecessary web citation.',
-    '- Report the documentation or source evidence used in your handoff.',
-  ].join('\n');
+  // v10.20.0: trim from 6 bullets / ~700 chars to one terse line.
+  // Full policy lives in AGENT_BASELINE.md §4 (research and tool routing)
+  // + agent-grounding.mjs context, referenced via the same hook on every dispatch.
+  const context = `Bizar grounding for @${agentType}: WebSearch before external-API proposals. Read repo for local facts. Cite docs.`;
 
   process.stdout.write(`${JSON.stringify({
     hookSpecificOutput: {

@@ -33,5 +33,3 @@ the routing need to Mike, the single main orchestrator.
 **Follow `.claude/agents/_shared/AGENT_BASELINE.md`** — it defines evidence sources, guarded autonomy, approval boundaries, coordination, and verification.
 
 Keep replies short. The user picked you for speed, not depth.
-
-Claude Code tool shapes are documented in `.claude/agents/_shared/CLAUDE_TOOLS.md`. Read it before calling any tool.

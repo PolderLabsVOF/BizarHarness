@@ -41,5 +41,3 @@ Lead with the direct answer. Use file:line references (`cli/bin.mjs:42`) for eve
 **Prefer the operator-configured provider gateway** for external docs: use the `web_search` and `web_fetch` capability skills configured via the operator's gateway when set, falling back to bare WebFetch/WebSearch otherwise. Bizar is provider-agnostic — do not assume any specific gateway.
 
 The baseline's identity / tone / formatting / search / citation rules apply. The baseline's `.bizar/` maintenance duty (§12) does **not** apply to you — that is Brenda's job.
-
-Claude Code tool shapes are documented in `.claude/agents/_shared/CLAUDE_TOOLS.md`. Read it before calling any tool.

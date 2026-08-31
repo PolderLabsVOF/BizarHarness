@@ -46,18 +46,21 @@ test('empty primary prompts remain silent', () => {
   assert.equal(result.hookSpecificOutput.additionalContext, '');
 });
 
-test('every subagent receives official-documentation grounding', () => {
+test('every subagent receives terse grounding', () => {
   const result = runHook('agent-grounding.mjs', {
     hook_event_name: 'SubagentStart',
     agent_id: 'agent-123',
     agent_type: 'linda',
   });
   const context = result.hookSpecificOutput.additionalContext;
+  // v10.20.0: payload trimmed from ~700 chars / 6 bullets to ~80 chars / 1 line.
+  // Pin the agent-type echo, WebSearch mention, citation directive, and a
+  // hard size budget so a future edit cannot quietly re-bloat the prompt.
   assert.match(context, /@linda/);
   assert.match(context, /WebSearch/);
-  assert.match(context, /official documentation/i);
-  assert.match(context, /do not guess/i);
-  assert.match(context, /trial-and-error/i);
+  assert.match(context, /external-API/);
+  assert.match(context, /Cite/);
+  assert.ok(context.length <= 200, `payload ${context.length} chars exceeds 200`);
 });
 
 test('project settings apply grounding to all subagents', () => {
