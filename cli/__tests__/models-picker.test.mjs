@@ -27,6 +27,8 @@ import {
   resolveRouterPath,
   currentSelection,
   explainSelection,
+  classifyPickStatus,
+  renderPickStatusScreen,
   run as runModelsCommand,
 } from '../commands/models.mjs';
 
@@ -659,4 +661,141 @@ test('run(): interactive picker defers fetchModelsDevCatalog until after confirm
     else process.env.ANTHROPIC_AUTH_TOKEN = prevTokenEnv;
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ── 10.19.9 Phase 3: post-confirm status screen ──────────────────────────────
+//
+// Five unit tests for renderPickStatusScreen / classifyPickStatus. Pin the
+// per-row ✔ / ✖ / ⤳ contract, the non-TTY single-line collapse, and the
+// exit-code propagation (0 when any ✔; 2 when every row is ✖). The
+// subprocess coverage for `--json` status.perPick lives in
+// cli/__tests__/models-namespace-sync.test.mjs.
+
+test('renderPickStatusScreen: ✔ for every pick with profile.name', () => {
+  // Fresh Models.dev profile → ✔. Two picks, both with metadata.source =
+  // 'models.dev'. Assert two ✔ rows + a footer `2 passed, 0 failed, 0 skipped`.
+  const out = makeOutput();
+  const result = renderPickStatusScreen({
+    picked: ['anthropic/claude-3-5-sonnet', 'minimax/MiniMax-M3'],
+    profiles: {
+      'anthropic/claude-3-5-sonnet': { name: 'Claude 3.5 Sonnet', metadata: { source: 'models.dev' } },
+      'minimax/MiniMax-M3': { name: 'MiniMax M3', metadata: { source: 'models.dev' } },
+    },
+    preExisting: new Set(),
+    out,
+    isTTY: true,
+  });
+  const buf = out.buffer();
+  // Per-row ✔ lines, one per picked id.
+  assert.match(buf, /✔ anthropic\/claude-3-5-sonnet.*Claude 3\.5 Sonnet/);
+  assert.match(buf, /✔ minimax\/MiniMax-M3.*MiniMax M3/);
+  // Footer count line.
+  assert.match(buf, /2 passed, 0 failed, 0 skipped/);
+  // Returned totals + perPick shape.
+  assert.deepEqual(result.totals, { passed: 2, failed: 0, skipped: 0 });
+  assert.deepEqual(result.perPick, [
+    { id: 'anthropic/claude-3-5-sonnet', status: 'fresh', hasProfile: true },
+    { id: 'minimax/MiniMax-M3', status: 'fresh', hasProfile: true },
+  ]);
+  // Exit code 0 when at least one ✔.
+  assert.equal(result.exitCode, 0);
+});
+
+test('renderPickStatusScreen: ✖ when profile === null AND no _gateway.name fallback', () => {
+  // Unknown id with no profile, no _gateway.name → ✖. Assert the row
+  // contains ✖ + the id, and the footer reads `0 passed, 1 failed, 0 skipped`.
+  const out = makeOutput();
+  const result = renderPickStatusScreen({
+    picked: ['unknown/x'],
+    profiles: {},
+    preExisting: new Set(),
+    out,
+    isTTY: true,
+  });
+  const buf = out.buffer();
+  assert.match(buf, /✖ unknown\/x/);
+  assert.match(buf, /0 passed, 1 failed, 0 skipped/);
+  assert.deepEqual(result.totals, { passed: 0, failed: 1, skipped: 0 });
+  // Every row is ✖ → exit code 2.
+  assert.equal(result.exitCode, 2);
+  assert.equal(result.perPick[0].status, 'unavailable');
+  assert.equal(result.perPick[0].hasProfile, false);
+});
+
+test('renderPickStatusScreen: ⤳ when pick already existed in userSelected.models', () => {
+  // The preExisting Set captures userSelected.models BEFORE applyModels
+  // overwrites the block. A re-confirmed pick is reported as ⤳ even when
+  // its Phase 2 profile is fresh — preexisting always wins.
+  const out = makeOutput();
+  const result = renderPickStatusScreen({
+    picked: ['a/1'],
+    profiles: { 'a/1': { name: 'A', metadata: { source: 'models.dev' } } },
+    preExisting: new Set(['a/1']),
+    out,
+    isTTY: true,
+  });
+  const buf = out.buffer();
+  assert.match(buf, /⤳ a\/1/);
+  assert.match(buf, /0 passed, 0 failed, 1 skipped/);
+  assert.deepEqual(result.totals, { passed: 0, failed: 0, skipped: 1 });
+  assert.equal(result.perPick[0].status, 'preexisting');
+  assert.equal(result.perPick[0].hasProfile, true);
+});
+
+test('renderPickStatusScreen: non-TTY single-line collapse (no per-row output)', () => {
+  // When stdout is piped (isTTY=false), the screen collapses to one line
+  // appended to the existing "Saved" block. No ✔ rows leak into the pipe.
+  const out = makeOutput();
+  const result = renderPickStatusScreen({
+    picked: ['anthropic/claude-3-5-sonnet', 'minimax/MiniMax-M3'],
+    profiles: {
+      'anthropic/claude-3-5-sonnet': { name: 'Claude 3.5 Sonnet', metadata: { source: 'models.dev' } },
+      'minimax/MiniMax-M3': { name: 'MiniMax M3', metadata: { source: 'models.dev' } },
+    },
+    preExisting: new Set(),
+    out,
+    isTTY: false,
+  });
+  const buf = out.buffer();
+  // Single collapsed line.
+  assert.match(buf, /v 2 passed, 0 failed, 0 skipped/);
+  // Zero per-row ✔ rows in the pipe.
+  assert.equal(buf.match(/✔ /g), null, `non-TTY must not emit per-row ✔ lines; got: ${buf}`);
+  // Returned data still has perPick + totals.
+  assert.equal(result.perPick.length, 2);
+  assert.deepEqual(result.totals, { passed: 2, failed: 0, skipped: 0 });
+});
+
+test('renderPickStatusScreen: exit code 0 when any ✔, exit code 2 when every row is ✖', () => {
+  // Mixed pick: one fresh ✔, one ✖. The exit code is 0 (any ✔ wins).
+  const mixedOut = makeOutput();
+  const mixed = renderPickStatusScreen({
+    picked: ['a/1', 'b/2'],
+    profiles: { 'a/1': { name: 'A', metadata: { source: 'models.dev' } } },
+    preExisting: new Set(),
+    out: mixedOut,
+    isTTY: true,
+  });
+  assert.equal(mixed.exitCode, 0, 'mixed ✔+✖ picks must exit 0 (any ✔ wins)');
+  assert.deepEqual(mixed.totals, { passed: 1, failed: 1, skipped: 0 });
+
+  // Every row is ✖ → exit code 2.
+  const allFailOut = makeOutput();
+  const allFail = renderPickStatusScreen({
+    picked: ['x/1', 'y/2'],
+    profiles: {},
+    preExisting: new Set(),
+    out: allFailOut,
+    isTTY: true,
+  });
+  assert.equal(allFail.exitCode, 2, 'every row ✖ must exit 2');
+  assert.deepEqual(allFail.totals, { passed: 0, failed: 2, skipped: 0 });
+
+  // classifyPickStatus is the pure 4-state classifier the renderer
+  // depends on. Pin each branch so future refactors can't silently
+  // change the ✔/✖/⤳ mapping without breaking this test.
+  assert.equal(classifyPickStatus('a/1', null, new Set()), 'unavailable');
+  assert.equal(classifyPickStatus('a/1', { metadata: { source: 'models.dev' } }, new Set()), 'fresh');
+  assert.equal(classifyPickStatus('a/1', { metadata: { source: 'gateway-fallback' } }, new Set()), 'refreshed');
+  assert.equal(classifyPickStatus('a/1', { metadata: { source: 'models.dev' } }, new Set(['a/1'])), 'preexisting');
 });

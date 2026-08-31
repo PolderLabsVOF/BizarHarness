@@ -8,11 +8,14 @@
 
 **Plan (4 commits, in this order):**
 1. ✅ `feat(models): add renderPickStatusScreen + classifyPickStatus (exported)` — adds the two helpers; no wire-in yet. Commit `6567be9`.
-2. `feat(models): wire status screen into interactive picker` — calls `renderPickStatusScreen` after the "Saved" block; empty-pick branch preserved.
-3. `feat(models): --json gains status.perPick + status.totals` — non-TTY single-line collapse, JSON shape, exit-code propagation. Adds the 5 picker tests.
+2. ✅ `feat(models): wire status screen into interactive picker` — calls `renderPickStatusScreen` after the "Saved" block; empty-pick branch preserved. Commit `b367100`.
+3. ✅ `feat(models): --json gains status.perPick + status.totals` — non-TTY single-line collapse, JSON shape, exit-code propagation. Adds the 5 picker tests.
 4. `feat(models): document status screen in showHelp + CHANGELOG + PROGRESS (v10.19.9)` — showHelp paragraph, CHANGELOG v10.19.9 entry, PROGRESS 10.19.9 patch entry. Plus the 1 subprocess test. Adds grep-fence rule to `make check-arch`.
 
 **Test count target:** +6 (models-picker +5, models-namespace-sync +1 subprocess).
+
+**Tests run (from this worktree, after commit 3):**
+- `node --test cli/__tests__/models-picker.test.mjs` — 41/41 pass (was 36 pre-patch, +5 from Phase 3 commit 3).
 
 **Out of scope:** SDK changes, `config/claude/hooks/sessionstart-model-sync.mjs`, `disabledProviders` (Phase 4), the deprecated `bizar model` alias surface.
 
