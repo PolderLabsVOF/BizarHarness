@@ -577,3 +577,101 @@ test('enrichModelsWithCapabilities: promotes _gateway.name into profile.name on 
   assert.equal(out.profile.description, null); // gateway didn't have description either
   assert.equal(out.profile.metadata.source, 'gateway-fallback');
 });
+
+// ── 10.19.8 Phase 2: subprocess proves --list skips the catalog fetch ─────
+
+test('bizar models --list does NOT contact models.dev', async () => {
+  // Phase 2 (10.19.8) regression: `bizar models --list` used to call
+  // `fetchModelsDevCatalog` BEFORE any flag was inspected, paying the
+  // round-trip on every `--list` and `--set`. After Phase 2 the catalog
+  // fetch is gated behind picker confirmation; `--list` (and `--set`)
+  // must skip the fetch entirely.
+  //
+  // Strategy: spin up a stub gateway AND a stub models.dev server. The
+  // models.dev server records every hit (count via a side-channel file).
+  // Run `bizar models --list`; assert exit 0 and that the models.dev
+  // hit-count remains 0.
+  const { writeFileSync, readFileSync } = await import('node:fs');
+
+  const stubDir = mkdtempSync(join(tmpdir(), 'bizar-models-list-'));
+  const counterPath = join(stubDir, 'models-dev-hits.txt');
+  writeFileSync(counterPath, '0');
+
+  let gwHits = 0;
+  let mdHits = 0;
+  const gwSrv = createServer((req, res) => {
+    if (req.url.startsWith('/models')) {
+      gwHits += 1;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: [
+        { id: 'minimax/MiniMax-M3', owned_by: 'minimax' },
+        { id: 'codex/gpt-5.6-sol', owned_by: 'codex' },
+      ] }));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  const mdSrv = createServer((req, res) => {
+    // Any contact with models.dev is a Phase 2 regression. Record the hit
+    // and serve an empty catalog so we don't accidentally pass-by luck.
+    mdHits += 1;
+    try {
+      const current = parseInt(readFileSync(counterPath, 'utf8').trim() || '0', 10);
+      writeFileSync(counterPath, String(current + 1));
+    } catch {
+      /* counter file IO is best-effort; the in-process mdHits counter
+         below is the authoritative measurement. */
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{}');
+  });
+  await Promise.all([
+    new Promise((r) => gwSrv.listen(0, '127.0.0.1', r)),
+    new Promise((r) => mdSrv.listen(0, '127.0.0.1', r)),
+  ]);
+  const gwPort = gwSrv.address().port;
+  const mdPort = mdSrv.address().port;
+  try {
+    const cwd = makeCwd();
+    try {
+      const routerPath = writeBaseRouter(cwd);
+      const { code, stdout, stderr } = await runBizar(
+        ['models', '--list'],
+        {
+          cwd,
+          env: {
+            BIZAR_MODEL_ROUTER_CONFIG: routerPath,
+            HOME: cwd,
+            BIZAR_HOME: cwd,
+            BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${gwPort}`,
+            // Point fetchModelsDevCatalog at the stub models.dev server
+            // so any contact with it is observable.
+            BIZAR_MODELS_DEV_URL: `http://127.0.0.1:${mdPort}/models.json`,
+          },
+        },
+      );
+      assert.equal(code, 0, `expected 0, got ${code}; stderr=${stderr}; stdout=${stdout}`);
+      // Gateway must have been hit (Phase 2 still calls listModels for --list).
+      assert.ok(gwHits >= 1, `gateway /models must be hit for --list (got ${gwHits})`);
+      // Models.dev must NOT have been hit (Phase 2 defers the fetch past
+      // the picker; --list never opens a picker).
+      assert.equal(mdHits, 0, `models.dev must NOT be contacted for --list (got ${mdHits} hits)`);
+      assert.equal(
+        parseInt(readFileSync(counterPath, 'utf8').trim() || '0', 10),
+        0,
+        'counter file shows zero models.dev hits',
+      );
+      // --list still prints the candidate IDs from the gateway stub.
+      assert.match(stdout, /minimax\/MiniMax-M3/);
+      assert.match(stdout, /codex\/gpt-5\.6-sol/);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  } finally {
+    await Promise.all([
+      new Promise((r) => gwSrv.close(r)),
+      new Promise((r) => mdSrv.close(r)),
+    ]);
+    try { rmSync(stubDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+});

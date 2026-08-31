@@ -1,5 +1,28 @@
 # Changelog
 
+## [10.19.8] - 2026-08-31
+
+Defer catalog fetch until after picker confirmation; per-id enrichment runs in parallel with bounded concurrency. `--list` and `--set` skip the fetch entirely.
+
+The interactive picker path used to call `fetchModelsDevCatalog` BEFORE the picker opened, paying the round-trip on every `--list` and `--set` invocation that never even consulted the catalog. Phase 2 (10.19.8) moves the fetch past picker confirmation and gates per-id lookups behind a bounded-concurrency runner with a per-id timeout.
+
+### Added
+
+- **`cli/commands/models.mjs#enrichPicksByMetadata`** (new, exported) — Phase 2 lazy enrichment helper. Fetches the catalog once, then enriches the picked IDs in parallel with a bounded worker pool (`concurrency`, default 8) and a per-id timeout (`timeoutMs`, default 3000ms). Per-id failures fall back to the candidate's `_gateway.name` contract (Phase 1). Wholesale catalog fetch failures degrade to `_gateway.name` (or `null` when no `_gateway` block is attached). Returns `{ profiles: Map<string, object|null>, modelsDev: object }`.
+- **`cli/commands/models.mjs#run`** — accepts an optional fourth `deps` argument (`{ pickModels, fetchModelsDevCatalog, listModels }`) for test injection. Production callers see no change. The interactive branch uses the injected picker when provided and bypasses the `process.stdin.isTTY` guard, so unit tests can drive the picker without a real TTY.
+- **`cli/commands/models.mjs#run`** interactive `--json` output gains an `enriched: string[]` key naming the picked IDs that received Models.dev enrichment. Phase 2 emits `picks` as-is (no filtering); Phase 4 will filter to only the IDs that received a profile.
+
+### Changed
+
+- **`cli/commands/models.mjs#run`** — `fetchModelsDevCatalog` is no longer called before the picker opens. The interactive branch calls `enrichPicksByMetadata` AFTER `pickModels` resolves; `--list` and `--set` skip the fetch entirely. `--list` JSON output now reports `modelsDev.status === 'skipped'`.
+- **`cli/commands/models.mjs#run`** interactive branch — the per-id enrichment is parallel with bounded concurrency (8 workers by default) and a per-id timeout of 3000ms. The wholesale catalog fetch inherits the same timeout so a hung stub cannot block picker confirmation.
+
+### Regression tests
+
+- **`cli/__tests__/models-picker.test.mjs`** (+1) — `run()` interactive picker defers `fetchModelsDevCatalog` until after confirmation. Pins the call order via a monotonic counter: `listModels` < `pickModels:start` < `pickModels:end` < `fetchModelsDevCatalog`.
+- **`cli/__tests__/models-refresh.test.mjs`** (+3) — `enrichPicksByMetadata` returns one profile entry per picked id with bounded concurrency (wholesale fetchFn called exactly once); per-id timeout falls back to `_gateway.name` with `metadata.source === 'gateway-fallback'`; wholesale catalog fetch failure degrades to `_gateway.name`.
+- **`cli/__tests__/models-namespace-sync.test.mjs`** (+1 subprocess) — `bizar models --list` does NOT contact `models.dev`. Spins up a stub models.dev server that records every hit (via side-channel file counter), asserts `mdHits === 0` after `--list` exits cleanly.
+
 ## [10.19.7] - 2026-08-31
 
 `bizar models` picker rows carry richer label/description metadata — operator-visible behaviour unchanged.

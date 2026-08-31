@@ -2,6 +2,28 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.19.8 patch: lazy Models.dev fetch
+
+**Why:** `bizar models` (interactive) used to call `fetchModelsDevCatalog` BEFORE the picker opened, paying the round-trip on every `--list` and `--set` invocation that never even consulted the catalog. The same was true for the deprecated `bizar model` alias, and for any operator who aborted the picker before confirming. Phase 2 (10.19.8) defers the fetch until AFTER picker confirmation.
+
+**Fix (this commit):**
+
+- **`cli/commands/models.mjs#enrichPicksByMetadata`** (new, exported) — Phase 2 lazy enrichment helper. Fetches the catalog once via the injected `fetchFn` (defaults to `fetchModelsDevCatalog`), then enriches the picked IDs in parallel via a bounded worker pool (`concurrency`, default 8) and a per-id timeout (`timeoutMs`, default 3000ms). Per-id timeouts and wholesale fetch failures fall back to the candidate's `_gateway.name` contract (Phase 1) when present; without `_gateway`, the profile is `null`. Returns `{ profiles: Map<string, object|null>, modelsDev: object }`.
+- **`cli/commands/models.mjs#run`** — `fetchModelsDevCatalog` is no longer called before the picker opens. The candidate-loading block now only fetches the live gateway; the catalog fetch (and per-id enrichment) moves to AFTER `pickModels` resolves. `--list`, `--set`, `--clear`, `--refresh`, `explain`, and the deprecated `bizar model` alias never contact `models.dev`. `--list` JSON output reports `modelsDev.status === 'skipped'`.
+- **`cli/commands/models.mjs#run`** interactive `--json` output gains an `enriched: string[]` key naming the picked IDs that received Models.dev enrichment. Phase 2 emits `picks` as-is (no filtering); Phase 4 will filter to only the IDs that received a profile.
+- **`cli/commands/models.mjs#run`** accepts an optional fourth `deps` argument (`{ pickModels, fetchModelsDevCatalog, listModels }`) for test injection. Production callers see no change; the interactive branch uses the injected picker when provided and bypasses the `process.stdin.isTTY` guard.
+
+**Regression tests (+5):**
+
+- **`cli/__tests__/models-picker.test.mjs`** (+1) — `run()` interactive picker defers `fetchModelsDevCatalog` until after confirmation. Pins the call order via a monotonic counter: `listModels` < `pickModels:start` < `pickModels:end` < `fetchModelsDevCatalog`.
+- **`cli/__tests__/models-refresh.test.mjs`** (+3) — `enrichPicksByMetadata` returns one profile entry per picked id with bounded concurrency (wholesale fetchFn called exactly once); per-id timeout falls back to `_gateway.name` with `metadata.source === 'gateway-fallback'`; wholesale catalog fetch failure degrades to `_gateway.name`.
+- **`cli/__tests__/models-namespace-sync.test.mjs`** (+1 subprocess) — `bizar models --list` does NOT contact `models.dev`. Spins up a stub models.dev server that records every hit (via side-channel file counter), asserts `mdHits === 0` after `--list` exits cleanly.
+
+**Tests run (from this worktree, `agent-ada5b31e85b061fd4`):**
+
+- `node --test --test-concurrency=1 cli/__tests__/models-picker.test.mjs cli/__tests__/models-refresh.test.mjs cli/__tests__/models-namespace-sync.test.mjs cli/__tests__/models-cli.test.mjs cli/__tests__/models-picker-context.test.mjs cli/__tests__/models-picker-tty.test.mjs cli/__tests__/models-mirror-shipped.test.mjs cli/__tests__/models-persists-under-bizar-home.test.mjs` — 106/106 pass (was 101 pre-patch, +5 from this patch).
+- Test count delta verified: `models-picker` 35→36, `models-refresh` 5→8, `models-namespace-sync` 23→24.
+
 ## In Progress — Production-autonomy audit (commit 2a283c1) implementation
 
 The audit at `docs/audits/production-autonomy-improvements-2026-08-28.md` enumerates 11 P0/P1/P2 recommendations across a 4-milestone sequence (one source of truth → resumable controller → independent verification → production operations). This block tracks per-recommendation implementation status.
