@@ -1,4 +1,5 @@
-import { dispatchAgent } from './lib/dispatch.js'
+import { randomUUID } from 'node:crypto'
+import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
 
 export const meta = {
   name: 'ultracode-research',
@@ -12,6 +13,10 @@ export const meta = {
 }
 
 const QUESTION = typeof args === 'string' ? args : args?.question || JSON.stringify(args || {})
+
+// Phase B (v10.21.0) artifact-on-disk barriers: one runId per workflow
+// invocation. Used by every writeArtifact() + barrierRef() in this script.
+const RUN_ID = randomUUID()
 const EVIDENCE = {
   type: 'object',
   required: ['claims', 'gaps'],
@@ -36,9 +41,14 @@ const evidence = (await parallel([
 ])).filter(Boolean)
 if (evidence.length === 0) return { status: 'blocked', reason: 'No research pass completed.' }
 
+// Phase B: persist evidence artifact for the next barrier agent.
+const evidenceSummary = `${evidence.length} evidence passes with ${evidence.reduce((n, e) => n + (Array.isArray(e?.claims) ? e.claims.length : 0), 0)} total claims`
+writeArtifact({ runId: RUN_ID, phase: 'Research', label: 'barrier', payload: evidence, summary: evidenceSummary, role: 'research-analyst' })
+
 phase('Critique')
-const critique = await dispatchAgent(agent, 'completeness-critic', `Challenge these research claims. Identify contradictions, unread sources, outdated assumptions, and claims lacking reproducible evidence.\nQuestion: ${QUESTION}\nEvidence: ${JSON.stringify(evidence)}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: 'completeness-critic', phase: 'Critique', schema: EVIDENCE })
+const critique = await dispatchAgent(agent, 'completeness-critic', `Challenge these research claims. Identify contradictions, unread sources, outdated assumptions, and claims lacking reproducible evidence.\nQuestion: ${QUESTION}\n${barrierRef({ runId: RUN_ID, phase: 'Research', label: 'barrier', summary: evidenceSummary }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: 'completeness-critic', phase: 'Critique', schema: EVIDENCE })
+writeArtifact({ runId: RUN_ID, phase: 'Critique', label: 'barrier', payload: critique, summary: typeof critique === 'string' ? critique.slice(0, 200) : 'critique complete', role: 'adversarial' })
 
 phase('Synthesize')
-const synthesis = await dispatchAgent(agent, 'synthesis-author', `Produce a concise sourced decision brief for: ${QUESTION}. Separate verified facts, repository-specific implications, recommendation, risks, and unresolved gaps. Do not invent consensus or hide evidence gaps.\nEvidence: ${JSON.stringify(evidence)}\nCritique: ${JSON.stringify(critique)}`, { role: 'architect', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'synthesis', phase: 'Synthesize' })
+const synthesis = await dispatchAgent(agent, 'synthesis-author', `Produce a concise sourced decision brief for: ${QUESTION}. Separate verified facts, repository-specific implications, recommendation, risks, and unresolved gaps. Do not invent consensus or hide evidence gaps.\n${barrierRef({ runId: RUN_ID, phase: 'Research', label: 'barrier', summary: evidenceSummary }).promptBlock}\n${barrierRef({ runId: RUN_ID, phase: 'Critique', label: 'barrier', summary: typeof critique === 'string' ? critique.slice(0, 200) : 'critique complete' }).promptBlock}`, { role: 'architect', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'synthesis', phase: 'Synthesize' })
 return { question: QUESTION, evidence, critique, synthesis }
