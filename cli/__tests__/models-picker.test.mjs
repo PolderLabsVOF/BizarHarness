@@ -27,6 +27,7 @@ import {
   resolveRouterPath,
   currentSelection,
   explainSelection,
+  run as runModelsCommand,
 } from '../commands/models.mjs';
 
 function tmpDir() {
@@ -562,4 +563,100 @@ test('explainSelection: missing router file degrades to empty userSelected witho
   const verdict = explainSelection({ routerPath, role: 'todd' });
   assert.deepEqual(verdict, { ranked: [] });
   rmSync(dir, { recursive: true, force: true });
+});
+
+// ── 10.19.8 Phase 2: lazy Models.dev fetch deferral ───────────────────────
+
+test('run(): interactive picker defers fetchModelsDevCatalog until after confirmation', async () => {
+  // Phase 2 (10.19.8) regression: `bizar models` (interactive) used to call
+  // `fetchModelsDevCatalog` BEFORE the picker opened, paying the round-trip
+  // on every `bizar models --list` and `--set` invocation that never even
+  // looked at the catalog. After Phase 2 the catalog fetch is gated behind
+  // picker confirmation.
+  //
+  // We pin the order by feeding both hooks a monotonic counter and
+  // asserting `pickerEnd <= catalogEnd` — i.e. the catalog fetch started
+  // AFTER the picker returned.
+  const dir = tmpDir();
+  const order = [];
+  let orderCounter = 0;
+
+  const stubListModels = async () => {
+    order.push({ step: 'listModels', n: ++orderCounter });
+    // The injected listModels bypasses the real `normalizeModels`, so
+    // we return the normalized candidate shape directly.
+    return [
+      { id: 'minimax/MiniMax-M3', owned_by: 'minimax', kind: 'minimax' },
+      { id: 'codex/gpt-5.6-sol', owned_by: 'codex', kind: 'codex' },
+    ];
+  };
+
+  const stubFetchModelsDevCatalog = async () => {
+    order.push({ step: 'fetchModelsDevCatalog', n: ++orderCounter });
+    return {
+      'minimax/MiniMax-M3': {
+        name: 'MiniMax M3',
+        tool_call: true,
+        limit: { context: 200000 },
+      },
+    };
+  };
+
+  const stubPickModels = async ({ candidates }) => {
+    order.push({ step: 'pickModels:start', n: ++orderCounter });
+    // Yield once so the event loop has a chance to schedule any work
+    // the picker would have done — keeps the counter ordering honest.
+    await new Promise((resolveP) => setImmediate(resolveP));
+    order.push({ step: 'pickModels:end', n: ++orderCounter });
+    return [candidates[0].id];
+  };
+
+  const prevRouterEnv = process.env.BIZAR_MODEL_ROUTER_CONFIG;
+  const prevUrlEnv = process.env.BIZAR_MODEL_ROUTER_URL;
+  const prevTokenEnv = process.env.ANTHROPIC_AUTH_TOKEN;
+  try {
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({ version: '13.0.0' }));
+    process.env.BIZAR_MODEL_ROUTER_CONFIG = routerPath;
+    process.env.BIZAR_MODEL_ROUTER_URL = 'http://stub-gw.invalid/v1';
+    process.env.ANTHROPIC_AUTH_TOKEN = 'tok';
+    await runModelsCommand('models', [], false, {
+      listModels: stubListModels,
+      pickModels: stubPickModels,
+      fetchModelsDevCatalog: stubFetchModelsDevCatalog,
+    });
+
+    const listStep = order.find((e) => e.step === 'listModels');
+    const pickerStart = order.find((e) => e.step === 'pickModels:start');
+    const pickerEnd = order.find((e) => e.step === 'pickModels:end');
+    const catalogStep = order.find((e) => e.step === 'fetchModelsDevCatalog');
+    assert.ok(listStep, 'listModels was called');
+    assert.ok(pickerStart, 'picker started');
+    assert.ok(pickerEnd, 'picker ended');
+    assert.ok(catalogStep, 'catalog fetch happened');
+
+    // Phase 2 invariant: listModels runs first, picker runs second, and
+    // the catalog fetch happens AFTER the picker returns. This is the
+    // exact ordering that the deferred-fetch plan (10.19.8) requires.
+    assert.ok(
+      listStep.n < pickerStart.n,
+      `listModels (n=${listStep.n}) must precede picker:start (n=${pickerStart.n})`,
+    );
+    assert.ok(
+      pickerStart.n < pickerEnd.n,
+      `picker:start (n=${pickerStart.n}) must precede picker:end (n=${pickerEnd.n})`,
+    );
+    assert.ok(
+      pickerEnd.n < catalogStep.n,
+      `catalog fetch (n=${catalogStep.n}) must run AFTER picker:end (n=${pickerEnd.n}) — that is the Phase 2 deferral`,
+    );
+  } finally {
+    if (prevRouterEnv === undefined) delete process.env.BIZAR_MODEL_ROUTER_CONFIG;
+    else process.env.BIZAR_MODEL_ROUTER_CONFIG = prevRouterEnv;
+    if (prevUrlEnv === undefined) delete process.env.BIZAR_MODEL_ROUTER_URL;
+    else process.env.BIZAR_MODEL_ROUTER_URL = prevUrlEnv;
+    if (prevTokenEnv === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+    else process.env.ANTHROPIC_AUTH_TOKEN = prevTokenEnv;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

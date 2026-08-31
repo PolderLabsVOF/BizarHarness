@@ -23,7 +23,7 @@ const BIN = join(CWD, 'cli', 'bin.mjs');
 // Imports from the CLI module — these are the canonical test surface.
 // `applyRefresh` is the pure function that writes the router file.
 const modelsCmd = await import('../../cli/commands/models.mjs');
-const { applyRefresh, explainSelection, fetchModelsDevCatalog } = modelsCmd;
+const { applyRefresh, explainSelection, fetchModelsDevCatalog, enrichPicksByMetadata } = modelsCmd;
 
 function makeCwd() {
   return mkdtempSync(join(tmpdir(), 'bizar-models-refresh-'));
@@ -284,4 +284,89 @@ test('fetchModelsDevCatalog: stub server 200 returns parsed JSON body', async ()
   } finally {
     await new Promise((resolveP) => srv.close(resolveP));
   }
+});
+
+// ── 10.19.8 Phase 2: lazy Models.dev fetch + per-id enrichment ────────────
+
+test('enrichPicksByMetadata: enriches each picked id with bounded concurrency', async () => {
+  // Pin that the runner returns a profile for every picked id
+  // (even when the catalog has nothing for them — null profile is fine).
+  // The per-id work itself is an in-memory catalog lookup, so the
+  // observable runtime is dominated by the wholesale fetch. Concurrency
+  // is enforced by the bounded worker pool (4 workers, 20 picks);
+  // we assert it does not exceed the cap.
+  const candidates = Array.from({ length: 20 }, (_, i) => ({
+    id: `test/model-${i}`,
+    owned_by: 'test',
+  }));
+  const pickedIds = candidates.map((c) => c.id);
+  let fetchCalls = 0;
+  const fetchFn = async () => {
+    fetchCalls += 1;
+    return {};
+  };
+  const { profiles, modelsDev } = await enrichPicksByMetadata({
+    candidates,
+    pickedIds,
+    fetchFn,
+    concurrency: 4,
+  });
+  assert.equal(profiles.size, 20, 'one profile entry per picked id');
+  for (const id of pickedIds) {
+    assert.equal(profiles.get(id), null, `no catalog hit → null profile for ${id}`);
+  }
+  assert.equal(fetchCalls, 1, 'wholesale fetchFn called exactly once (not per-id)');
+  assert.deepEqual(modelsDev, {}, 'wholesale fetch result echoed back');
+});
+
+test('enrichPicksByMetadata: per-id timeout falls back to _gateway.name', async () => {
+  // Pin the Phase 1 fallback contract: when models.dev is unreachable AND
+  // the candidate carries a `_gateway` block, the profile keeps `_gateway.name`
+  // (with metadata.source='gateway-fallback') so `applyModelPicker` can still
+  // surface a human-readable label.
+  const candidates = [{
+    id: 'a/b',
+    owned_by: 'a',
+    _gateway: { name: 'B', description: 'b-model from gateway' },
+  }];
+  // `fetchFn` that hangs forever on the wholesale fetch so every per-id
+  // job hits the timeout path. `enrichPicksByMetadata` itself swallows
+  // the wholesale failure via `.catch(() => ({}))`, then runs per-id
+  // jobs which all race against the timeout.
+  const { profiles, modelsDev } = await enrichPicksByMetadata({
+    candidates,
+    pickedIds: ['a/b'],
+    fetchFn: () => new Promise(() => {}),
+    timeoutMs: 50,
+  });
+  const profile = profiles.get('a/b');
+  assert.ok(profile, 'profile is non-null even when catalog fetch hangs');
+  assert.equal(profile.name, 'B', '_gateway.name preserved');
+  assert.equal(profile.metadata.source, 'gateway-fallback');
+  // Wholesale fetch rejection surfaces as an empty catalog; per-id
+  // timeout falls back to the Phase 1 contract.
+  assert.deepEqual(modelsDev, {});
+});
+
+test('enrichPicksByMetadata: wholesale catalog fetch failure degrades to _gateway.name', async () => {
+  // The `.catch(() => ({}))` on the wholesale fetch path means a thrown
+  // network error surfaces as an empty catalog map. Per-id jobs then
+  // fall back to `_gateway.name` for any candidate that has it. Without
+  // `_gateway`, the profile is `null` and the picker falls back to
+  // id-derived labels downstream.
+  const candidates = [{
+    id: 'a/b',
+    owned_by: 'a',
+    _gateway: { name: 'B', description: 'b-model from gateway' },
+  }];
+  const { profiles, modelsDev } = await enrichPicksByMetadata({
+    candidates,
+    pickedIds: ['a/b'],
+    fetchFn: async () => { throw new Error('network down'); },
+  });
+  const profile = profiles.get('a/b');
+  assert.ok(profile, 'wholesale fetch failure → _gateway fallback is non-null');
+  assert.equal(profile.name, 'B');
+  assert.equal(profile.metadata.source, 'gateway-fallback');
+  assert.deepEqual(modelsDev, {}, 'wholesale fetch result echoed back as empty');
 });

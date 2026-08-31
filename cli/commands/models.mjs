@@ -349,6 +349,154 @@ export function enrichModelsWithCapabilities(candidates, catalog) {
   });
 }
 
+/**
+ * Strip a `<provider>/` prefix from a model id. Used as a last-ditch catalog
+ * lookup key when the gateway reports the model under a wrapper namespace
+ * (e.g. `claude-minimax/MiniMax-M3`) and the models.dev catalog uses the bare
+ * form (`minimax/MiniMax-M3`).
+ *
+ * @param {string} id
+ * @returns {string}
+ */
+function stripProvider(id) {
+  const raw = String(id || '').trim();
+  const slash = raw.indexOf('/');
+  return slash >= 0 ? raw.slice(slash + 1) : raw;
+}
+
+/**
+ * Phase 2 lazy enrichment. The interactive picker path used to call
+ * `fetchModelsDevCatalog` BEFORE the picker opened, paying the round-trip
+ * on every `--list`/`--set` (which never even consulted the catalog) and
+ * on every interactive session that the user then aborted.
+ *
+ * After Phase 2 the catalog fetch moves to AFTER picker confirmation:
+ *   - `--list` and `--set` skip the fetch entirely.
+ *   - The interactive path only fetches when the user actually picked
+ *     one or more models, and only the picked IDs are enriched.
+ *
+ * Concurrency: per-id lookups run in parallel with a bounded worker pool
+ * (`concurrency`, default 8) and a per-id timeout (`timeoutMs`, default
+ * 3000ms). On per-id timeout or lookup failure, we fall back to the
+ * candidate's Phase 1 `_gateway.name` contract (when present); when no
+ * `_gateway` block is attached, the profile is `null`.
+ *
+ * @param {{
+ *   candidates: Array<{ id: string, owned_by?: string|null, _gateway?: { name?: string|null, display_name?: string|null, description?: string|null } }>,
+ *   pickedIds: string[],
+ *   fetchFn?: typeof fetchModelsDevCatalog,
+ *   timeoutMs?: number,
+ *   concurrency?: number,
+ *   now?: () => number,
+ * }} opts
+ * @returns {Promise<{ profiles: Map<string, object|null>, modelsDev: object }>}
+ */
+export async function enrichPicksByMetadata({
+  candidates,
+  pickedIds,
+  fetchFn = fetchModelsDevCatalog,
+  timeoutMs = 3000,
+  concurrency = 8,
+} = {}) {
+  // Wholesale catalog fetch — best-effort. A network failure on the
+  // initial fetch degrades to an empty map; per-id timeouts on the
+  // downstream enrichment path fall back to `_gateway.name`.
+  // The wholesale fetch inherits `timeoutMs` so a hung stub does not
+  // block the picker-confirmation step indefinitely.
+  const catalog = await Promise.race([
+    fetchFn({}),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('enrichPicksByMetadata: wholesale fetch timeout')), timeoutMs)),
+  ]).catch(() => ({}));
+  const catalogMap = flattenModelsDevCatalog(catalog);
+
+  const out = new Map();
+  const ids = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id) : [];
+  // Stable order so the work array indexes are predictable for the
+  // bounded runner below.
+  const work = ids.map((id, index) => ({ id, index }));
+  if (work.length === 0) return { profiles: out, modelsDev: catalog };
+
+  const findCandidate = (id) => (Array.isArray(candidates) ? candidates.find((c) => c && c.id === id) : null);
+
+  // Bounded-concurrency worker pool. Each worker pulls jobs off the
+  // queue until empty. Per-id failure (timeout or thrown) falls back to
+  // the candidate's `_gateway` block when present, otherwise leaves
+  // the profile as `null`.
+  const queue = [...work];
+  const workerCount = Math.max(1, Math.min(concurrency, queue.length));
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (queue.length > 0) {
+      const job = queue.shift();
+      if (!job) return;
+      const { id } = job;
+      const candidate = findCandidate(id);
+      if (!candidate) {
+        out.set(id, null);
+        continue;
+      }
+      try {
+        await Promise.race([
+          // Each "job" resolves immediately with the profile lookup; the
+          // race is a defense-in-depth measure so a misbehaving fetchFn
+          // cannot stall the worker past `timeoutMs`.
+          Promise.resolve().then(() => {
+            const lower = String(id).toLowerCase();
+            const match = catalogMap.get(lower)
+              || catalogMap.get(stripProvider(id).toLowerCase());
+            let profile;
+            if (match) {
+              // Re-use the existing capability-profile shape; the new
+              // helper differs from `enrichModelsWithCapabilities` only
+              // in WHEN the catalog is fetched and WHICH ids are
+              // enriched (confirmed picks only).
+              profile = toCapabilityProfile(id, match, 'exact-id', 0.9);
+            } else if (candidate._gateway) {
+              profile = {
+                name: candidate._gateway.name ?? candidate._gateway.display_name ?? null,
+                description: candidate._gateway.description ?? null,
+                summary: null,
+                ownedBy: candidate.owned_by ?? null,
+                supportsTools: null,
+                supportsVision: null,
+                contextWindow: null,
+                costTier: null,
+                confidence: 0,
+                metadata: { source: 'gateway-fallback' },
+              };
+            } else {
+              profile = null;
+            }
+            out.set(id, profile);
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('enrichPicksByMetadata: per-id timeout')), timeoutMs)),
+        ]);
+      } catch {
+        // Per-id failure (timeout or thrown). Fall back to `_gateway.name`
+        // when present so the Phase 1 contract still surfaces a name;
+        // otherwise the profile is null.
+        if (candidate._gateway) {
+          out.set(id, {
+            name: candidate._gateway.name ?? candidate._gateway.display_name ?? null,
+            description: candidate._gateway.description ?? null,
+            summary: null,
+            ownedBy: candidate.owned_by ?? null,
+            supportsTools: null,
+            supportsVision: null,
+            contextWindow: null,
+            costTier: null,
+            confidence: 0,
+            metadata: { source: 'gateway-fallback' },
+          });
+        } else {
+          out.set(id, null);
+        }
+      }
+    }
+  });
+  await Promise.all(workers);
+  return { profiles: out, modelsDev: catalog };
+}
+
 function capabilityLabel(profile) {
   if (!profile) return 'metadata unavailable';
   const caps = [];
@@ -1454,7 +1602,16 @@ function parseSet(value) {
     .filter((s) => s.length > 0);
 }
 
-export async function run(name, args, isHelpRequest) {
+export async function run(name, args, isHelpRequest, deps = {}) {
+  // `bizar model` remains a deprecated alias; `bizar models` is the canonical surface.
+  // `deps` is an optional test-injection surface (10.19.8 Phase 2):
+  //   - `pickModels` — override the interactive picker (for tests that
+  //     auto-confirm without a TTY)
+  //   - `fetchModelsDevCatalog` — override the catalog fetch (for tests
+  //     that count calls or stub models.dev)
+  //   - `listModels` — override the gateway `/models` fetch (for tests)
+  // All three default to the module-level exports; production callers
+  // see no behaviour change.
   // `bizar model` remains a deprecated alias; `bizar models` is the canonical surface.
   if (name !== 'models' && name !== 'model') return false;
   if (isHelpRequest || args.includes('--help') || args.includes('-h')) {
@@ -1617,32 +1774,21 @@ export async function run(name, args, isHelpRequest) {
   // We do not short-circuit here — the code below falls into the
   // `wantList || isDeprecatedAlias` branch and prints candidate IDs.
 
+  // Phase 2 (10.19.8): the Models.dev catalog fetch used to happen HERE,
+  // before any flag was inspected. That paid the round-trip on every
+  // `--list`, every `--set`, every aborted picker, and every CI run that
+  // never looked at the result. Move the fetch to AFTER picker
+  // confirmation (see the interactive branch below); `--list` and
+  // `bizar model` now skip the fetch entirely.
   let candidates;
-  let modelsDev = { status: 'not-attempted', matched: 0, total: 0 };
+  let modelsDev = { status: 'skipped', matched: 0, total: 0, source: MODELS_DEV_CATALOG_URL, note: 'lazy fetch — --list does not contact models.dev' };
   try {
     // The deprecated `bizar model` alias preserves the legacy
     // "retry-without-auth on 401" behavior so existing scripts keep working.
     // The new `bizar models` surface fails fast on 401 with an actionable
     // error message (the user explicitly picks models — no silent retry).
-    candidates = await listModels({ endpoint, authToken, retryWithoutAuth: isDeprecatedAlias });
-    try {
-      const catalogue = await fetchModelsDevCatalog({});
-      candidates = enrichModelsWithCapabilities(candidates, catalogue);
-      modelsDev = {
-        status: 'ok',
-        matched: candidates.filter((candidate) => candidate.profile).length,
-        total: candidates.length,
-        source: MODELS_DEV_CATALOG_URL,
-      };
-    } catch (metadataError) {
-      modelsDev = {
-        status: 'unavailable',
-        matched: 0,
-        total: candidates.length,
-        source: MODELS_DEV_CATALOG_URL,
-        error: metadataError instanceof Error ? metadataError.message : String(metadataError),
-      };
-    }
+    const listModelsFn = deps.listModels || listModels;
+    candidates = await listModelsFn({ endpoint, authToken, retryWithoutAuth: isDeprecatedAlias });
   } catch (err) {
     if (err.name === 'AbortError' || String(err.message).includes('aborted')) {
       console.error(chalk.red(`  x Request timed out after 3000ms - ${endpoint}/models`));
@@ -1673,7 +1819,10 @@ export async function run(name, args, isHelpRequest) {
   // Interactive picker — only reached when explicitly invoked as `bizar models`
   // with NO --list / --clear / --set flags. We avoid running the picker when
   // stdin is not a TTY (e.g. CI / npm test), because readline.question would block.
-  if (!process.stdin.isTTY) {
+  // 10.19.8 Phase 2: when `deps.pickModels` is provided (test injection),
+  // skip the TTY guard — the test harness is responsible for the picker.
+  const pickModelsFn = deps.pickModels || pickModels;
+  if (!process.stdin.isTTY && !deps.pickModels) {
     if (wantJson) {
       process.stdout.write(JSON.stringify({
         endpoint,
@@ -1692,7 +1841,24 @@ export async function run(name, args, isHelpRequest) {
 
   const router = loadRouter(routerPath);
   const { models: current } = currentSelection(router);
-  const picked = await pickModels({ candidates, current });
+  const picked = await pickModelsFn({ candidates, current });
+
+  // Phase 2 (10.19.8): the Models.dev catalog fetch moves HERE — only
+  // AFTER the operator has actually confirmed picks. Per-id enrichment
+  // runs in parallel with bounded concurrency (8 workers) and a per-id
+  // timeout (3000ms); per-id failures fall back to the Phase 1
+  // `_gateway.name` contract.
+  const fetchModelsDevCatalogFn = deps.fetchModelsDevCatalog || fetchModelsDevCatalog;
+  const enrichment = await enrichPicksByMetadata({
+    candidates,
+    pickedIds: picked,
+    fetchFn: fetchModelsDevCatalogFn,
+  });
+  const profilesMap = enrichment.profiles;
+  const modelsDevStatus = enrichment.modelsDev && Object.keys(enrichment.modelsDev).length > 0
+    ? { status: 'ok', source: MODELS_DEV_CATALOG_URL, matched: [...profilesMap.values()].filter((p) => p && p.metadata && p.metadata.source === 'models.dev').length, total: picked.length }
+    : { status: 'unavailable', source: MODELS_DEV_CATALOG_URL, matched: 0, total: picked.length, note: 'wholesale fetch failed; per-id enrichment degraded to _gateway.name fallback' };
+
   if (picked.length === 0) {
     const block = applyModels({ routerPath, models: [], source: 'live-pick' });
     // Clear Claude Code modelOverrides + modelPicker when the picker is
@@ -1700,7 +1866,14 @@ export async function run(name, args, isHelpRequest) {
     applyModelOverrides({ pickedIds: [], liveIds: [] });
     applyModelPicker({ pickedIds: [], liveIds: [] });
     if (wantJson) {
-      process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({
+        applied: block,
+        endpoint,
+        endpointSource,
+        enriched: [],
+        profiles: {},
+        modelsDev: modelsDevStatus,
+      }, null, 2) + '\n');
     } else {
       console.log(chalk.yellow('  ! No models selected - userSelected is now empty; orchestrator will fall back to session-only.'));
     }
@@ -1710,7 +1883,7 @@ export async function run(name, args, isHelpRequest) {
   const profiles = {};
   for (const id of picked) {
     tierHints[id] = defaultTierHint(id);
-    const profile = candidates.find((candidate) => candidate.id === id)?.profile;
+    const profile = profilesMap.get(id);
     if (profile) profiles[id] = profile;
   }
   // F-191 / 10.19.2 — stale-ID detection: the picker shows candidates
@@ -1729,7 +1902,21 @@ export async function run(name, args, isHelpRequest) {
   // picks drive the picker without relying on gateway discovery.
   const picker = applyModelPicker({ pickedIds: picked, profiles, liveIds });
   if (wantJson) {
-    process.stdout.write(JSON.stringify({ applied: block, endpoint, endpointSource, sync, picker }, null, 2) + '\n');
+    // Phase 2 (10.19.8): the interactive JSON output gains an `enriched`
+    // key naming the picked IDs that received Models.dev enrichment. For
+    // Phase 2 the array equals the picks list (no filtering); Phase 4
+    // will filter to only the IDs that actually received a profile.
+    const enriched = picked.slice();
+    process.stdout.write(JSON.stringify({
+      applied: block,
+      endpoint,
+      endpointSource,
+      enriched,
+      profiles,
+      modelsDev: modelsDevStatus,
+      sync,
+      picker,
+    }, null, 2) + '\n');
   } else {
     console.log(chalk.green(`\n  v Saved ${block.models.length} model(s) to ${routerPath}:`));
     console.log(chalk.dim(`    Models.dev profiles: ${Object.keys(block.profiles || {}).length}/${block.models.length}`));
