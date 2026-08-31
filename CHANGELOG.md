@@ -1,5 +1,47 @@
 # Changelog
 
+## [10.22.0] - 2026-08-31
+
+Phase 4 dynamic disable-providers mechanism. Adds an operator-controlled `disabledProviders: string[]` config key that filters out providers at every reader site. Adding or removing a blocked provider is a single JSON edit on the operator's `model-router.json` — no in-code `BLOCKED_PROVIDERS` constant, no `if (id === 'claude-opus-5')` branch, no compiled-in family allowlist.
+
+### Added
+
+- **`cli/commands/models.mjs`** — new exports:
+  - `normalizeDisabledPrefix(raw)` — trim + lowercase; case-insensitive input normalization.
+  - `extractDisabledProviders(parsed)` — safe reader off a parsed router block; tolerates missing/non-array/non-string entries.
+  - `readDisabledProviders({ routerPath, legacyPath })` — dual-path reader. Bizar path (`~/.config/bizar/config/claude/model-router.json`) wins when present and the `disabledProviders` key exists; empty `[]` on the Bizar path explicitly beats a non-empty legacy mirror. Falls back to the legacy `~/.claude/model-router.json` only when the Bizar path is absent or unreadable.
+  - `filterCandidatesByDisabledProviders(candidates, disabledProviders)` — case-sensitive prefix filter; returns `{ kept, stripped }` so the CLI can surface what was dropped without crashing on the disable list.
+  - `disabledProviders` parameter on `applyModels`, `applyModelOverrides`, `applyModelPicker`, `partitionStalePicks`, `applyRefresh`, `currentSelection` — optional override for deterministic tests; production callers omit it and read from disk.
+- **`config/claude/hooks/sessionstart-model-sync.mjs`** — inline dual-path reader + `filterDisabled` helper. Strip disabled-provider ids from `settings.modelPicker.options` AND from `settings.model` (replace with first surviving pick) so Claude Code's `/model` picker never surfaces a disabled option.
+- **`config/claude/hooks/agent-model-guard.mjs`** — `readDisabledProvidersFromRegistry`, `isDisabledId`, and silent-filter early-return. `configuredModels` and `userSelectedModels` filter disabled-provider ids before the live-discovery check. The picker IS still the discovery surface for user picks, but the operator's disable intent overrides user intent at config time, not dispatch time.
+- **`cli/commands/model.mjs`** — replaced hardcoded `PROVIDER_GROUPS` with `classifyKind` from `models.mjs`. Provider group names are derived from the canonical family classifier; no compiled-in family allowlist.
+- **`cli/provision.mjs`** — install-banner premium model now derives from `userSelected.tierHints.premium[0]`; `settings.json#model` and `settings.json#modelOverrides` derive from `userSelected.models[0]` (omitted when empty). Install never pins a literal model id.
+- **`cli/commands/upgrade-defaults.mjs`** — replaces hardcoded `model: 'claude/minimax/MiniMax-M3'` with derivation from `userSelected.models[0]`; omits the key when the picker has no entries.
+- **`config/claude/model-router.json`** — `disabledProviders: ["anthropic"]` ships as the default example; comment explains the case-sensitive prefix contract.
+- **`.claude/agents/office-manager.md`** — JSDoc example model ids (`claude-minimax/MiniMax-M3`, `claude-qwen/qwen3.8-max`) replaced with `<pick-from-default-tier>` / `<pick-from-premium-tier>` placeholders so the documentation is decoupled from any specific provider.
+- **`cli/__tests__/models-disabled-providers.test.mjs`** (new, 4 cases) — `normalizeDisabledPrefix` / `extractDisabledProviders` units; dual-path empty-array precedence; `filterCandidatesByDisabledProviders` kept/stripped split.
+- **Regression coverage extended** (12 new tests across 6 files):
+  - `cli/__tests__/models-picker.test.mjs` (+2) — `applyModels` / `applyModelPicker` strip `anthropic/*` ids via the `disabledProviders` parameter.
+  - `cli/__tests__/models-namespace-sync.test.mjs` (+3) — `applyModelOverrides`, `partitionStalePicks`, `applyRefresh`, `currentSelection` honour the disabled list.
+  - `cli/__tests__/models-cli.test.mjs` (+1) — subprocess end-to-end: `bizar models --list` filters `anthropic/*` when the staged router pins `anthropic`.
+  - `config/claude/hooks/__tests__/sessionstart-model-sync.test.mjs` (+1) — SessionStart sync filters `anthropic/*` from `settings.modelPicker.options`.
+  - `config/claude/hooks/__tests__/agent-model-guard.test.mjs` (+1) — silent-filter contract: orchestrator-picked disabled ids fall through without advisory `additionalContext`.
+
+### Changed
+
+- **`config/claude/settings.json`** — removed hardcoded `model` and `modelOverrides` keys; install-time derivation populates them from `userSelected.models[0]`.
+- **`packages/sdk/package.json`** — bumped to `10.22.0` for parity with the harness version.
+
+### Hard constraint
+
+> *make sure bizar doesnt hardocdee things like this. eveyrhting should be dynamic*
+
+There is no in-code list of blocked providers, no per-id branch, no compiled-in family allowlist. Adding a provider to the disable list is a single JSON edit; removing it is a single JSON edit. The 12 new tests pin the contract at every reader site.
+
+### Migration note
+
+`disabledProviders` is a new optional key. Existing `model-router.json` files without the key continue to behave as before — every candidate is kept. Operators who want to start filtering can add `"disabledProviders": ["anthropic"]` (or any other prefix) to their existing router file; whitespace and case are normalized at read time.
+
 ## [10.21.0] - 2026-08-31
 
 Phase B workflow re-architecture: artifact-on-disk barriers. Every Claude-Code-native workflow script (`config/workflows/*.js`) now writes prior agent outputs to `.bizar/runs/<run-id>/<phase-slug>__<label-slug>.json` and passes a 4-line `barrierRef()` block to the next agent instead of re-inlining the full JSON. Phase A (v10.20.0) recovered ~14-16 KB of static prompt bloat per orchestrator turn; Phase B collapses the remaining 15-40 KB of structural workflow bloat.

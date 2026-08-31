@@ -1945,6 +1945,16 @@ function showHelp() {
     a default. Bizar is provider-agnostic and ships no default gateway.
 
   Auth: $ANTHROPIC_AUTH_TOKEN -> settings.json#env.ANTHROPIC_AUTH_TOKEN.\n\n  Discovered models are enriched from https://models.dev/models.json.\n  Metadata lookup is best-effort and never hides gateway-reported models.
+
+  Disable providers (10.22.0 / Phase 4): the operator's
+    model-router.json#disabledProviders: string[]
+  list filters out every id whose provider prefix matches (case-sensitive,
+  trimmed + lowercased at read time). The filter is consulted at every
+  reader site: the picker (interactive + --list), settings.json#model
+  and #modelOverrides, settings.json#modelPicker.options, the
+  SessionStart sync, and the Agent model guard. Empty / missing list is
+  a no-op (every id passes through). Add or remove a blocked provider
+  with a single JSON edit; no in-code list exists.
 `;
   console.log(help);
 }
