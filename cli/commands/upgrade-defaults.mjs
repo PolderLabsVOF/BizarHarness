@@ -11,7 +11,7 @@
  *   2. Sets the permissive defaults the Bizar user typically wants:
  *        - permissions.defaultMode  → "bypassPermissions"
  *        - worktree.bgIsolation     → "worktree"
- *        - model                    → "claude/minimax/MiniMax-M3"
+ *        - model                    → userSelected.models[0] (10.22.0 / Phase 4)
  *        - alwaysThinkingEnabled    → true
  *        - effortLevel              → "high"
  *        - skipDangerousModePermissionPrompt → true
@@ -21,6 +21,9 @@
  *      a more restrictive mode (e.g. a user who set
  *      defaultMode="default" gets to keep it).
  *   4. Preserves every unrelated key (mcpServers, hooks, env, etc.).
+ *   5. Skips `model` entirely when userSelected is empty — Claude Code
+ *      inherits its session default, still gated by the operator's
+ *      `disabledProviders` list (10.22.0 / Phase 4).
  *
  * Why this exists: the canonical config/claude/settings.json ships with
  * these defaults and `cli/provision.mjs` (F-163 scope-owned) is the
@@ -37,17 +40,52 @@ import { join } from 'node:path';
 const HOME = homedir();
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR?.trim() || join(HOME, '.claude');
 const SETTINGS_PATH = join(CLAUDE_DIR, 'settings.json');
+// 10.22.0 / Phase 4 spirit-of-constraint: the install model id comes
+// from the operator's `userSelected.models[0]`, not a hardcoded literal.
+// Dual-path read matches `cli/commands/models.mjs#readDisabledProviders`:
+// the Bizar path wins when present; the Claude Code mirror is fallback.
+const BIZAR_ROUTER_PATH = process.env.BIZAR_MODEL_ROUTER_CONFIG?.trim()
+  || join(HOME, '.config', 'bizar', 'config', 'claude', 'model-router.json');
+const LEGACY_ROUTER_PATH = join(HOME, '.claude', 'model-router.json');
 
-const FAVORED = {
+function readUserSelectedModels() {
+  for (const path of [BIZAR_ROUTER_PATH, LEGACY_ROUTER_PATH]) {
+    if (!existsSync(path)) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(path, 'utf8'));
+      const list = Array.isArray(parsed?.userSelected?.models)
+        ? parsed.userSelected.models.filter((id) => typeof id === 'string' && id.trim())
+        : [];
+      if (list.length > 0) return list;
+      // Bizar path exists with an explicit empty `userSelected.models` —
+      // honour that intent (do NOT fall through to the legacy mirror).
+      if (path === BIZAR_ROUTER_PATH && parsed && typeof parsed === 'object'
+          && Array.isArray(parsed.userSelected?.models)) {
+        return [];
+      }
+    } catch { /* keep falling through */ }
+  }
+  return [];
+}
+
+const STATIC_FAVORED = {
   permissions: { defaultMode: 'bypassPermissions' },
   worktree: { bgIsolation: 'worktree' },
-  model: 'claude/minimax/MiniMax-M3',
+  // `model` is intentionally absent — `buildFavored()` derives it from
+  // userSelected.models[0] (or omits it when empty).
   alwaysThinkingEnabled: true,
   effortLevel: 'high',
   skipDangerousModePermissionPrompt: true,
   showThinkingSummaries: true,
   askUserQuestionTimeout: '5m',
 };
+
+function buildFavored() {
+  const out = { ...STATIC_FAVORED };
+  const picks = readUserSelectedModels();
+  if (picks[0]) out.model = picks[0];
+  return out;
+}
 
 function isAtLeastAsPermissive(existing, desired) {
   // Don't downgrade: if the user picked a stricter mode, keep theirs.
@@ -86,10 +124,11 @@ function load() {
 
 function diff(existing) {
   const proposed = JSON.parse(JSON.stringify(existing));
-  deepAssign(proposed, FAVORED);
+  const favored = buildFavored();
+  deepAssign(proposed, favored);
   // Permission-mode guard.
   const existingMode = existing?.permissions?.defaultMode;
-  if (existingMode && !isAtLeastAsPermissive(existingMode, FAVORED.permissions.defaultMode)) {
+  if (existingMode && !isAtLeastAsPermissive(existingMode, favored.permissions.defaultMode)) {
     proposed.permissions.defaultMode = existingMode;
   }
   return proposed;
