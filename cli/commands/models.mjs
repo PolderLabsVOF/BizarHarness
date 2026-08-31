@@ -670,6 +670,134 @@ export function classifyKind(modelId) {
   return 'other';
 }
 
+// ── Disabled providers (10.22.0 / Phase 4) ────────────────────────────────────
+//
+// Operator-controllable provider disable list. Read from the top-level
+// `disabledProviders: string[]` key on the model-router config. There is NO
+// in-code hardcoded list — adding or removing a blocked provider is a
+// single JSON edit.
+//
+// Dual-path read: the Bizar path (`~/.config/bizar/config/claude/model-router.json`)
+// WINS when both exist, including an explicit `[]` (operators may pin
+// "no providers disabled" without deleting the legacy mirror). Whitespace
+// trim + lowercase normalization happens at read time so operators may
+// write `"  Anthropic  "` in JSON and still match `anthropic/...` model
+// ids. The comparison itself is a case-sensitive prefix filter against
+// the (lowercase) disabled prefixes, so `Anthropic/claude-X` (capital A)
+// is intentionally NOT stripped — pin test covers that.
+
+/**
+ * Normalize a single disabled-provider prefix: trim whitespace, lowercase.
+ * Returns empty string for non-string / empty input.
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function normalizeDisabledPrefix(raw) {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  return trimmed.toLowerCase();
+}
+
+/**
+ * Read `disabledProviders` from a parsed router object. Returns the
+ * normalized prefix array (or empty array when missing / malformed).
+ * @param {unknown} router
+ * @returns {string[]}
+ */
+function extractDisabledProviders(router) {
+  if (!router || typeof router !== 'object' || Array.isArray(router)) return [];
+  const raw = router.disabledProviders;
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const v of raw) {
+    const norm = normalizeDisabledPrefix(v);
+    if (norm) out.push(norm);
+  }
+  return out;
+}
+
+/**
+ * Read the operator's `disabledProviders` list from the model-router
+ * config. Dual-path: the Bizar path wins when present (even with an
+ * explicit empty array); the legacy `~/.claude/model-router.json` mirror
+ * is the fallback. Both paths are normalized (trim + lowercase) at read.
+ *
+ * Pure function over the filesystem; returns an empty array when neither
+ * file exists, when both files lack the key, or when both reads fail.
+ *
+ * @param {{ routerPath?: string, legacyPath?: string }} [opts]
+ *   - `routerPath` defaults to the Bizar home path
+ *     (`~/.config/bizar/config/claude/model-router.json`).
+ *   - `legacyPath` defaults to the Claude Code mirror
+ *     (`~/.claude/model-router.json`).
+ * @returns {string[]} normalized disabled-provider prefixes
+ */
+export function readDisabledProviders({ routerPath, legacyPath } = {}) {
+  const bizarPath = routerPath || join(homedir(), '.config', 'bizar', 'config', 'claude', 'model-router.json');
+  const fallPath = legacyPath || join(homedir(), '.claude', 'model-router.json');
+  if (existsSync(bizarPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(bizarPath, 'utf8'));
+      const extracted = extractDisabledProviders(parsed);
+      // Bizar path exists — its `disabledProviders` is authoritative even
+      // when explicitly `[]` (operators may pin "no providers disabled"
+      // without deleting the legacy mirror). Missing key still falls back.
+      if (Array.isArray(parsed && typeof parsed === 'object' ? parsed.disabledProviders : undefined)) {
+        return extracted;
+      }
+    } catch {
+      // Corrupt Bizar file — fall through to the legacy mirror.
+    }
+  }
+  if (existsSync(fallPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(fallPath, 'utf8'));
+      return extractDisabledProviders(parsed);
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/**
+ * Filter a candidate id list against the disabled-providers prefix list.
+ *
+ * The comparison is a strict, case-sensitive prefix match against the
+ * NORMALIZED (lowercase) disabled prefixes. Candidate ids are checked
+ * as-given, so a candidate like `Anthropic/claude-X` (capital A) is
+ * intentionally NOT stripped when `disabledProviders` is `["anthropic"]`
+ * — pin test covers that. Operators who want to block mixed-case ids
+ * should write the lowercase form.
+ *
+ * Empty / missing `disabledProviders` is a no-op (returns the input list).
+ *
+ * @template T extends string
+ * @param {T[] | Iterable<T>} candidates
+ * @param {string[]} disabledProviders  already-normalized prefixes
+ * @returns {{ kept: T[], stripped: T[] }}
+ */
+export function filterCandidatesByDisabledProviders(candidates, disabledProviders) {
+  const list = Array.isArray(candidates) ? candidates : Array.from(candidates || []);
+  const prefixes = Array.isArray(disabledProviders)
+    ? disabledProviders.filter((p) => typeof p === 'string' && p.length > 0)
+    : [];
+  if (prefixes.length === 0) return { kept: [...list], stripped: [] };
+  const kept = [];
+  const stripped = [];
+  for (const id of list) {
+    const s = typeof id === 'string' ? id : '';
+    let blocked = false;
+    for (const p of prefixes) {
+      if (s && s.startsWith(p)) { blocked = true; break; }
+    }
+    if (blocked) stripped.push(id);
+    else kept.push(id);
+  }
+  return { kept, stripped };
+}
+
 // ── Persistence ──────────────────────────────────────────────────────────────
 
 /**
