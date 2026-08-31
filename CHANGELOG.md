@@ -54,6 +54,41 @@ The interactive picker path used to call `fetchModelsDevCatalog` BEFORE the pick
 - **`cli/__tests__/models-refresh.test.mjs`** (+3) — `enrichPicksByMetadata` returns one profile entry per picked id with bounded concurrency (wholesale fetchFn called exactly once); per-id timeout falls back to `_gateway.name` with `metadata.source === 'gateway-fallback'`; wholesale catalog fetch failure degrades to `_gateway.name`.
 - **`cli/__tests__/models-namespace-sync.test.mjs`** (+1 subprocess) — `bizar models --list` does NOT contact `models.dev`. Spins up a stub models.dev server that records every hit (via side-channel file counter), asserts `mdHits === 0` after `--list` exits cleanly.
 
+## [10.19.9] - 2026-08-31
+
+`bizar models` interactive picker prints a per-row ✔ / ✖ / ⤳ status screen after confirmation, mirroring the per-row pattern in `cli/doctor.mjs#runDoctor`.
+
+After the operator confirms a picker selection, the interactive path now prints one row per picked id with a ✔ (Models.dev profile retrieved, or carried over via the Phase 1 `_gateway.name` fallback), ✖ (Models.dev miss AND no `_gateway.name` fallback), or ⤳ (id was already in `userSelected.models` before this run — a re-confirmed pick). The screen ends with a footer `N passed, M failed, K skipped`. In a TTY the screen is multi-row; in a pipe it collapses to a single line appended to the existing "Saved N model(s)" block so non-interactive shells see one summary line, not a flood of rows.
+
+### Added
+
+- **`cli/commands/models.mjs#classifyPickStatus`** (new, exported) — pure 4-state classifier. Returns `'fresh'` (profile.metadata.source === 'models.dev'), `'refreshed'` (profile.metadata.source === 'gateway-fallback'), `'unavailable'` (profile === null AND no `_gateway.name` fallback), or `'preexisting'` (id was already in userSelected.models before this run). `'preexisting'` always wins over the other branches; otherwise `'unavailable'` is reserved for the strict-null-profile case (the Phase 1 plumbing makes the latter rare).
+- **`cli/commands/models.mjs#renderPickStatusScreen`** (new, exported) — the renderer. Accepts `{ picked, profiles, preExisting, fetchSummary, out, isTTY }`. When `isTTY=true` prints one `  <icon> <id>  (<label>)` line per picked id plus a footer; when `isTTY=false` prints a single `  v N passed, M failed, K skipped` collapsed line. Always returns `{ perPick: [{id, status, hasProfile}], totals: {passed, failed, skipped}, exitCode: 0 when any ✔, 2 when every row is ✖ }` so `--json` callers can embed the data in the JSON envelope without re-implementing the classification. The injected `out` writable lets tests stub without monkey-patching `process.stdout`.
+- **`cli/commands/models.mjs#run`** — captures a `preExisting = new Set(currentSelection(router).models)` snapshot BEFORE `applyModels` overwrites the block, so the classifier can detect re-confirmed picks (⤳) versus freshly-picked ids (✔). Calls `renderPickStatusScreen` after the existing "Saved N model(s)" block in the interactive non-JSON branch. Empty-pick early-return (the `picked.length === 0` branch) intentionally skips the screen — the existing `chalk.yellow` "No models selected" message stays the only operator feedback there.
+- **`cli/commands/models.mjs#run`** interactive `--json` output gains a `status: { perPick, totals }` key. The renderer is invoked with a no-op `out` writable so nothing leaks into the JSON stream. Existing keys (`applied`, `endpoint`, `endpointSource`, `enriched`, `profiles`, `modelsDev`, `sync`, `picker`) are unchanged.
+- **`cli/commands/models.mjs#showHelp`** — documents the new screen: the per-row ✔ / ✖ / ⤳ mapping, the footer, the non-TTY collapse, the `--json` envelope keys, and the exit-code contract.
+
+### Changed
+
+- **`.harness/arch-rules.json`** — new rule `arch-status-icons` pins the per-row ✔ / ✖ / ⤳ glyphs to `cli/commands/models.mjs#renderPickStatusScreen` and `cli/doctor.mjs#runDoctor`. Any other source file that prints those glyphs fails `make check-arch` (Phase 4 hooks must not import the renderer).
+- **`cli/commands/models.mjs`** — `classifyPickStatus` and `renderPickStatusScreen` are exported from the module root. Both are CLI-only; the SessionStart hook has no TTY and no outbound HTTP and must NOT import them (pinned by JSDoc and the new grep fence).
+
+### Risks
+
+- **Exit code 2 collision with bash convention.** Bash reserves exit code 2 for "misuse of shell builtins". Phase 3 reserves it for "every pick unavailable" — a meaningful operator signal that every confirmed id had no Models.dev profile and no `_gateway.name` fallback. Documented in the new `showHelp` paragraph.
+- **Icon glyph rendering on Windows.** ✖ (U+2716) may render as a fallback on legacy Windows consoles (cp437). The ✔ / ⤳ glyphs are BMP and render correctly under all modern terminals. Phase 3 does not add a Windows-specific code page; operators on legacy consoles may see `?` instead of ✖.
+- **`preexisting` precedence.** A pick that already existed in `userSelected.models` is always ⤳, even when Models.dev returns a fresh profile. The classifier intentionally prioritises "this pick survived a prior run" over "the catalog just succeeded" — operators use ⤳ to verify their saved picks are still present, not to re-check catalog freshness. Phase 4 (`disabledProviders`) filters disabled picks BEFORE this classifier runs, so a disabled re-confirmed pick never surfaces as ⤳.
+- **SessionStart hook limitation.** The hook cannot render the status screen — it has no TTY and no outbound HTTP. The grep fence prevents the hook from accidentally importing the renderer.
+
+### Regression tests
+
+- **`cli/__tests__/models-picker.test.mjs`** (+5) — pins the full renderPickStatusScreen contract: ✔ for every pick with `profile.name` (totals + perPick + exitCode(0)); ✖ when `profile === null` AND no `_gateway.name` fallback (exitCode 2); ⤳ when the pick was already in `userSelected.models` BEFORE this run (preexisting always wins); non-TTY single-line collapse (`isTTY=false` prints one `v N passed, M failed, K skipped` line and zero per-row ✔ lines); exit code propagation (mixed ✔+✖ exits 0; all-✖ exits 2; `classifyPickStatus` returns each of the four states from the right input).
+- **`cli/__tests__/models-namespace-sync.test.mjs`** (+1 subprocess) — `bizar models --json` interactive path exposes `status.perPick` and `status.totals` after a 1-pick confirmation against a stubbed gateway AND a stubbed models.dev catalog. Asserts the JSON envelope contains a `status` block with the picked id's `{status, hasProfile}` and the running totals.
+
+### Audit references
+
+- F-192 / docs/plans/2026-08-31-models-picker-ux.md Phase 3 (lines 481-594).
+
 ## [10.19.7] - 2026-08-31
 
 `bizar models` picker rows carry richer label/description metadata — operator-visible behaviour unchanged.

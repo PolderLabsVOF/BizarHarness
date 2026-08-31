@@ -1744,6 +1744,24 @@ function showHelp() {
   userSelected. If userSelected is empty, every dispatch inherits the
   active session model.
 
+  Post-confirm status screen (interactive only): after the picker saves a
+  selection, every confirmed id is reported on its own row with one of:
+
+    ✔   Models.dev profile retrieved (or carried over via the gateway
+        _gateway.name fallback). The label shows the profile name.
+    ✖   Models.dev miss AND no _gateway.name fallback. The row prints
+        \`(metadata unavailable)\`.
+    ⤳   Id was already in userSelected.models before this run
+        (re-confirmed pick). Label: \`(already in userSelected)\`.
+
+  The screen ends with a footer \`N passed, M failed, K skipped\`. In a
+  TTY the screen is multi-row; in a pipe it collapses to one summary
+  line appended to the existing \"Saved N model(s)\" block. \`--json\`
+  carries the equivalent data in \`status.perPick\` (one entry per
+  picked id) and \`status.totals\` ({passed, failed, skipped}). Exit
+  code is 0 when at least one ✔ was reported, 2 when every row is ✖;
+  mixed ✔+✖ still exits 0.
+
   Endpoint resolution order: $BIZAR_MODEL_ROUTER_URL / $ANTHROPIC_BASE_URL
     -> ~/.claude/settings.json#env.BIZAR_MODEL_ROUTER_URL
     -> model-router.json#endpoint

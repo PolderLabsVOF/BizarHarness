@@ -2,22 +2,39 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — 10.19.9 patch: `bizar models` post-confirm status screen (Phase 3)
+## Complete — 10.19.9 patch: `bizar models` post-confirm status screen (Phase 3)
 
 **Why:** `bizar models` (interactive) confirms a picker selection and prints a "Saved N model(s)" block but gives the operator no per-pick visibility into whether each ID's Models.dev metadata was retrieved (✔), unavailable (✖), or carried over from a prior `userSelected` (⤳). Phase 3 ships the renderer + classifier from `docs/plans/2026-08-31-models-picker-ux.md` lines 481-594; the underlying data flow is already correct from Phase 1 (gateway `name` plumbing) and Phase 2 (lazy metadata fetch).
 
-**Plan (4 commits, in this order):**
-1. ✅ `feat(models): add renderPickStatusScreen + classifyPickStatus (exported)` — adds the two helpers; no wire-in yet. Commit `6567be9`.
-2. ✅ `feat(models): wire status screen into interactive picker` — calls `renderPickStatusScreen` after the "Saved" block; empty-pick branch preserved. Commit `b367100`.
-3. ✅ `feat(models): --json gains status.perPick + status.totals` — non-TTY single-line collapse, JSON shape, exit-code propagation. Adds the 5 picker tests.
-4. `feat(models): document status screen in showHelp + CHANGELOG + PROGRESS (v10.19.9)` — showHelp paragraph, CHANGELOG v10.19.9 entry, PROGRESS 10.19.9 patch entry. Plus the 1 subprocess test. Adds grep-fence rule to `make check-arch`.
+**Fix (this commit, `feat(models): document status screen in showHelp + CHANGELOG + PROGRESS (v10.19.9)`):**
 
-**Test count target:** +6 (models-picker +5, models-namespace-sync +1 subprocess).
+- **`cli/commands/models.mjs#showHelp`** — added a "Post-confirm status screen" paragraph that documents the per-row ✔ / ✖ / ⤳ mapping, the footer, the non-TTY single-line collapse, the `--json` envelope keys (`status.perPick`, `status.totals`), and the exit-code contract (0 when any ✔; 2 when every row is ✖; mixed ✔+✖ exits 0).
+- **`CHANGELOG.md`** — added a `[10.19.9] - 2026-08-31` entry covering the Phase 3 renderer / classifier / wire-in / `--json` shape / `showHelp` / grep fence / +6 regression tests.
+- **`.harness/arch-rules.json`** — added rule `arch-status-icons`. The grep fence fails `make check-arch` if `✔` / `✖` / `⤳` appear in any `.mjs` / `.js` / `.ts` / `.md` file under `cli`, `packages`, `config`, or `scripts` outside the two designated surfaces (`cli/commands/models.mjs#renderPickStatusScreen`, `cli/doctor.mjs#runDoctor`) plus the test files and the plan/CHANGELOG/PROGRESS that document the glyphs. Pins the SessionStart hook (which has no TTY and no outbound HTTP) from accidentally importing the renderer.
+- **`cli/__tests__/models-namespace-sync.test.mjs`** (+1 subprocess) — `bizar models --json` exposes `status.perPick` and `status.totals` after a 1-pick confirmation. The test spawns a tiny Node wrapper that stubs `process.stdin.isTTY=true`, `setRawMode` (no-op fallback to line mode), and the Phase 2 test-injection surface (`deps.listModels`, `deps.pickModels`, `deps.fetchModelsDevCatalog`) BEFORE requiring the CLI. The wrapper then calls `run('models', ['--json'], false, deps)`. Asserts the JSON envelope's `status.perPick[0].status === 'fresh'`, `status.perPick[0].hasProfile === true`, and `status.totals === { passed: 1, failed: 0, skipped: 0 }`.
 
-**Tests run (from this worktree, after commit 3):**
-- `node --test cli/__tests__/models-picker.test.mjs` — 41/41 pass (was 36 pre-patch, +5 from Phase 3 commit 3).
+**Regression tests (+6, all green):**
 
-**Out of scope:** SDK changes, `config/claude/hooks/sessionstart-model-sync.mjs`, `disabledProviders` (Phase 4), the deprecated `bizar model` alias surface.
+- **`cli/__tests__/models-picker.test.mjs`** (+5) — pins the renderPickStatusScreen contract (✔ for fresh, ✖ for unavailable no-`_gateway.name` fallback, ⤳ for preExisting, non-TTY single-line collapse, exit-code 0/2 propagation) plus the four classifyPickStatus states.
+- **`cli/__tests__/models-namespace-sync.test.mjs`** (+1 subprocess) — pins the `--json` envelope shape.
+
+**Tests run (from this worktree, after all 4 commits):**
+
+- `node --test cli/__tests__/models-picker.test.mjs cli/__tests__/models-namespace-sync.test.mjs` — 70/70 pass (was 64 pre-patch, +6 from Phase 3).
+- Test count delta verified: `models-picker` 36→41 (+5), `models-namespace-sync` 28→29 (+1).
+- Full models suite (`models-picker` + `models-namespace-sync` + `models-picker-tty` + `models-refresh` + `models-picker-context` + `models-persists-under-bizar-home` + `models-mirror-shipped` + `models-cli`) — 117/117 pass, no regressions.
+- `make check` and `make check-arch` (the new `arch-status-icons` rule) — see verification gate in the final handoff.
+
+**Out of scope (preserved):** SDK changes, `config/claude/hooks/sessionstart-model-sync.mjs`, `disabledProviders` (Phase 4, v10.19.10), the deprecated `bizar model` alias surface.
+
+**Commit chain (this branch `worktree-agent-a71ca933102808463`):**
+
+1. `6567be9` `feat(models): add renderPickStatusScreen + classifyPickStatus (exported)`
+2. `b367100` `feat(models): wire status screen into interactive picker`
+3. `86fd0ca` `feat(models): --json gains status.perPick + status.totals`
+4. (this commit, pending)
+
+## Complete — 10.20.0 patch: Phase A token reduction trim
 
 ## Complete — 10.20.0 patch: Phase A token reduction trim
 
