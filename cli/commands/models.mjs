@@ -821,7 +821,13 @@ export function loadRouter(routerPath) {
  * @returns {{ models: string[], lastUpdated: string, source: string, tierHints: Record<string,string>, profiles: Record<string,object> }}
  */
 export function applyModels({ routerPath, models, tierHints = {}, profiles = {}, source = 'live-pick' }) {
-  const list = Array.isArray(models) ? models.filter((m) => typeof m === 'string' && m.trim()) : [];
+  const incoming = Array.isArray(models) ? models.filter((m) => typeof m === 'string' && m.trim()) : [];
+  // 10.22.0 / Phase 4: strip any id whose provider prefix is on the
+  // operator's disabled-providers list. The router file owns the list —
+  // no in-code hardcoded families. Stripped ids never reach the picker,
+  // the settings.json sync, the SessionStart hook, or the Agent guard.
+  const disabled = readDisabledProviders();
+  const { kept: list } = filterCandidatesByDisabledProviders(incoming, disabled);
   const hints = { ...(tierHints || {}) };
   for (const id of list) if (!hints[id]) hints[id] = defaultTierHint(id);
   const block = {
@@ -910,6 +916,7 @@ export function partitionStalePicks({ liveIds, pickedIds }) {
  *   wrote: boolean,
  *   syncedIds: string[],
  *   skippedStale: string[],
+ *   skippedDisabled: string[],
  *   settingsPath: string|null,
  * }}
  */
@@ -918,10 +925,16 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [] 
     ? join(homedir(), '.claude', 'settings.json')
     : settingsJsonPath;
   if (path === null) {
-    return { wrote: false, syncedIds: [], skippedStale: [], settingsPath: null };
+    return { wrote: false, syncedIds: [], skippedStale: [], skippedDisabled: [], settingsPath: null };
   }
   const live = new Set(Array.isArray(liveIds) ? liveIds : []);
-  const picks = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  const incoming = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  // 10.22.0 / Phase 4: strip disabled-provider ids BEFORE the self-map
+  // so Claude Code never sees an `anthropic/*` self-map entry. The
+  // skipped ids are reported back so the operator can see what was
+  // dropped (without crashing on the disabled list).
+  const disabled = readDisabledProviders();
+  const { kept: picks, stripped: skippedDisabled } = filterCandidatesByDisabledProviders(incoming, disabled);
   // Self-map only IDs the live gateway serves. Stale IDs intentionally stay
   // out so the `[claude-code:unrecognized_model]` diagnostic still fires
   // for them — the operator should re-run `bizar models` to drop them.
@@ -938,14 +951,14 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [] 
     } catch {
       // Corrupt settings.json — refuse to overwrite it; surface the sync
       // as a no-op so `bizar models` still completes.
-      return { wrote: false, syncedIds: [], skippedStale: skipped, settingsPath: path };
+      return { wrote: false, syncedIds: [], skippedStale: skipped, skippedDisabled, settingsPath: path };
     }
   }
   // Self-map pattern — Claude Code uses modelOverrides to suppress
   // `[claude-code:unrecognized_model]` for any ID that maps to itself.
   settings.modelOverrides = Object.fromEntries(synced.map((id) => [id, id]));
   writeAtomic(path, JSON.stringify(settings, null, 2) + '\n');
-  return { wrote: true, syncedIds: synced, skippedStale: skipped, settingsPath: path };
+  return { wrote: true, syncedIds: synced, skippedStale: skipped, skippedDisabled, settingsPath: path };
 }
 
 /**
@@ -1021,6 +1034,7 @@ export function deriveModelLabel(modelId, profile) {
  *   wrote: boolean,
  *   options: Array<{model: string, label: string, description?: string}>,
  *   skippedStale: string[],
+ *   skippedDisabled: string[],
  *   settingsPath: string|null,
  * }}
  */
@@ -1029,10 +1043,15 @@ export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, l
     ? join(homedir(), '.claude', 'settings.json')
     : settingsJsonPath;
   if (path === null) {
-    return { wrote: false, options: [], skippedStale: [], settingsPath: null };
+    return { wrote: false, options: [], skippedStale: [], skippedDisabled: [], settingsPath: null };
   }
   const live = new Set(Array.isArray(liveIds) ? liveIds : []);
-  const picks = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  const incoming = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  // 10.22.0 / Phase 4: drop disabled-provider ids BEFORE the live-id
+  // gate so Claude Code's `/model` picker never surfaces an
+  // `anthropic/*` (or any other disabled) option.
+  const disabled = readDisabledProviders();
+  const { kept: picks, stripped: skippedDisabled } = filterCandidatesByDisabledProviders(incoming, disabled);
   const surviving = live.size === 0 ? picks : picks.filter((id) => live.has(id));
   const skipped = live.size === 0 ? [] : picks.filter((id) => !live.has(id));
   const options = surviving.map((id) => {
@@ -1050,12 +1069,12 @@ export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, l
       const parsed = JSON.parse(readFileSync(path, 'utf8'));
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) settings = parsed;
     } catch {
-      return { wrote: false, options: [], skippedStale: skipped, settingsPath: path };
+      return { wrote: false, options: [], skippedStale: skipped, skippedDisabled, settingsPath: path };
     }
   }
   settings.modelPicker = { options };
   writeAtomic(path, JSON.stringify(settings, null, 2) + '\n');
-  return { wrote: true, options, skippedStale: skipped, settingsPath: path };
+  return { wrote: true, options, skippedStale: skipped, skippedDisabled, settingsPath: path };
 }
 
 // ── F-190 / IMP-017 refresh + operator-override preservation ────────────────
