@@ -271,6 +271,37 @@ test('model-sync: missing settings.json is created on first run', () => {
   }
 });
 
+test('model-sync: disabledProviders strips banned ids before picker re-apply', () => {
+  // 10.22.0 / Phase 4: the SessionStart hook honours the operator's
+  // `disabledProviders: ["anthropic"]` list — even if `userSelected.models`
+  // already contains `anthropic/*` from a prior run, the picker re-apply
+  // must NOT surface them to Claude Code's `/model` menu.
+  const stage = makeStage();
+  try {
+    writeFileSync(stage.routerPath, JSON.stringify({
+      disabledProviders: ['anthropic'],
+      userSelected: {
+        models: ['anthropic/claude-3-5-sonnet', 'minimax/MiniMax-M3', 'anthropic/claude-opus-4'],
+      },
+    }));
+    writeFileSync(stage.settingsPath, JSON.stringify({}));
+    const result = runHook(
+      { hook_event_name: 'SessionStart', source: 'startup' },
+      { HOME: stage.dir, BIZAR_MODEL_ROUTER_CONFIG: stage.routerPath },
+    );
+    assert.equal(result.status, 0);
+    const after = JSON.parse(readFileSync(stage.settingsPath, 'utf8'));
+    // Only the non-disabled id survives in the picker.
+    assert.deepEqual(after.modelPicker.options.map((o) => o.model), ['minimax/MiniMax-M3']);
+    // The self-map pattern also skips the disabled ids.
+    assert.deepEqual(after.modelOverrides, {
+      'minimax/MiniMax-M3': 'minimax/MiniMax-M3',
+    });
+  } finally {
+    rmSync(stage.dir, { recursive: true, force: true });
+  }
+});
+
 test('model-sync: hook source mentions contract (regression fence)', () => {
   // Source-only assertions; no subprocess spawn so no settings.json writes.
   const src = readFileSync(HOOK_PATH, 'utf8');

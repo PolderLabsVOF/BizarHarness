@@ -22,6 +22,8 @@ import {
   enrichModelsWithCapabilities,
   pickModels,
   applyModels,
+  applyModelOverrides,
+  applyModelPicker,
   defaultTierHint,
   resolveEndpoint,
   resolveRouterPath,
@@ -234,6 +236,49 @@ test('applyModels: drops blank model entries', () => {
     writeFileSync(routerPath, JSON.stringify({ version: '12.0.0' }));
     const block = applyModels({ routerPath, models: ['a/1', '', '   ', 'b/2'], source: 'cli-set' });
     assert.deepEqual(block.models, ['a/1', 'b/2']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── 10.22.0 / Phase 4: `disabledProviders` filter contract ────────────────
+
+test('applyModels: disabledProviders strips banned ids before persisting', () => {
+  const dir = tmpDir();
+  try {
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({ version: '12.0.0' }));
+    // Operator disabled `anthropic` — every `anthropic/*` id must be
+    // stripped, but `claude-minimax/*` survives.
+    const block = applyModels({
+      routerPath,
+      models: ['anthropic/claude-3-5-sonnet', 'claude-minimax/MiniMax-M3', 'anthropic/claude-opus-4'],
+      source: 'cli-set',
+      disabledProviders: ['anthropic'],
+    });
+    assert.deepEqual(block.models, ['claude-minimax/MiniMax-M3']);
+    const after = JSON.parse(readFileSync(routerPath, 'utf8'));
+    assert.deepEqual(after.userSelected.models, ['claude-minimax/MiniMax-M3']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('applyModelPicker: skippedDisabled returned in result shape', () => {
+  // The /model picker sync must report what was dropped, not silently
+  // swallow it. The disabled ids stay in the result's `skippedDisabled`
+  // so the operator sees them in the interactive summary.
+  const dir = tmpDir();
+  try {
+    const settingsJsonPath = join(dir, 'settings.json');
+    writeFileSync(settingsJsonPath, JSON.stringify({}));
+    const result = applyModelPicker({
+      settingsJsonPath,
+      pickedIds: ['anthropic/claude-3-5-sonnet', 'claude-minimax/MiniMax-M3'],
+      disabledProviders: ['anthropic'],
+    });
+    assert.deepEqual(result.options.map((o) => o.model), ['claude-minimax/MiniMax-M3']);
+    assert.deepEqual(result.skippedDisabled, ['anthropic/claude-3-5-sonnet']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

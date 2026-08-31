@@ -29,6 +29,7 @@ import {
   normalizeModels,
   partitionStalePicks,
   classifyKind,
+  currentSelection,
 } from '../commands/models.mjs';
 
 const CWD = process.cwd();
@@ -898,4 +899,67 @@ await run('models', ['--json'], false, deps);
     rmSync(cwd, { recursive: true, force: true });
     rmSync(stubDir, { recursive: true, force: true });
   }
+});
+
+// ── 10.22.0 / Phase 4: disabled-providers filter contract ──────────────
+
+test('applyModelOverrides: skippedDisabled is reported and disabled ids never sync', () => {
+  // The self-map pattern writes {<id>:<id>}. Operators with
+  // `disabledProviders: ["anthropic"]` must NEVER see an
+  // `anthropic/*` self-map entry in their settings.json — the
+  // skippedDisabled array carries the dropped ids back so the CLI
+  // can surface them in the interactive summary.
+  const cwd = makeCwd();
+  try {
+    const routerPath = writeBaseRouter(cwd);
+    const settingsJsonPath = tmpSettingsPath(cwd);
+    writeFileSync(settingsJsonPath, JSON.stringify({}));
+    const result = applyModelOverrides({
+      settingsJsonPath,
+      pickedIds: ['anthropic/claude-3-5-sonnet', 'claude-minimax/MiniMax-M3'],
+      liveIds: ['anthropic/claude-3-5-sonnet', 'claude-minimax/MiniMax-M3'],
+      disabledProviders: ['anthropic'],
+    });
+    assert.deepEqual(result.syncedIds, ['claude-minimax/MiniMax-M3']);
+    assert.deepEqual(result.skippedDisabled, ['anthropic/claude-3-5-sonnet']);
+    // The settings.json must contain ONLY the surviving self-map.
+    const after = JSON.parse(readFileSync(settingsJsonPath, 'utf8'));
+    assert.deepEqual(after.modelOverrides, {
+      'claude-minimax/MiniMax-M3': 'claude-minimax/MiniMax-M3',
+    });
+    assert.equal(after.modelOverrides['anthropic/claude-3-5-sonnet'], undefined);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('partitionStalePicks: disabled ids are not in live pool OR stale list', () => {
+  // Disabled ids must not surface as "stale" either — they were never
+  // the operator's intent once the disable list landed.
+  const result = partitionStalePicks({
+    liveIds: ['claude-minimax/MiniMax-M3', 'anthropic/claude-3-5-sonnet'],
+    pickedIds: ['claude-minimax/MiniMax-M3', 'anthropic/claude-3-5-sonnet', 'anthropic/claude-opus-4'],
+    disabledProviders: ['anthropic'],
+  });
+  assert.deepEqual(result.liveIds, ['claude-minimax/MiniMax-M3']);
+  // The disabled `anthropic/claude-opus-4` is dropped entirely — it is
+  // neither live nor stale.
+  assert.deepEqual(result.staleIds, []);
+});
+
+test('currentSelection: disabled ids already persisted in userSelected are stripped on read', () => {
+  // Even when the router file already has `anthropic/*` ids in
+  // `userSelected.models` from a prior run, every read site honours the
+  // current disable list — the operator's disable intent overrides
+  // history.
+  const router = {
+    userSelected: {
+      models: ['anthropic/claude-3-5-sonnet', 'claude-minimax/MiniMax-M3'],
+      tierHints: { 'claude-minimax/MiniMax-M3': 'default' },
+    },
+  };
+  const result = currentSelection(router, { disabledProviders: ['anthropic'] });
+  assert.deepEqual(result.models, ['claude-minimax/MiniMax-M3']);
+  // tierHints keys for disabled ids are NOT carried over (no orphan hints).
+  assert.deepEqual(result.tierHints, { 'claude-minimax/MiniMax-M3': 'default' });
 });

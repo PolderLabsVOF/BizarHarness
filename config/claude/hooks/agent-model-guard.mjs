@@ -176,6 +176,16 @@ export async function guardAgentModel(input, options = {}) {
     return {};
   }
 
+  // 10.22.0 / Phase 4: silent-filter contract — if the operator's
+  // `disabledProviders` list covers the requested id, fall through
+  // without advising. The orchestrator already chose the id; the
+  // operator's disable intent overrides user picks at config time, not
+  // dispatch time. Pin: see
+  // `config/claude/hooks/__tests__/agent-model-guard.test.mjs#Agent
+  // model guard filters disabled-provider user picks silently`.
+  const disabled = readDisabledProvidersFromRegistry(registry);
+  if (isDisabledId(requested, disabled)) return {};
+
   const allowed = configuredModels(registry);
   const userPicks = userSelectedModels(registry);
 

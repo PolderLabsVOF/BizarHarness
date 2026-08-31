@@ -316,3 +316,57 @@ test('bizar model (deprecated alias) routes to legacy module and preserves JSON 
     await stopServer(srv);
   }
 });
+
+// ── 10.22.0 / Phase 4: disabled-providers subprocess test ────────────────
+
+test('bizar models --list: anthropic/* ids are stripped when disabledProviders:["anthropic"]', async () => {
+  // Subprocess end-to-end pin: the operator's `disabledProviders: ["anthropic"]`
+  // config causes every `anthropic/*` candidate to be filtered before the
+  // picker writes its output. The gateway may still report them; the CLI
+  // removes them.
+  const { srv, port } = await startServer((req, res) => {
+    if (req.url.startsWith('/models')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(SAMPLE));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  try {
+    const cwd = makeCwd();
+    try {
+      const routerPath = writeBaseRouter(cwd);
+      // Inject `disabledProviders: ["anthropic"]` into the operator's
+      // Bizar router file. The subprocess reads from the Bizar path
+      // because BIZAR_MODEL_ROUTER_CONFIG is set.
+      const router = JSON.parse(readFileSync(routerPath, 'utf8'));
+      router.disabledProviders = ['anthropic'];
+      writeFileSync(routerPath, JSON.stringify(router, null, 2));
+
+      const { code, stdout, stderr } = await runBizar(['models', '--list'], {
+        cwd,
+        env: {
+          BIZAR_MODEL_ROUTER_URL: `http://127.0.0.1:${port}`,
+          ANTHROPIC_AUTH_TOKEN: 'tok',
+          BIZAR_MODEL_ROUTER_CONFIG: routerPath,
+          HOME: cwd,
+        },
+      });
+      assert.equal(code, 0, `expected 0, got ${code}; stderr=${stderr}`);
+      const ids = stdout.trim().split('\n').filter(Boolean);
+      // Every surviving id must NOT start with `anthropic/`.
+      for (const id of ids) {
+        assert.ok(!id.startsWith('anthropic/'), `disabled id survived: ${id}`);
+      }
+      // The sample ships anthropic/* ids — assert they were filtered.
+      assert.ok(!ids.includes('anthropic/claude-3-5-sonnet'));
+      // Sanity: non-anthropic ids still appear.
+      assert.ok(ids.includes('claude-minimax/MiniMax-M3'));
+      assert.ok(ids.includes('claude-qwen/qwen3.8-max'));
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  } finally {
+    await stopServer(srv);
+  }
+});

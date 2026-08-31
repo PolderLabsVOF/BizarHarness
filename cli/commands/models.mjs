@@ -820,13 +820,15 @@ export function loadRouter(routerPath) {
  * @param {{ routerPath: string, models: string[], tierHints?: Record<string,string>, profiles?: Record<string,object>, source?: string }} opts
  * @returns {{ models: string[], lastUpdated: string, source: string, tierHints: Record<string,string>, profiles: Record<string,object> }}
  */
-export function applyModels({ routerPath, models, tierHints = {}, profiles = {}, source = 'live-pick' }) {
+export function applyModels({ routerPath, models, tierHints = {}, profiles = {}, source = 'live-pick', disabledProviders }) {
   const incoming = Array.isArray(models) ? models.filter((m) => typeof m === 'string' && m.trim()) : [];
   // 10.22.0 / Phase 4: strip any id whose provider prefix is on the
   // operator's disabled-providers list. The router file owns the list —
   // no in-code hardcoded families. Stripped ids never reach the picker,
   // the settings.json sync, the SessionStart hook, or the Agent guard.
-  const disabled = readDisabledProviders();
+  // Tests pass an explicit `disabledProviders` array to keep the contract
+  // deterministic; production callers omit it and read from disk.
+  const disabled = Array.isArray(disabledProviders) ? disabledProviders : readDisabledProviders();
   const { kept: list } = filterCandidatesByDisabledProviders(incoming, disabled);
   const hints = { ...(tierHints || {}) };
   for (const id of list) if (!hints[id]) hints[id] = defaultTierHint(id);
@@ -873,13 +875,13 @@ function writeAtomic(path, body) {
  *   - `staleIds` — picks that were never returned by the gateway in this run.
  *   - `unknownIds` — picks whose live status is unknown (no live pool yet).
  */
-export function partitionStalePicks({ liveIds, pickedIds }) {
+export function partitionStalePicks({ liveIds, pickedIds, disabledProviders }) {
   const live = Array.isArray(liveIds) ? new Set(liveIds) : null;
   const incoming = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
   // 10.22.0 / Phase 4: strip disabled-provider ids before partition so
   // they never reach the live pool OR the stale list — they were never
   // the operator's intent once the disable list landed.
-  const disabled = readDisabledProviders();
+  const disabled = Array.isArray(disabledProviders) ? disabledProviders : readDisabledProviders();
   const { kept: picks } = filterCandidatesByDisabledProviders(incoming, disabled);
   if (!live || live.size === 0) {
     return { liveIds: [], staleIds: [], unknownIds: [...new Set(picks)] };
@@ -925,7 +927,7 @@ export function partitionStalePicks({ liveIds, pickedIds }) {
  *   settingsPath: string|null,
  * }}
  */
-export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [] }) {
+export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [], disabledProviders }) {
   const path = settingsJsonPath === undefined
     ? join(homedir(), '.claude', 'settings.json')
     : settingsJsonPath;
@@ -938,7 +940,7 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [] 
   // so Claude Code never sees an `anthropic/*` self-map entry. The
   // skipped ids are reported back so the operator can see what was
   // dropped (without crashing on the disabled list).
-  const disabled = readDisabledProviders();
+  const disabled = Array.isArray(disabledProviders) ? disabledProviders : readDisabledProviders();
   const { kept: picks, stripped: skippedDisabled } = filterCandidatesByDisabledProviders(incoming, disabled);
   // Self-map only IDs the live gateway serves. Stale IDs intentionally stay
   // out so the `[claude-code:unrecognized_model]` diagnostic still fires
@@ -1043,7 +1045,7 @@ export function deriveModelLabel(modelId, profile) {
  *   settingsPath: string|null,
  * }}
  */
-export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, liveIds = [] }) {
+export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, liveIds = [], disabledProviders }) {
   const path = settingsJsonPath === undefined
     ? join(homedir(), '.claude', 'settings.json')
     : settingsJsonPath;
@@ -1055,7 +1057,7 @@ export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, l
   // 10.22.0 / Phase 4: drop disabled-provider ids BEFORE the live-id
   // gate so Claude Code's `/model` picker never surfaces an
   // `anthropic/*` (or any other disabled) option.
-  const disabled = readDisabledProviders();
+  const disabled = Array.isArray(disabledProviders) ? disabledProviders : readDisabledProviders();
   const { kept: picks, stripped: skippedDisabled } = filterCandidatesByDisabledProviders(incoming, disabled);
   const surviving = live.size === 0 ? picks : picks.filter((id) => live.has(id));
   const skipped = live.size === 0 ? [] : picks.filter((id) => !live.has(id));
@@ -1116,6 +1118,7 @@ export function applyRefresh({
   catalog,
   aliasMap = {},
   now = new Date(),
+  disabledProviders,
 } = {}) {
   if (!routerPath || typeof routerPath !== 'string') throw new Error('routerPath is required');
   if (!Array.isArray(candidates)) throw new Error('candidates is required (array)');
@@ -1142,7 +1145,7 @@ export function applyRefresh({
   // userSelected.models reflects the operator's intent. Dropped profiles
   // are also pruned so the on-disk state does not keep growing on every
   // refresh.
-  const disabled = readDisabledProviders();
+  const disabled = Array.isArray(disabledProviders) ? disabledProviders : readDisabledProviders();
   const { kept: existingModels, stripped: droppedDisabledIds } = filterCandidatesByDisabledProviders(
     rawExistingModels.filter((id) => typeof id === 'string' && id.trim()),
     disabled,
@@ -1315,7 +1318,7 @@ function stampProvenance(profile, now) {
  * Read the user-selected block off the router. Returns the models array
  * (possibly empty) and the tier hints.
  */
-export function currentSelection(router) {
+export function currentSelection(router, { disabledProviders } = {}) {
   if (!router || typeof router !== 'object') return { models: [], tierHints: {} };
   const us = router.userSelected;
   if (!us || typeof us !== 'object') return { models: [], tierHints: {} };
@@ -1324,7 +1327,7 @@ export function currentSelection(router) {
   // Callers (interactive picker, JSON envelope, audit tools) all consume
   // the filtered list so the operator's disable intent is honoured even
   // for ids already persisted in `userSelected.models` from a prior run.
-  const disabled = readDisabledProviders();
+  const disabled = Array.isArray(disabledProviders) ? disabledProviders : readDisabledProviders();
   const { kept: models } = filterCandidatesByDisabledProviders(incoming, disabled);
   const tierHints = us.tierHints && typeof us.tierHints === 'object' ? us.tierHints : {};
   return { models, tierHints };
