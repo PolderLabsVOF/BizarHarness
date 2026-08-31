@@ -31,10 +31,12 @@ Default tier classification heuristic (set by the picker, overridable per-model 
 | anything else | `mid` |
 | `nano`, `mini`, `haiku` (older), `flash`, `lite`, `tiny` | `budget` |
 
-Concrete example: if `userSelected.models = ["claude-minimax/MiniMax-M3", "claude-qwen/qwen3.8-max"]` and `tierHints = { "claude-minimax/MiniMax-M3": "default", "claude-qwen/qwen3.8-max": "premium" }`:
-- a `default`-tier dispatch picks `claude-minimax/MiniMax-M3`,
-- a `premium`-tier dispatch picks `claude-qwen/qwen3.8-max`,
+Concrete example: if `userSelected.models = ["<pick-from-default-tier>", "<pick-from-premium-tier>"]` and `tierHints = { "<pick-from-default-tier>": "default", "<pick-from-premium-tier>": "premium" }`:
+- a `default`-tier dispatch picks `<pick-from-default-tier>`,
+- a `premium`-tier dispatch picks `<pick-from-premium-tier>`,
 - anything else (no tier configured) → omit `model` and inherit the session.
+
+10.22.0 / Phase 4: agent docs ship with placeholder ids (`<pick-from-default-tier>`, `<pick-from-premium-tier>`) instead of literal model ids so a provider swap never requires editing this file. Operators configure the real ids via `bizar models`.
 
 The SDK resolver (`packages/sdk/src/router/agent-model-registry.ts#rankUserSelectedForRole`) now ranks the `userSelected` pool by capability profile before falling back to the tier default.
 
