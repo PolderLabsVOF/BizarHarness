@@ -875,7 +875,12 @@ function writeAtomic(path, body) {
  */
 export function partitionStalePicks({ liveIds, pickedIds }) {
   const live = Array.isArray(liveIds) ? new Set(liveIds) : null;
-  const picks = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  const incoming = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+  // 10.22.0 / Phase 4: strip disabled-provider ids before partition so
+  // they never reach the live pool OR the stale list — they were never
+  // the operator's intent once the disable list landed.
+  const disabled = readDisabledProviders();
+  const { kept: picks } = filterCandidatesByDisabledProviders(incoming, disabled);
   if (!live || live.size === 0) {
     return { liveIds: [], staleIds: [], unknownIds: [...new Set(picks)] };
   }
@@ -1300,7 +1305,13 @@ export function currentSelection(router) {
   if (!router || typeof router !== 'object') return { models: [], tierHints: {} };
   const us = router.userSelected;
   if (!us || typeof us !== 'object') return { models: [], tierHints: {} };
-  const models = Array.isArray(us.models) ? us.models.filter((m) => typeof m === 'string') : [];
+  const incoming = Array.isArray(us.models) ? us.models.filter((m) => typeof m === 'string') : [];
+  // 10.22.0 / Phase 4: also strip disabled-provider ids on every read.
+  // Callers (interactive picker, JSON envelope, audit tools) all consume
+  // the filtered list so the operator's disable intent is honoured even
+  // for ids already persisted in `userSelected.models` from a prior run.
+  const disabled = readDisabledProviders();
+  const { kept: models } = filterCandidatesByDisabledProviders(incoming, disabled);
   const tierHints = us.tierHints && typeof us.tierHints === 'object' ? us.tierHints : {};
   return { models, tierHints };
 }
