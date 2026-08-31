@@ -1108,7 +1108,25 @@ export async function runProvision(opts = {}) {
   if (anyFail) console.log(chalk.yellow('  ⚠ Some steps had issues.'));
   else { console.log(chalk.bold.green('  ✓ Bizar is ready.')); console.log(chalk.dim('     Next: restart your Claude Code session.')); }
   console.log('');
-  console.log(chalk.dim('  Premium model: ANTHROPIC_MODEL=claude-qwen/qwen3.8-max claude'));
+  // 10.22.0 / Phase 4 spirit-of-constraint fix: derive the install-banner
+  // premium model id from the operator's persisted
+  // `userSelected.tierHints.premium[0]` instead of hardcoding one
+  // provider's id. When the operator has not picked anything yet, fall
+  // back to a clear hint to run `bizar models`.
+  let premiumPick = null;
+  try {
+    const routerPath = join(BIZAR_HOME(), 'config', 'claude', 'model-router.json');
+    const router = JSON.parse(readFileSync(routerPath, 'utf8'));
+    const picks = Array.isArray(router?.userSelected?.tierHints?.premium)
+      ? router.userSelected.tierHints.premium.filter((id) => typeof id === 'string' && id)
+      : [];
+    premiumPick = picks[0] || null;
+  } catch { /* fresh install — no router file yet */ }
+  if (premiumPick) {
+    console.log(chalk.dim(`  Premium model: ANTHROPIC_MODEL=${premiumPick} claude`));
+  } else {
+    console.log(chalk.dim('  Premium model: (no premium pick configured yet — run `bizar models`)'));
+  }
   console.log(chalk.dim('  See /use-premium or .claude/commands/use-premium.md for the full launch snippet.'));
   console.log('');
   return { ok: !anyFail, mode: effectiveMode, state: detectState(), stepResults };
