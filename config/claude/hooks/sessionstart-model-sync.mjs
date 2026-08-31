@@ -65,6 +65,69 @@ function readRouterPath() {
   return join(homedir(), '.config', 'bizar', 'config', 'claude', 'model-router.json');
 }
 
+/**
+ * 10.22.0 / Phase 4: read the operator's `disabledProviders: string[]`
+ * list with the same dual-path contract as `cli/commands/models.mjs`.
+ * The Bizar path (`~/.config/bizar/config/claude/model-router.json`) wins
+ * when both exist (even with explicit `[]`); the legacy
+ * `~/.claude/model-router.json` mirror is the fallback. Whitespace +
+ * lowercase normalization happens here. Returns `[]` on any failure —
+ * the hook is advisory and must NEVER block session start.
+ */
+function readDisabledProviders() {
+  const bizarPath = readRouterPath();
+  const legacyPath = join(homedir(), '.claude', 'model-router.json');
+  const extract = (parsed) => {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    if (!Array.isArray(parsed.disabledProviders)) return null;
+    const out = [];
+    for (const v of parsed.disabledProviders) {
+      if (typeof v !== 'string') continue;
+      const trimmed = v.trim();
+      if (!trimmed) continue;
+      out.push(trimmed.toLowerCase());
+    }
+    return out;
+  };
+  if (existsSync(bizarPath)) {
+    const parsed = readJsonIfObject(bizarPath);
+    // Bizar path exists — its `disabledProviders` is authoritative even
+    // when explicit `[]`. Missing key still falls back to the legacy.
+    if (parsed && Array.isArray(parsed.disabledProviders)) {
+      const extracted = extract(parsed);
+      if (extracted !== null) return extracted;
+    }
+  }
+  const legacy = readJsonIfObject(legacyPath);
+  if (legacy && Array.isArray(legacy.disabledProviders)) {
+    const extracted = extract(legacy);
+    if (extracted !== null) return extracted;
+  }
+  return [];
+}
+
+/**
+ * Strip disabled-provider prefixes from an id list. Case-sensitive
+ * prefix match against the (lowercase) disabled list. The hook mirrors
+ * the CLI's `filterCandidatesByDisabledProviders` contract — see
+ * `cli/commands/models.mjs` for the authoritative implementation.
+ */
+function filterDisabled(ids, disabled) {
+  const list = Array.isArray(ids) ? ids : [];
+  const prefixes = Array.isArray(disabled) ? disabled.filter((p) => typeof p === 'string' && p) : [];
+  if (prefixes.length === 0) return [...list];
+  const kept = [];
+  for (const id of list) {
+    if (typeof id !== 'string' || !id) { kept.push(id); continue; }
+    let blocked = false;
+    for (const p of prefixes) {
+      if (id.startsWith(p)) { blocked = true; break; }
+    }
+    if (!blocked) kept.push(id);
+  }
+  return kept;
+}
+
 function readSettingsPath() {
   return join(homedir(), '.claude', 'settings.json');
 }
@@ -129,7 +192,15 @@ function syncOnce() {
   const profiles = userSelected && userSelected.profiles && typeof userSelected.profiles === 'object'
     ? userSelected.profiles
     : {};
-  const liveIds = models.filter((id) => typeof id === 'string' && id.trim());
+  // 10.22.0 / Phase 4: filter the operator's disabled-provider ids out
+  // of the SessionStart re-apply so Claude Code's `/model` picker never
+  // surfaces e.g. `anthropic/*` after a session restart. Dual-path read
+  // matches `cli/commands/models.mjs#readDisabledProviders`.
+  const disabled = readDisabledProviders();
+  const liveIds = filterDisabled(
+    models.filter((id) => typeof id === 'string' && id.trim()),
+    disabled,
+  );
   if (liveIds.length === 0) {
     return { applied: 0, modelAfter: null, skipped: 'no-userSelected' };
   }

@@ -61,17 +61,61 @@ function advise(reason) {
 }
 
 /**
+ * 10.22.0 / Phase 4: extract the operator's `disabledProviders` list from
+ * the loaded registry. Whitespace-trimmed + lowercased at read time.
+ * Returns `[]` for legacy configs that lack the key (no in-code default).
+ * The hook MUST fail open on parse errors — the orchestrator already
+ * chose a model; let Claude Code validate it once.
+ */
+function readDisabledProvidersFromRegistry(registry) {
+  if (!registry || typeof registry !== 'object') return [];
+  const raw = registry.disabledProviders;
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const v of raw) {
+    if (typeof v !== 'string') continue;
+    const trimmed = v.trim();
+    if (!trimmed) continue;
+    out.push(trimmed.toLowerCase());
+  }
+  return out;
+}
+
+/**
+ * 10.22.0 / Phase 4: case-sensitive prefix filter against the (lowercase)
+ * disabled list. Empty / missing prefix list is a no-op (returns input).
+ */
+function isDisabledId(id, prefixes) {
+  if (!Array.isArray(prefixes) || prefixes.length === 0) return false;
+  if (typeof id !== 'string' || !id) return false;
+  for (const p of prefixes) {
+    if (typeof p === 'string' && p && id.startsWith(p)) return true;
+  }
+  return false;
+}
+
+/**
  * Models that pass the configured-tier check: every model in any
  * `tiers.<x>.models` block, PLUS every model in `userSelected.models`.
+ *
+ * 10.22.0 / Phase 4: ids whose provider prefix is on the operator's
+ * `disabledProviders` list are silently filtered out — the picker IS
+ * still the discovery surface for user picks, but the operator's
+ * disable intent overrides user intent.
  */
 function configuredModels(registry) {
+  const disabled = readDisabledProvidersFromRegistry(registry);
   const out = new Set();
   for (const tier of Object.values(registry?.tiers || {})) {
-    if (Array.isArray(tier?.models)) for (const id of tier.models) out.add(id);
+    if (Array.isArray(tier?.models)) for (const id of tier.models) {
+      if (!isDisabledId(id, disabled)) out.add(id);
+    }
   }
   const userSelected = registry?.userSelected;
   if (userSelected && Array.isArray(userSelected.models)) {
-    for (const id of userSelected.models) out.add(id);
+    for (const id of userSelected.models) {
+      if (!isDisabledId(id, disabled)) out.add(id);
+    }
   }
   return out;
 }
@@ -79,12 +123,17 @@ function configuredModels(registry) {
 /**
  * Subset of `configuredModels` that came from the user picker. These bypass
  * the live-discovery validation (the picker IS the discovery).
+ *
+ * 10.22.0 / Phase 4: same disabled-prefix filter as `configuredModels`.
  */
 function userSelectedModels(registry) {
+  const disabled = readDisabledProvidersFromRegistry(registry);
   const out = new Set();
   const userSelected = registry?.userSelected;
   if (userSelected && Array.isArray(userSelected.models)) {
-    for (const id of userSelected.models) out.add(id);
+    for (const id of userSelected.models) {
+      if (!isDisabledId(id, disabled)) out.add(id);
+    }
   }
   return out;
 }
