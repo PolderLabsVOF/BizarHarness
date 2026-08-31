@@ -227,7 +227,15 @@ function normalizedModelIdentity(id) {
   };
 }
 
-function toCapabilityProfile(gatewayId, match, matchType, confidence) {
+/**
+ * Build a per-model profile object from a Models.dev catalog row.
+ *
+ * Phase 1 (v10.19.7): in addition to the long-standing `name` / `family` /
+ * `capabilities` / `limits` / `metadata` fields, propagate Models.dev's
+ * `description` and `summary` onto the profile so Phase 3's status screen
+ * (10.19.9) can render the description without re-querying the catalog.
+ */
+export function toCapabilityProfile(gatewayId, match, matchType, confidence) {
   const limit = match.limit && typeof match.limit === 'object' ? match.limit : {};
   const modalities = match.modalities && typeof match.modalities === 'object' ? match.modalities : {};
   return {
@@ -235,6 +243,8 @@ function toCapabilityProfile(gatewayId, match, matchType, confidence) {
     baseModel: match.id,
     name: typeof match.name === 'string' ? match.name : match.id,
     family: typeof match.family === 'string' ? match.family : null,
+    description: typeof match.description === 'string' ? match.description : null,
+    summary: typeof match.summary === 'string' ? match.summary : null,
     capabilities: {
       attachment: match.attachment === true,
       reasoning: match.reasoning === true,
@@ -265,6 +275,15 @@ function toCapabilityProfile(gatewayId, match, matchType, confidence) {
  * Enrich gateway-discovered models with Models.dev profiles. Exact IDs win.
  * A normalized/suffix match is accepted only when unique; ambiguous models
  * remain unmatched rather than receiving guessed capabilities.
+ *
+ * Phase 1 (v10.19.7): when Models.dev has no row for the candidate AND the
+ * candidate carries gateway-supplied `_gateway.name` / `_gateway.description`,
+ * build a minimal `profile` so the picker row renderer can read
+ * `profile.name` / `profile.description` directly without dereferencing
+ * `_gateway`. Candidates whose `normalizeModels` output had no `_gateway`
+ * fields keep the legacy `profile === null` contract so `capabilityLabel`
+ * still returns `'metadata unavailable'` (Phase 2 owns the rewrite that
+ * lets a non-null profile render the `'metadata unavailable'` label).
  */
 export function enrichModelsWithCapabilities(candidates, catalog) {
   const entries = flattenModelsDevCatalog(catalog);
@@ -286,7 +305,47 @@ export function enrichModelsWithCapabilities(candidates, catalog) {
       const profile = toCapabilityProfile(gatewayId, matches[0], 'unique-normalized-id', 0.7);
       return { ...candidate, profile, contextWindow: profile.limits.contextTokens };
     }
-    return { ...candidate, profile: null, contextWindow: null };
+    // Models.dev miss: if the candidate carries gateway-supplied label /
+    // description, build a minimal `profile` so the picker row renderer
+    // can read `profile.name` / `profile.description` directly. Candidates
+    // that arrived from `normalizeModels` WITHOUT any `_gateway` data keep
+    // the legacy `profile === null` contract so `capabilityLabel(null)`
+    // still returns `'metadata unavailable'` (Phase 2 owns that rewrite).
+    const gw = (candidate && typeof candidate._gateway === 'object' && candidate._gateway) || {};
+    const gatewayName = typeof gw.name === 'string' ? gw.name
+      : (typeof gw.display_name === 'string' ? gw.display_name : null);
+    const gatewayDescription = typeof gw.description === 'string' ? gw.description : null;
+    if (gatewayName === null && gatewayDescription === null) {
+      return { ...candidate, profile: null, contextWindow: null };
+    }
+    const fallbackProfile = {
+      gatewayId,
+      baseModel: gatewayId,
+      name: gatewayName,
+      family: null,
+      description: gatewayDescription,
+      summary: null,
+      capabilities: {
+        attachment: false,
+        reasoning: false,
+        toolCall: false,
+        structuredOutput: false,
+        temperature: true,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+      },
+      limits: { contextTokens: null, inputTokens: null, outputTokens: null },
+      releaseDate: null,
+      lastUpdated: null,
+      metadata: {
+        source: 'gateway-fallback',
+        sourceUrl: null,
+        retrievedAt: new Date().toISOString(),
+        matchType: 'gateway-fallback',
+        confidence: 0,
+      },
+    };
+    return { ...candidate, profile: fallbackProfile, contextWindow: null };
   });
 }
 
@@ -379,7 +438,24 @@ async function fetchOnce({ doFetch, url, authToken, timeoutMs }) {
   }
 }
 
-function normalizeModels(body) {
+/**
+ * Normalize the gateway `/models` response into the candidate-pool shape
+ * consumed by the picker.
+ *
+ * Phase 1 (v10.19.7): in addition to the existing `id` / `owned_by` / `kind`
+ * fields, preserve the gateway's optional `name` / `display_name` /
+ * `description` payload under a new `_gateway` sub-object. The picker row
+ * renderer reads `profile.name` / `profile.description`, so when the
+ * Models.dev enrichment misses (Phase 2) the renderer can still surface a
+ * gateway-supplied label or description rather than an id-derived fallback.
+ *
+ * NOTE: `_gateway` is in-memory only. `applyModels` never writes it to
+ * `model-router.json`; the persisted shape stays as it was before this
+ * change. See `models-namespace-sync.test.mjs#normalizeModels does not
+ * persist _gateway into userSelected on round-trip` for the regression
+ * pin.
+ */
+export function normalizeModels(body) {
   if (!body || typeof body !== 'object') return [];
   const list = Array.isArray(body.data) ? body.data : Array.isArray(body) ? body : [];
   const out = [];
@@ -388,7 +464,11 @@ function normalizeModels(body) {
     const id = typeof m.id === 'string' ? m.id.trim() : '';
     if (!id) continue;
     const owned = typeof m.owned_by === 'string' ? m.owned_by : '';
-    out.push({ id, owned_by: owned, kind: classifyKind(id) });
+    const gw = {};
+    if (typeof m.name === 'string' && m.name) gw.name = m.name;
+    if (typeof m.display_name === 'string' && m.display_name) gw.display_name = m.display_name;
+    if (typeof m.description === 'string' && m.description) gw.description = m.description;
+    out.push({ id, owned_by: owned, kind: classifyKind(id), _gateway: gw });
   }
   // Stable order — by id — so the picker does not shuffle between runs.
   out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
