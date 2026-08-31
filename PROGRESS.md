@@ -2,14 +2,14 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## Complete — 10.19.9 patch: `bizar models` post-confirm status screen (Phase 3)
+## Complete — 10.20.1 patch: `bizar models` post-confirm status screen (Phase 3)
 
 **Why:** `bizar models` (interactive) confirms a picker selection and prints a "Saved N model(s)" block but gives the operator no per-pick visibility into whether each ID's Models.dev metadata was retrieved (✔), unavailable (✖), or carried over from a prior `userSelected` (⤳). Phase 3 ships the renderer + classifier from `docs/plans/2026-08-31-models-picker-ux.md` lines 481-594; the underlying data flow is already correct from Phase 1 (gateway `name` plumbing) and Phase 2 (lazy metadata fetch).
 
-**Fix (this commit, `feat(models): document status screen in showHelp + CHANGELOG + PROGRESS (v10.19.9)`):**
+**Fix (this commit, `feat(models): document status screen in showHelp + CHANGELOG + PROGRESS (v10.20.1)`):**
 
 - **`cli/commands/models.mjs#showHelp`** — added a "Post-confirm status screen" paragraph that documents the per-row ✔ / ✖ / ⤳ mapping, the footer, the non-TTY single-line collapse, the `--json` envelope keys (`status.perPick`, `status.totals`), and the exit-code contract (0 when any ✔; 2 when every row is ✖; mixed ✔+✖ exits 0).
-- **`CHANGELOG.md`** — added a `[10.19.9] - 2026-08-31` entry covering the Phase 3 renderer / classifier / wire-in / `--json` shape / `showHelp` / grep fence / +6 regression tests.
+- **`CHANGELOG.md`** — added a `[10.20.1] - 2026-08-31` entry covering the Phase 3 renderer / classifier / wire-in / `--json` shape / `showHelp` / grep fence / +6 regression tests.
 - **`.harness/arch-rules.json`** — added rule `arch-status-icons`. The grep fence fails `make check-arch` if `✔` / `✖` / `⤳` appear in any `.mjs` / `.js` / `.ts` / `.md` file under `cli`, `packages`, `config`, or `scripts` outside the two designated surfaces (`cli/commands/models.mjs#renderPickStatusScreen`, `cli/doctor.mjs#runDoctor`) plus the test files and the plan/CHANGELOG/PROGRESS that document the glyphs. Pins the SessionStart hook (which has no TTY and no outbound HTTP) from accidentally importing the renderer.
 - **`cli/__tests__/models-namespace-sync.test.mjs`** (+1 subprocess) — `bizar models --json` exposes `status.perPick` and `status.totals` after a 1-pick confirmation. The test spawns a tiny Node wrapper that stubs `process.stdin.isTTY=true`, `setRawMode` (no-op fallback to line mode), and the Phase 2 test-injection surface (`deps.listModels`, `deps.pickModels`, `deps.fetchModelsDevCatalog`) BEFORE requiring the CLI. The wrapper then calls `run('models', ['--json'], false, deps)`. Asserts the JSON envelope's `status.perPick[0].status === 'fresh'`, `status.perPick[0].hasProfile === true`, and `status.totals === { passed: 1, failed: 0, skipped: 0 }`.
 

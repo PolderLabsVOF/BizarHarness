@@ -54,7 +54,7 @@ The interactive picker path used to call `fetchModelsDevCatalog` BEFORE the pick
 - **`cli/__tests__/models-refresh.test.mjs`** (+3) — `enrichPicksByMetadata` returns one profile entry per picked id with bounded concurrency (wholesale fetchFn called exactly once); per-id timeout falls back to `_gateway.name` with `metadata.source === 'gateway-fallback'`; wholesale catalog fetch failure degrades to `_gateway.name`.
 - **`cli/__tests__/models-namespace-sync.test.mjs`** (+1 subprocess) — `bizar models --list` does NOT contact `models.dev`. Spins up a stub models.dev server that records every hit (via side-channel file counter), asserts `mdHits === 0` after `--list` exits cleanly.
 
-## [10.19.9] - 2026-08-31
+## [10.20.1] - 2026-08-31
 
 `bizar models` interactive picker prints a per-row ✔ / ✖ / ⤳ status screen after confirmation, mirroring the per-row pattern in `cli/doctor.mjs#runDoctor`.
 
