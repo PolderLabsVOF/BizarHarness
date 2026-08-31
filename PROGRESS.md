@@ -2,6 +2,14 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — 10.21.0 Phase B: workflow artifact-on-disk barriers
+
+**Why:** Per `token-bloat-research.md` §S4 (2026-08-31), `config/workflows/*.js` re-serializes prior agent outputs with `JSON.stringify(...)` into every barrier prompt, multiplying the bloat across 5-lane fan-outs (15-40 KB per orchestrator turn). Phase A (v10.20.0, shipped) recovered ~14-16 KB via static trim. The remaining structural bloat only collapses via an artifact-on-disk barrier rewrite: write each phase output to `.bizar/runs/<run-id>/<phase-slug>__<label-slug>.json`, replace the inline JSON with a 3-line barrier reference block.
+
+**Migration note:** `.bizar/runs/` does not exist at plan time. The GC tool (B.3) starts with an empty candidate set; no migration needed. Any future tooling that writes to `.bizar/runs/` MUST conform to the manifest schema or be added to GC's ignore list.
+
+**Stale-artifact fallback:** When `dispatch.js` writes a barrier artifact and the read site finds a stale or partially-written file, the writer returns `{ stale: true }` (fail-soft). The reader decides whether to re-render the upstream phase. Pin with test.
+
 ## Complete — 10.20.0 patch: Phase A token reduction trim
 
 **Why:** Bizar harness prompt surface had grown to ~70 KB / ~17.5 K tokens per multi-dispatch orchestrator turn (Opus cost ~$0.26/turn). The growth was mechanical: duplicated tool-shape pointers on every agent file, a 700-char grounding payload, 6 KB advisor-context dumps, verbose Mike self-improvement walkthroughs, and Skill-delegate command bodies that grew past their budget. Per `docs/plans/2026-08-31-prompt-token-reduction.md` Phase A, ship the pure trim (zero behavior change) to recover ~50% per turn.
