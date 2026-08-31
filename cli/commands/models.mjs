@@ -1108,7 +1108,7 @@ function profileNeedsRefresh(profile, now = new Date()) {
  * `bizar models --refresh` prints in non-interactive mode.
  *
  * @param {{ routerPath: string, candidates: Array<{ id: string, profile?: object }>, catalog: object, aliasMap?: object, now?: Date }} opts
- * @returns {{ refreshed: string[], preservedOperator: string[], skippedFresh: string[], error?: string }}
+ * @returns {{ refreshed: string[], preservedOperator: string[], skippedFresh: string[], skippedDisabled: string[], error?: string }}
  */
 export function applyRefresh({
   routerPath,
@@ -1131,15 +1131,29 @@ export function applyRefresh({
   const existingProfiles = userSelected.profiles && typeof userSelected.profiles === 'object'
     ? userSelected.profiles
     : {};
-  const existingModels = Array.isArray(userSelected.models) ? userSelected.models : [];
+  const rawExistingModels = Array.isArray(userSelected.models) ? userSelected.models : [];
   const existingTierHints = userSelected.tierHints && typeof userSelected.tierHints === 'object'
     ? userSelected.tierHints
     : {};
 
+  // 10.22.0 / Phase 4: filter disabled-provider ids off the existing
+  // list BEFORE the refresh loop so the disabled ids never get a
+  // refresh attempt, are not in the returned counts, and the persisted
+  // userSelected.models reflects the operator's intent. Dropped profiles
+  // are also pruned so the on-disk state does not keep growing on every
+  // refresh.
+  const disabled = readDisabledProviders();
+  const { kept: existingModels, stripped: droppedDisabledIds } = filterCandidatesByDisabledProviders(
+    rawExistingModels.filter((id) => typeof id === 'string' && id.trim()),
+    disabled,
+  );
+  const newProfiles = { ...existingProfiles };
+  for (const dropped of droppedDisabledIds) delete newProfiles[dropped];
+
   const refreshed = [];
   const preservedOperator = [];
   const skippedFresh = [];
-  const newProfiles = { ...existingProfiles };
+  const skippedDisabled = [...droppedDisabledIds];
 
   for (const id of existingModels) {
     if (typeof id !== 'string' || !id.trim()) continue;
@@ -1202,7 +1216,7 @@ export function applyRefresh({
   // the picker write path above.
   writeAtomic(routerPath, JSON.stringify(router, null, 2) + '\n');
 
-  return { refreshed, preservedOperator, skippedFresh };
+  return { refreshed, preservedOperator, skippedFresh, skippedDisabled };
 }
 
 function safeParseRouter(path) {
