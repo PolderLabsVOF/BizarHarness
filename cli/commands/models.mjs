@@ -2114,8 +2114,9 @@ export async function run(name, args, isHelpRequest, deps = {}) {
       modelsDev: modelsDevStatus,
       sync,
       picker,
-      status: { perPick: statusResult.perPick, totals: statusResult.totals },
+      status: { perPick: statusResult.perPick, totals: statusResult.totals, exitCode: statusResult.exitCode },
     }, null, 2) + '\n');
+    if (statusResult.exitCode !== 0) process.exitCode = statusResult.exitCode;
   } else {
     console.log(chalk.green(`\n  v Saved ${block.models.length} model(s) to ${routerPath}:`));
     console.log(chalk.dim(`    Models.dev profiles: ${Object.keys(block.profiles || {}).length}/${block.models.length}`));
@@ -2135,13 +2136,14 @@ export async function run(name, args, isHelpRequest, deps = {}) {
     // (the `picked.length === 0` branch above) intentionally skips the
     // screen — the chalk.yellow "No models selected" line is the only
     // operator feedback there.
-    renderPickStatusScreen({
+    const statusResult = renderPickStatusScreen({
       picked,
       profiles: profilesMap,
       preExisting,
       out: process.stdout,
       isTTY: !!process.stdout.isTTY,
     });
+    if (statusResult.exitCode !== 0) process.exitCode = statusResult.exitCode;
   }
   return true;
 }

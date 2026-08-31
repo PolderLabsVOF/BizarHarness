@@ -795,3 +795,107 @@ await run('models', ['--json'], false, deps);
     rmSync(stubDir, { recursive: true, force: true });
   }
 });
+
+test('bizar models --json exits 2 when every pick is unavailable', async () => {
+  // Linda's exit-code propagation regression: previously, run() called
+  // renderPickStatusScreen but discarded its exitCode, so the all-✖
+  // case exited 0 instead of the documented 2. This test pins the fix:
+  // every picked id must produce exitCode=2 from the renderer, and the
+  // subprocess (which exercises the real process.exitCode wire-in) must
+  // exit with code 2. The JSON envelope must also expose exitCode so
+  // machine consumers can read it without inspecting the process exit.
+  const stubDir = mkdtempSync(join(tmpdir(), 'bizar-phase3-exit-'));
+  const wrapperPath = join(stubDir, 'phase3-exit-wrapper.mjs');
+  const modelsModulePath = join(CWD, 'cli', 'commands', 'models.mjs');
+  writeFileSync(wrapperPath, `
+import { run } from ${JSON.stringify(modelsModulePath)};
+
+Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+Object.defineProperty(process.stdin, 'setRawMode', { value: () => true, configurable: true });
+Object.defineProperty(process.stdin, 'resume', { value: () => {}, configurable: true });
+Object.defineProperty(process.stdin, 'pause', { value: () => {}, configurable: true });
+Object.defineProperty(process.stdin, 'setEncoding', { value: () => {}, configurable: true });
+Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+
+const deps = {
+  // Candidate id 'no-such/no-model-9000' has no Models.dev profile: the
+  // catalog below does not contain a 'no-such' provider. Phase 2's
+  // enrichPicksByMetadata will leave it without a profile, so
+  // classifyPickStatus reports 'unavailable' (✖) for every pick.
+  listModels: async () => ([
+    { id: 'no-such/no-model-9000', owned_by: 'no-such', name: 'No Such Model 9000' },
+  ]),
+  // pickModels: confirm the only candidate. The id is not in profilesMap
+  // (no gateway namespace entry) and not in the Models.dev catalog stub,
+  // so every picked id becomes a ✖ row.
+  pickModels: async ({ candidates }) => candidates.map((c) => c.id),
+  // fetchModelsDevCatalog: stub a catalog that does NOT contain the picked
+  // id. 'no-such' is absent; only the unrelated 'minimax' provider exists.
+  fetchModelsDevCatalog: async () => ({
+    minimax: {
+      id: 'minimax',
+      name: 'minimax',
+      models: {
+        'MiniMax-M3': {
+          id: 'MiniMax-M3',
+          name: 'MiniMax M3',
+          family: 'm3',
+          tool_call: true,
+          limit: { context: 200000, output: 8192 },
+        },
+      },
+    },
+  }),
+};
+
+await run('models', ['--json'], false, deps);
+`);
+
+  const cwd = makeCwd();
+  try {
+    const routerPath = writeBaseRouter(cwd);
+    const settingsDir = join(cwd, '.claude');
+    mkdirSync(settingsDir, { recursive: true });
+    writeFileSync(join(settingsDir, 'settings.json'), JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'tok' } }, null, 2));
+
+    const result = await new Promise((resolveP) => {
+      const child = spawn(process.execPath, [wrapperPath], {
+        cwd,
+        env: {
+          ...process.env,
+          BIZAR_SKIP_BUILD: '1',
+          BIZAR_MODEL_ROUTER_CONFIG: routerPath,
+          HOME: cwd,
+          BIZAR_HOME: cwd,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let out = '';
+      let err = '';
+      child.stdout.on('data', (d) => { out += String(d); });
+      child.stderr.on('data', (d) => { err += String(d); });
+      const timer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch { /* ignore */ }
+        resolveP({ code: -1, stdout: out, stderr: err, killed: true });
+      }, 15000);
+      child.on('exit', (c) => { clearTimeout(timer); resolveP({ code: c, stdout: out, stderr: err }); });
+    });
+    const { code, stdout, stderr } = result;
+    assert.equal(code, 2, `expected exit code 2 when every pick is unavailable, got ${code}; stderr=${stderr}; stdout=${stdout}`);
+
+    // The JSON envelope must also expose exitCode so machine consumers can
+    // read it without inspecting the process exit status. Parse and pin it.
+    const jsonStart = stdout.indexOf('{');
+    assert.notEqual(jsonStart, -1, `expected JSON envelope in stdout, got: ${stdout.slice(0, 200)}`);
+    const envelope = JSON.parse(stdout.slice(jsonStart));
+    assert.ok(envelope.status, `expected envelope.status to be set, got keys: ${Object.keys(envelope)}`);
+    assert.equal(envelope.status.exitCode, 2, `expected envelope.status.exitCode to be 2, got ${envelope.status.exitCode}`);
+    assert.equal(envelope.status.perPick.length, 1);
+    assert.equal(envelope.status.perPick[0].status, 'unavailable', `expected unavailable ✖, got: ${envelope.status.perPick[0].status}`);
+    assert.equal(envelope.status.perPick[0].hasProfile, false);
+    assert.deepEqual(envelope.status.totals, { passed: 0, failed: 1, skipped: 0 });
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+    rmSync(stubDir, { recursive: true, force: true });
+  }
+});
