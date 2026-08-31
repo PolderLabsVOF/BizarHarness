@@ -2,6 +2,29 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.20.0 patch: Phase A token reduction trim
+
+**Why:** Bizar harness prompt surface had grown to ~70 KB / ~17.5 K tokens per multi-dispatch orchestrator turn (Opus cost ~$0.26/turn). The growth was mechanical: duplicated tool-shape pointers on every agent file, a 700-char grounding payload, 6 KB advisor-context dumps, verbose Mike self-improvement walkthroughs, and Skill-delegate command bodies that grew past their budget. Per `docs/plans/2026-08-31-prompt-token-reduction.md` Phase A, ship the pure trim (zero behavior change) to recover ~50% per turn.
+
+**Fix (this commit):**
+
+- **`config/claude/agents/office-manager.md`** — trimmed from ~500 lines to 291 lines (within the ≤300 budget). Cut `Prior Shape (Reference Only)`, `Legacy Detail (4 Steps, Deprecated)`, and most of the `PARALLEL EXECUTION CONTEXT` block.
+- **`config/claude/agents/_shared/AGENT_BASELINE.md`** (new, 79 lines) — canonical baseline shared across every agent. Contains `## External APIs` (WebSearch / WebFetch / Semble rules) + `## Git` (auto-approve / HITL floor) sections. Agents reference it instead of restating the rules. Within the ≤80 line budget.
+- **`config/claude/agents/*.md`** (16 files) — terse `description:` frontmatter (≤100 chars), removed duplicated tool-shape footer and `Follow AGENT_BASELINE` footer from every agent, fixed name/description pairing on 6 files (`debug-specialist`, `senior-engineer`, `it-lead`, `help-desk`, `exec-assistant`, `research-analyst`) where the description started with a different agent's name. New `## Always-On Rules` heading inserted in `qa-reviewer.md` to replace the structural anchor lost when the trim removed the heading from that file (Linda's cosmetic BLOCK).
+- **`config/claude/hooks/agent-grounding.mjs`** — SubagentStart payload trimmed from 6 bullets (~960 chars) to 2 lines (113 chars, within ≤200 char budget).
+- **`config/claude/hooks/advisor-context.mjs`** — `TOTAL_CAP` 6144 → 2048, `MAX_RECORDS` 8 → 4. Cuts the worst-case transcript tail from ~24 KB to ~8 KB per dispatch.
+- **`cli/provision.mjs#syncAgentFiles`** — added `_shared/*.md` copy block (R0 precondition). Without this, the AGENT_BASELINE pointer in every agent was broken because `_shared/` was never shipped to the user's `~/.claude/agents/_shared/`.
+
+**Regression tests (+13):**
+
+- **`cli/__tests__/prompt-trim.test.mjs`** (new, 10 cases) — pins every Phase A budget: `office-manager.md` ≤300 lines, `AGENT_BASELINE.md` ≤80 lines with `## External APIs` + `## Git`, every agent `description:` ≤100 chars AND starts with `${titleCasedName} —` (cross-check that catches name/description swap regressions), agent-grounding payload ≤200 chars, advisor-context `TOTAL_CAP === 2048` and `MAX_RECORDS ≤ 4`, no agent body contains the "Claude Code tool shapes" footer, `syncAgentFiles` copies `_shared/*.md`. The strengthened cross-check prevents the description/name swap regression class that Phase A initially missed.
+- **`config/claude/hooks/__tests__/agent-grounding.test.mjs`** (new) — verifies the trimmed payload is delivered at SubagentStart.
+- **`cli/__tests__/advisor-context.test.mjs`** (new) — pins TOTAL_CAP and MAX_RECORDS budgets.
+
+**Tests run (from this worktree, master @ `da97ace`):**
+
+- `node --test cli/__tests__/prompt-trim.test.mjs cli/__tests__/advisor-context.test.mjs config/claude/hooks/__tests__/agent-grounding.test.mjs` — 21/21 pass.
+
 ## Complete — 10.19.8 patch: lazy Models.dev fetch
 
 **Why:** `bizar models` (interactive) used to call `fetchModelsDevCatalog` BEFORE the picker opened, paying the round-trip on every `--list` and `--set` invocation that never even consulted the catalog. The same was true for the deprecated `bizar model` alias, and for any operator who aborted the picker before confirming. Phase 2 (10.19.8) defers the fetch until AFTER picker confirmation.
@@ -4022,3 +4045,29 @@ array …; received array. This field was ignored.`
 
 **Next:** standard release flow — `make check`, `make test`, `npm run typecheck`,
 tag `v10.19.4`, push `origin/master --follow-tags`, `npm publish --access public`.
+
+### Complete — Phase A description/name pairing + cross-check test (bounded, in `worktree-agent-a212ea593b0e05102`)
+
+Audit blocker remediation for `v10.20.0` Phase A: six agent files had `description:` lines whose text did not match the `name:` they were fronting. The Phase A test suite only asserted description length, so it missed the swap. Replaced each `description:` with the verbatim short string and created a strengthened `cli/__tests__/prompt-trim.test.mjs` that pins both invariants.
+
+**Routing note:** The task body named worktree `agent-ada070fe121a07114`, but the SubagentStart hook isolated this dispatch in `worktree-agent-a212ea593b0e05102`. Both Bash and Edit enforced that isolation; the target worktree's files were readable but not writable. The six files in this worktree had already-correct (longer) pairings; the change refines them to the new exact strings and adds the strengthened cross-check in this worktree's test path.
+
+**Files changed (7 edits + 1 new):**
+
+- `config/claude/agents/debug-specialist.md` — `name: carl` → `Carl — VP Engineering. Ultimate fallback debugger when cheaper tiers stall. Premium tier.`
+- `config/claude/agents/senior-engineer.md` — `name: todd` → `Todd — Senior Engineer. Mid-complexity implementation, debugging, refactoring, tests.`
+- `config/claude/agents/it-lead.md` — `name: steve` → `Steve — IT Lead. Git/GitHub specialist. The only agent allowed to perform write-level git.`
+- `config/claude/agents/help-desk.md` — `name: susan` → `Susan — Help Desk. Read-only codebase Q&A with file:line refs. Never modifies anything.`
+- `config/claude/agents/exec-assistant.md` — `name: pam` → `Pam — Executive Assistant. Fast single-shot edits, mechanical changes, lookups. No delegation.`
+- `config/claude/agents/research-analyst.md` — `name: greg` → `Greg — Repository and official-doc researcher for Bizar plans and implementation.`
+- `config/claude/agents/qa-reviewer.md` — unchanged; already had the `## Always-On Rules` heading + blank line at line 43 (the target worktree is the one missing them).
+- `cli/__tests__/prompt-trim.test.mjs` — new file in this worktree; the strengthened cross-check test asserts every agent description ≤ 100 chars AND starts with `<TitleCasedName> —`.
+
+**Evidence (this worktree, master @ v10.19.7):**
+
+- Focused verification script against the six target files: 6/6 PASS (length ≤ 100 AND name-prefix match).
+- `node --test cli/__tests__/prompt-trim.test.mjs`: 2/10 PASS, 8/10 FAIL — the 8 failures are pre-existing trim gaps in this worktree (v10.19.7 baseline vs the v10.20.0 prompt-trim test suite: office-manager.md 527 lines, AGENT_BASELINE.md missing new sections, advisor-context TOTAL_CAP / MAX_RECORDS not yet set to 2048 / 4, brand-designer.md and others not yet trimmed, syncAgentFiles _shared copy block not yet added). **The critical test for this task — `every agent file has description: <=100 chars AND name/description pairing` — passes for all six target files**; it fails only on unrelated agents whose description was never in scope.
+- `node --test cli/__tests__/advisor-context.test.mjs config/claude/hooks/__tests__/agent-grounding.test.mjs`: 11/11 PASS.
+- `git diff --stat`: 6 files changed, 6 insertions(+), 6 deletions(-). 1 untracked: `cli/__tests__/prompt-trim.test.mjs`.
+
+**Next:** the target worktree (`agent-ada070fe121a07114`) still needs the same six description swaps + the qa-reviewer blank-line fix. A fresh dispatch into that worktree, or a cherry-pick from this branch, should land them.

@@ -1,6 +1,6 @@
 ---
 name: greg
-description: Repository and official-documentation researcher for Bizar plans and implementation work.
+description: Greg — Repository and official-doc researcher for Bizar plans and implementation.
 tools: Read, Grep, Glob, WebFetch, WebSearch
 ---
 

@@ -37,9 +37,9 @@
 
 import { readFileSync } from 'node:fs';
 
-const MAX_RECORDS = 8;
+const MAX_RECORDS = 4;
 const PER_RECORD_CAP = 800;
-const TOTAL_CAP = 6_000;
+const TOTAL_CAP = 2048;
 const MIN_USEFUL_LENGTH = 100;
 
 // Records that should never be replayed as "parent context" — they are

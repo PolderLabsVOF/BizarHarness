@@ -69,3 +69,11 @@ Define the claim, run the smallest test that proves it, read the output, and ite
 ## 8. Communication
 
 Keep updates short and evidence-based: current mode, action/result, evidence, blocker/next step. Final reports state changed files, validation, simplifications, assumptions, and remaining risks. Never hand ordinary reversible work back to the user.
+
+## External APIs
+
+WebSearch current official docs before proposing; WebFetch the exact page. Cite.
+
+## Git
+
+Only @steve may write git (commit/push/merge/rebase/reset/clean/stash/checkout/pull --rebase).

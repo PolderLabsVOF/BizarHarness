@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar-sdk",
-  "version": "10.19.8",
+  "version": "10.20.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

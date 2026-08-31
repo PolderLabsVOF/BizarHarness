@@ -441,8 +441,22 @@ export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
   if (dryRun) return { ok: true, message: `[dry-run] would sync ${src} → ${dest}${force ? ' (prune stale)' : ''}` };
   ensureDir(dest);
   const { copied, skipped } = syncDir(src, dest, { filter: n => n.endsWith('.md') });
+  // v10.20.0: ship `_shared/*.md` (AGENT_BASELINE + CLAUDE_TOOLS + SKILLS)
+  // alongside agents so the Git / External-APIs / tool-shape pointers
+  // actually land on the user's machine instead of being dead text in repo.
+  // syncDir's `*.md` filter rejects `_shared` at the parent level (the dir
+  // name itself doesn't end in `.md`), so we copy the shared tree explicitly.
+  const sharedSrc = join(src, '_shared');
+  const sharedDst = join(dest, '_shared');
+  let sharedCopied = 0;
+  if (existsSync(sharedSrc)) {
+    ensureDir(sharedDst);
+    for (const f of readdirSync(sharedSrc)) {
+      if (f.endsWith('.md')) { copyFileSync(join(sharedSrc, f), join(sharedDst, f)); sharedCopied++; }
+    }
+  }
   const { pruned, tail } = pruneReport(src, dest, n => n.endsWith('.md'), force);
-  return { ok: true, message: `${copied} agent(s) synced (${skipped} kept)${tail}`, copied, skipped, pruned };
+  return { ok: true, message: `${copied} agent(s) synced (${skipped} kept)${sharedCopied ? `, ${sharedCopied} _shared/*.md` : ''}${tail}`, copied, skipped, pruned };
 }
 
 // The dynamic model router lives at config/claude/model-router.json and is

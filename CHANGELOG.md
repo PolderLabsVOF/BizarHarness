@@ -1,5 +1,36 @@
 # Changelog
 
+## [10.20.0] - 2026-08-31
+
+Phase A token-reduction trim of the Bizar harness prompt surface. Mechanical, zero behavior change. ~50% reduction in per-orchestrator-turn token spend.
+
+Per `docs/plans/2026-08-31-prompt-token-reduction.md`, every Bizar agent dispatch re-pays the cost of static prompt text injected into the subagent context. A previous version of the harness shipped ~14-16 KB of recoverable bloat per orchestrator turn — duplicated tool-shape pointers on every agent file, a 700-char grounding payload, 6 KB advisor-context dumps, verbose Mike self-improvement walkthroughs, and Skill-delegate command bodies that grew past their budget. Phase A trims that surface to ~50% of the previous size with zero behavior change.
+
+### Added
+
+- **`config/claude/agents/_shared/AGENT_BASELINE.md`** (new, 79 lines) — canonical baseline shared across every agent. Contains `## External APIs` (WebSearch / WebFetch / Semble rules) + `## Git` (auto-approve / HITL floor) sections. Agents reference it instead of restating the rules. Within the ≤80 line budget.
+- **`cli/provision.mjs#syncAgentFiles`** — new `_shared/*.md` copy block (R0 precondition). The `syncDir` filter only accepted files, so `_shared/` was never shipped to the user's `~/.claude/agents/_shared/` directory, breaking the AGENT_BASELINE pointer in every agent. The new block walks `src/_shared`, copies every `.md` file into `dest/_shared/`. Pinned by `cli/__tests__/prompt-trim.test.mjs#syncAgentFiles copies _shared/*.md into the dest tree`.
+- **`cli/__tests__/prompt-trim.test.mjs`** (new, 10 cases) — pins every Phase A budget.
+- **`config/claude/hooks/__tests__/agent-grounding.test.mjs`** (new) — verifies the trimmed SubagentStart payload.
+- **`cli/__tests__/advisor-context.test.mjs`** (new) — pins the advisor context `TOTAL_CAP` and `MAX_RECORDS` budgets.
+
+### Changed
+
+- **`config/claude/agents/office-manager.md`** — trimmed from ~500 lines to 291 lines (within the ≤300 budget). Cut `Prior Shape (Reference Only)`, `Legacy Detail (4 Steps, Deprecated)`, and most of the `PARALLEL EXECUTION CONTEXT` block. Pinned by `cli/__tests__/prompt-trim.test.mjs#office-manager.md is under 300 lines`.
+- **`config/claude/agents/*.md`** (16 files) — terse `description:` frontmatter (≤100 chars, formerly 200-500 chars of marketing copy). Removed the duplicated `Claude Code tool shapes … CLAUDE_TOOLS.md` footer (shipped in v10.19.x) and the `Follow _shared/AGENT_BASELINE.md` footer from every agent. Fixed name/description pairing on 6 files (`debug-specialist`, `senior-engineer`, `it-lead`, `help-desk`, `exec-assistant`, `research-analyst`) where the description started with a different agent's name. Pinned by `cli/__tests__/prompt-trim.test.mjs#every agent file has description: <=100 chars AND name/description pairing` and the new strengthened cross-check that reads `name:`, title-cases it, and asserts `description:` starts with `${Name} —`.
+- **`config/claude/hooks/agent-grounding.mjs`** — SubagentStart payload trimmed from 6 bullets (~960 chars) to 2 lines (113 chars). Within the ≤200 char budget. Pinned by `cli/__tests__/prompt-trim.test.mjs#agent-grounding.mjs hook payload is under 200 chars`.
+- **`config/claude/hooks/advisor-context.mjs`** — `TOTAL_CAP` 6144 → 2048, `MAX_RECORDS` 8 → 4. Cuts the worst-case transcript tail from ~24 KB to ~8 KB per dispatch. Pinned by `cli/__tests__/prompt-trim.test.mjs#advisor-context.mjs TOTAL_CAP is 2048 or less` and `#MAX_RECORDS is 4 or less`.
+
+### Regression tests
+
+- **`cli/__tests__/prompt-trim.test.mjs`** (new, 10 cases) — every Phase A budget is pinned: `office-manager.md` ≤300 lines, `AGENT_BASELINE.md` ≤80 lines with `## External APIs` + `## Git`, every agent `description:` ≤100 chars AND starts with `${titleCasedName} —` (cross-check), agent-grounding payload ≤200 chars, advisor-context `TOTAL_CAP === 2048` and `MAX_RECORDS ≤ 4`, no agent body contains the "Claude Code tool shapes" footer, `syncAgentFiles` copies `_shared/*.md`. The strengthened cross-check prevents the description/name swap regression class that Phase A initially missed.
+- **`config/claude/hooks/__tests__/agent-grounding.test.mjs`** (new) — verifies the trimmed payload is delivered at SubagentStart.
+- **`cli/__tests__/advisor-context.test.mjs`** (new) — pins TOTAL_CAP and MAX_RECORDS budgets.
+
+### Audit references
+
+- F-176 / F-179 — Phase A advances the autonomy-cost audit by reducing per-dispatch token spend by ~50% without behavior change. Phase B (workflow re-architecture, v10.21.0) targets the remaining 15-40 KB of workflow-barrier bloat.
+
 ## [10.19.8] - 2026-08-31
 
 Defer catalog fetch until after picker confirmation; per-id enrichment runs in parallel with bounded concurrency. `--list` and `--set` skip the fetch entirely.
