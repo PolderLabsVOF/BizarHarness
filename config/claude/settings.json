@@ -59,10 +59,6 @@
     "bgIsolation": "worktree",
     "cleanupPeriodDays": 7
   },
-  "model": "claude-minimax/MiniMax-M3[1m]",
-  "modelOverrides": {
-    "claude-minimax/MiniMax-M3": "claude-minimax/MiniMax-M3[1m]"
-  },
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true,

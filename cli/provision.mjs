@@ -813,6 +813,13 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   // source of truth for defaultMode, worktree, enableWorkflows, etc. We
   // overlay Bizar-owned keys (mcpServers, hooks, env) on top so the installer
   // honors user preferences without having to fork the template here.
+  // 10.22.0 / Phase 4 spirit-of-constraint fix: `model` and
+  // `modelOverrides` are no longer hardcoded in the shipped template;
+  // they are derived from the operator's persisted
+  // `userSelected.models[0]`. When the operator has not picked anything
+  // yet, both keys are omitted entirely — Claude Code inherits its
+  // session default, still gated by the operator's `disabledProviders`
+  // list (10.22.0 / Phase 4).
   const bizarSettings = {
     ...shipped,
     $schema: shipped.$schema || 'https://json.schemastore.org/claude-code-settings.json',
@@ -900,6 +907,37 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       SessionEnd: [{ hooks: [hook('session-end')] }],
     },
   };
+
+  // 10.22.0 / Phase 4: derive `model` and `modelOverrides` from the
+  // operator's `userSelected.models[0]`. Both keys are omitted entirely
+  // when the operator has not picked anything — Claude Code inherits its
+  // session default. Dual-path read matches
+  // `cli/commands/models.mjs#readDisabledProviders` and
+  // `cli/commands/upgrade-defaults.mjs#readUserSelectedModels`.
+  const bizarRouterPath = process.env.BIZAR_MODEL_ROUTER_CONFIG?.trim()
+    || join(BIZAR_HOME(), 'config', 'claude', 'model-router.json');
+  const legacyRouterPath = join(CLAUDE_DIR, 'model-router.json');
+  let userSelectedModels = [];
+  for (const p of [bizarRouterPath, legacyRouterPath]) {
+    if (!existsSync(p)) continue;
+    const parsed = readJsonSafe(p, null);
+    if (!parsed || typeof parsed !== 'object') continue;
+    const list = Array.isArray(parsed?.userSelected?.models)
+      ? parsed.userSelected.models.filter((id) => typeof id === 'string' && id && id.trim())
+      : [];
+    if (list.length > 0) { userSelectedModels = list; break; }
+    // Bizar path exists with explicit empty `userSelected.models` —
+    // honour that intent and stop the fallback walk.
+    if (p === bizarRouterPath) break;
+  }
+  const installModel = userSelectedModels[0];
+  if (installModel) {
+    bizarSettings.model = installModel;
+    bizarSettings.modelOverrides = { [installModel]: installModel };
+  } else {
+    delete bizarSettings.model;
+    delete bizarSettings.modelOverrides;
+  }
 
   const merged = { ...existing };
   if (force) {
