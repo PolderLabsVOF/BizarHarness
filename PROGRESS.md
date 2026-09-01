@@ -19,6 +19,16 @@ Release preparation targets `10.23.0`: complete the staged simplify review,
 rerun the full evidence suite, publish both package surfaces as applicable,
 install the released CLI globally, and verify a clean Claude startup.
 
+Publication of 10.23.0 succeeded for both packages, but npm reported that it
+auto-normalized two root test scripts which directly named
+`node_modules/.bin/vitest`. A 10.23.1 packaging-only follow-up will use PATH-
+resolved `vitest`, verify a warning-free dry run, and become the final globally
+installed release.
+
+The 10.23.1 packaging follow-up is complete: all 42 SDK files / 513 tests pass,
+TypeScript is green, and the root package dry run contains 372 files at 10.23.1
+without npm's manifest auto-correction warning.
+
 Final staged review found one remaining release blocker: model selection updated
 Claude's active model but could retain Bizar's context-window value from the
 previous model. The model/settings sync is being made atomic and regression-

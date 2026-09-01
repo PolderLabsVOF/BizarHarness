@@ -1,5 +1,12 @@
 # Changelog
 
+## [10.23.1] - 2026-09-01
+
+### Fixed
+
+- Use npm's PATH-resolved `vitest` executable in SDK test scripts so package
+  publication no longer needs to auto-correct the manifest.
+
 ## [10.23.0] - 2026-09-01
 
 Productivity and reliability audit for autonomous Claude Code development.
