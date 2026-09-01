@@ -2,7 +2,7 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — 10.23.6 workflow-routing release (2026-09-01)
+## Complete — 10.23.6 workflow-routing release (2026-09-01)
 
 The user authorized push and publication of commit `c7734b1`. Registry, tag,
 and workspace versions are aligned at 10.23.5; npm authentication is valid as
@@ -20,6 +20,14 @@ artifact as `@polderlabs/bizar@10.23.6` with 375 files and both new routing
 hooks, and the SDK artifact as `@polderlabs/bizar-sdk@10.23.6` with 196 files
 and its required runtime exports. Next: staged simplify review, release commit,
 tag, push, ordered publication, registry verification, and clean install smoke.
+
+Publication is complete. Release commit `1689eeb` and annotated tag `v10.23.6`
+are on `origin`; npm reports both `@polderlabs/bizar-sdk` and
+`@polderlabs/bizar` at 10.23.6. The exact public root package was installed
+globally and force-provisioned from its packaged files. Its installer identifies
+itself as 10.23.6, post-install doctor and a separate `bizar doctor` pass 12/12,
+and a normal Claude Code 2.1.257 startup selects Mike and returns
+`@mike 10.23.6 ready` without a Claude warning or error.
 
 ## In Progress — workflow-first primary routing (2026-09-01)
 
