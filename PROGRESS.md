@@ -2,6 +2,25 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — 10.23.5 publication (2026-09-01)
+
+The user authorized publication of the completed interactive installer. npm
+reports both public packages at 10.23.4 and the authenticated account is
+available. Release 10.23.5 will update the root, SDK, SDK constant, and
+changelog together, prove the packed contents and full release gates, then
+commit, tag, push, publish both packages, install the published versions, and
+verify the CLI and Claude startup. Existing untracked operator files remain
+excluded.
+
+Release preparation is complete. Root/SDK/constant versions are synchronized,
+the changelog documents the guided installer, both package dry runs report
+10.23.5 and the root tarball contains `cli/install/interactive-setup.mjs`.
+Fresh evidence passes: structure, removed-surface, architecture, 42 SDK files /
+513 tests, 1,041 Node tests, E2E 13/13, clean-check 5/5, TypeScript, and diff
+hygiene. Test-created `.test-bizar-home` logs were removed; operator-owned
+untracked files remain untouched. The remaining authorized operations are the
+release review, commit, tag/push, npm publication, and clean installed smoke.
+
 ## Complete — interactive provider-aware installer (2026-09-01)
 
 `bizar install` currently calls a non-interactive provisioner and tells users

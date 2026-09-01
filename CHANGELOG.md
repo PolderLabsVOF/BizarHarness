@@ -1,5 +1,19 @@
 # Changelog
 
+## [10.23.5] - 2026-09-01
+
+### Added
+
+- Make `bizar install` a guided terminal setup that confirms before mutation,
+  detects global provider configuration, and securely prompts only for a
+  missing provider URL or key.
+
+### Changed
+
+- Keep `--yes` and `--non-interactive` prompt-free for automation and align
+  provider setup, model discovery, and global Claude settings on
+  `ANTHROPIC_AUTH_TOKEN` plus `BIZAR_MODEL_ROUTER_URL`.
+
 ## [10.23.4] - 2026-09-01
 
 ### Fixed
