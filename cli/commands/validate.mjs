@@ -15,7 +15,7 @@
  *   - 7 rules mirrored from `config/rules/` → `~/.claude/rules/`
  *   - guarded autonomy hooks, including approval, compaction, and advisor context
  *   - shipped slash commands in `~/.claude/commands/`
- *   - permissions.allow includes mcp__bizar__*
+ *   - permissions follow the current hook-enforced policy
  *   - the complete hook-enforced approval floor is wired
  *   - ~/.config/bizar/ exists (loop/runtime state)
  *
@@ -27,7 +27,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { resolveBizarHome, resolveClaudeConfigDir, resolveGlobalModelRouter } from '../config-paths.mjs';
-import { configuredFallbackModels } from './models.mjs';
+import { configuredEnabledModels, listModels, resolveEndpoint } from './models.mjs';
 
 function claudeDir() { return resolveClaudeConfigDir(); }
 function bizarHome() { return resolveBizarHome(); }
@@ -159,14 +159,14 @@ const CHECKS = {
     return `MCP command OK: ${actual}`;
   },
 
-  'permissions-allow-bizar': async () => {
+  'permissions-policy-current': async () => {
     const cfg = readJsonSafe(settingsJsonPath());
     const allow = cfg?.permissions?.allow || [];
-    const hasBizar = allow.some((p) => typeof p === 'string' && p.startsWith('mcp__bizar__'));
-    if (!hasBizar) {
-      throw new Error('permissions.allow does not include any mcp__bizar__* entries');
+    const staleWildcard = allow.find((p) => typeof p === 'string' && p === 'mcp__*');
+    if (staleWildcard) {
+      throw new Error('legacy mcp__* wildcard remains in permissions.allow');
     }
-    return `${allow.filter((p) => p.startsWith('mcp__bizar__')).length} mcp__bizar__* allowed`;
+    return `hook-enforced policy active (${allow.length} explicit allow entries)`;
   },
 
   'permissions-deny-dangerous': async () => {
@@ -188,8 +188,9 @@ const CHECKS = {
     if (!Array.isArray(arr) || arr.length === 0) {
       throw new Error('no PreToolUse hooks wired in settings.json');
     }
-    const m = arr.find((h) => h.matcher && h.matcher.includes('Write') && h.matcher.includes('Edit'));
-    if (!m) throw new Error('PreToolUse matcher missing Write|Edit pattern');
+    const m = arr.find((h) => h.matcher === '*'
+      || (h.matcher && h.matcher.includes('Write') && h.matcher.includes('Edit')));
+    if (!m) throw new Error('PreToolUse matcher does not cover Write and Edit');
     return `${arr.length} PreToolUse hook(s) wired (matcher: ${m.matcher})`;
   },
 
@@ -348,24 +349,21 @@ const CHECKS = {
   },
 
   'provider-reachable': async () => {
-    const url = process.env.ANTHROPIC_BASE_URL || process.env.BIZAR_MODEL_ROUTER_URL;
-    if (!url) {
+    const { endpoint, authToken } = resolveEndpoint();
+    if (!endpoint) {
       const path = resolveGlobalModelRouter();
       const router = readJsonSafe(path);
-      const fallback = router ? configuredFallbackModels(router) : [];
+      const fallback = router ? configuredEnabledModels(router) : [];
       if (fallback.length === 0) {
         throw new Error(`no gateway URL or enabled configured model in ${path}; implicit defaults are prohibited`);
       }
       return `no gateway URL; explicit configured fallback is ${fallback[0]}`;
     }
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 4000);
     try {
-      const res = await fetch(`${url}/v1/models`, { signal: ac.signal });
-      if (!res.ok) throw new Error(`provider at ${url} returned HTTP ${res.status}`);
-      return `provider reachable at ${url}`;
-    } finally {
-      clearTimeout(timer);
+      const models = await listModels({ endpoint, authToken, timeoutMs: 4000 });
+      return `provider reachable at ${endpoint} (${models.length} models)`;
+    } catch (err) {
+      throw new Error(`provider at ${endpoint} unreachable: ${err.message ?? err}`);
     }
   },
 
@@ -387,7 +385,7 @@ const CHECK_ORDER = [
   'claude-settings-schema',
   'mcp-server-bizar-registered',
   'mcp-server-bizar-command',
-  'permissions-allow-bizar',
+  'permissions-policy-current',
   'permissions-deny-dangerous',
   'hooks-pretooluse-wired',
   'hooks-posttooluse-wired',
@@ -431,7 +429,7 @@ export function showValidateHelp() {
     integrated with Claude Code:
       • claude CLI reachable + version
       • ~/.claude/settings.json parses + Bizar MCP server registered
-      • permissions.allow includes mcp__bizar__*
+      • permissions follow the current hook-enforced policy
       • hook-enforced approval and destructive-action floor
       • all 14 Claude Code lifecycle events wired in settings.json
       • all 16 agent files installed with unique Claude Code names

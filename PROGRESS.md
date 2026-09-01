@@ -29,6 +29,24 @@ The 10.23.1 packaging follow-up is complete: all 42 SDK files / 513 tests pass,
 TypeScript is green, and the root package dry run contains 372 files at 10.23.1
 without npm's manifest auto-correction warning.
 
+The requested clean install exposed stale health-check logic, not a broken
+selection: global `userSelected` still contains 13 models, Claude activates
+`cx/gpt-5.6-luna`, and the settings-backed gateway lists 143 live models.
+Doctor/validate currently ignore settings credentials and explicit picks;
+validate also expects obsolete MCP allow entries and a pre-wildcard hook
+matcher. These diagnostics are being aligned with the shipped hook-enforced,
+globally configured architecture before final startup verification.
+
+The 10.23.2 diagnostic correction is complete against the clean install:
+doctor passes 12/12 and strict validation passes 26/26 while contacting the
+settings-configured gateway and seeing 143 models. Explicit global picks now
+count as configured candidates; current wildcard hooks and empty legacy MCP
+allowlists validate correctly.
+
+Final 10.23.2 release evidence is green: repository structure, architecture,
+42 SDK files / 513 tests, 1,031 retained Node tests, E2E 13/13, clean-check,
+TypeScript, and diff hygiene all pass.
+
 Final staged review found one remaining release blocker: model selection updated
 Claude's active model but could retain Bizar's context-window value from the
 previous model. The model/settings sync is being made atomic and regression-

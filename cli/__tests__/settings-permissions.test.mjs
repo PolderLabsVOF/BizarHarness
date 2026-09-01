@@ -61,6 +61,6 @@ test('F-176: shipped template does NOT carry the mcp__* wildcard', () => {
   const allow = loadSettings().permissions?.allow || [];
   assert.ok(
     !allow.includes('mcp__*'),
-    'mcp__* wildcard still in shipped allow (the explicit mcp__bizar__*/mcp__semble__*/mcp__agent-browser__* per-tool allowlist is the source of truth)',
+    'mcp__* wildcard still in shipped allow; tool authorization is enforced by the hook policy',
   );
 });

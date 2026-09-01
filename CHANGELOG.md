@@ -1,5 +1,13 @@
 # Changelog
 
+## [10.23.2] - 2026-09-01
+
+### Fixed
+
+- Doctor and strict validation now resolve settings-based gateway credentials,
+  accept global explicit model picks, and validate the current wildcard hook
+  and hook-enforced permission policy instead of obsolete settings shapes.
+
 ## [10.23.1] - 2026-09-01
 
 ### Fixed

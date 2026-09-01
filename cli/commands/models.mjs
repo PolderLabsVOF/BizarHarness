@@ -1022,6 +1022,12 @@ export function configuredFallbackModels(router) {
   return filterCandidatesByDisabledProviders(ids, disabled).kept;
 }
 
+export function configuredEnabledModels(router) {
+  const disabled = extractDisabledProviders(router);
+  const selected = currentSelection(router, { disabledProviders: disabled }).models;
+  return selected.length > 0 ? selected : configuredFallbackModels(router);
+}
+
 /**
  * Derive a human-readable label for a model ID. Used to populate the
  * `modelPicker` array in settings.json so Claude Code's `/model` picker

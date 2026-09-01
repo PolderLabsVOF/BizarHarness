@@ -261,6 +261,19 @@ test('configuredFallbackModels filters disabled providers and preserves tier ord
   }), ['provider/cheap', 'provider/main']);
 });
 
+test('configuredEnabledModels prefers explicit global picks and falls back to tiers', async () => {
+  const { configuredEnabledModels } = await import('../commands/models.mjs');
+  assert.deepEqual(configuredEnabledModels({
+    disabledProviders: ['anthropic/'],
+    userSelected: { models: ['anthropic/opus', 'provider/picked'] },
+    tiers: { default: { models: ['provider/fallback'] } },
+  }), ['provider/picked']);
+  assert.deepEqual(configuredEnabledModels({
+    userSelected: { models: [] },
+    tiers: { default: { models: ['provider/fallback'] } },
+  }), ['provider/fallback']);
+});
+
 // ── classifyKind (live namespace) ────────────────────────────────────────
 
 test('classifyKind: recognises every live gateway prefix', () => {

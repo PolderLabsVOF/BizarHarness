@@ -41,7 +41,7 @@ import {
   REQUIRED_COMMANDS,
   REQUIRED_HOOKS,
 } from './commands/validate.mjs';
-import { configuredFallbackModels } from './commands/models.mjs';
+import { configuredEnabledModels, listModels, resolveEndpoint } from './commands/models.mjs';
 
 const REQUIRED_RULES = [
   'general.md', 'git.md', 'javascript.md', 'python.md',
@@ -181,8 +181,8 @@ async function checkBizarHome() {
 }
 
 async function checkProviderReachable() {
-  const url = process.env.ANTHROPIC_BASE_URL || process.env.BIZAR_MODEL_ROUTER_URL;
-  if (!url) {
+  const { endpoint, authToken } = resolveEndpoint();
+  if (!endpoint) {
     const routerPath = resolveGlobalModelRouter();
     let router;
     try {
@@ -190,22 +190,18 @@ async function checkProviderReachable() {
     } catch {
       throw new Error(`no provider URL and no readable global model router at ${routerPath}`);
     }
-    const configured = configuredFallbackModels(router);
+    const configured = configuredEnabledModels(router);
     if (configured.length === 0) {
       throw new Error('no enabled configured model; implicit provider defaults are prohibited');
     }
     return `no gateway URL; explicit configured fallback is ${configured[0]}`;
   }
-  let res;
   try {
-    res = await fetch(`${url}/v1/models`, { signal: AbortSignal.timeout(3000) });
+    const models = await listModels({ endpoint, authToken, timeoutMs: 3000 });
+    return `provider at ${endpoint} ok (${models.length} models)`;
   } catch (err) {
-    throw new Error(`provider at ${url} unreachable: ${err.message ?? err}`);
+    throw new Error(`provider at ${endpoint} unreachable: ${err.message ?? err}`);
   }
-  if (!res.ok) {
-    throw new Error(`provider at ${url} responded HTTP ${res.status}`);
-  }
-  return `provider at ${url} ok`;
 }
 
 // ── runner ──────────────────────────────────────────────────────────────────
