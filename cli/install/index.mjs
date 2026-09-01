@@ -9,6 +9,7 @@ import { runProvision, forceCleanInstall, clearSavedEnv } from '../provision.mjs
 import { runDoctor } from '../doctor.mjs';
 import { showBanner, sectionHeading } from './banner.mjs';
 import { printInstallLocations } from './paths.mjs';
+import { runInteractiveSetup } from './interactive-setup.mjs';
 
 /**
  * Thin orchestrator entry point.
@@ -42,6 +43,15 @@ export async function runInstaller(opts = {}) {
 
   showBanner();
   printInstallLocations({ dryRun, force });
+
+  // A normal TTY install is a guided setup. Automation remains prompt-free
+  // via --yes / --non-interactive, and update runs never request credentials.
+  let interactive = null;
+  if (mode !== 'update' && !dryRun) {
+    interactive = await runInteractiveSetup({ enabled: !yes });
+    if (!interactive.ok) return { ok: false, interactive };
+    if (interactive.cancelled) return { ok: true, cancelled: true, interactive };
+  }
 
   // F-183 — pre-provision wipe for forced installs. Force-clean is what
   // makes `--force` actually a clean install: dirs under ~/.claude/ are
@@ -94,5 +104,5 @@ export async function runInstaller(opts = {}) {
     }
   }
 
-  return { ...provisionResult, clean };
+  return { ...provisionResult, clean, interactive };
 }

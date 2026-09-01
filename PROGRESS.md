@@ -2,6 +2,45 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — interactive provider-aware installer (2026-09-01)
+
+`bizar install` currently calls a non-interactive provisioner and tells users
+that it collects no provider configuration. The requested change will make a
+TTY install a guided flow: confirm before mutation, detect provider URL and
+credential from the environment or global Claude settings, securely prompt
+only for missing values, and persist them through the existing global settings
+writer. `--yes` and `--non-interactive` will remain prompt-free for CI and will
+emit actionable guidance when provider configuration is incomplete. The
+standalone `setup-provider` command will be aligned on the same
+`ANTHROPIC_AUTH_TOKEN` contract. Baseline `make check` passes; existing
+untracked operator files are preserved.
+
+The default TTY installer is now guided and confirmation-gated. It resolves
+the global settings path independently of the current project, detects URL and
+credentials from environment or settings, validates and normalizes a missing
+URL, accepts a missing key through a non-echoing reader, and feeds both values
+into the canonical provisioner. Existing values skip their corresponding
+questions. Cancellation happens before the clean-install wipe. `--yes`,
+`--non-interactive`, update, and dry-run paths never block for input; incomplete
+non-interactive configuration prints a concrete recovery command. The
+standalone provider command now writes the same router URL and
+`ANTHROPIC_AUTH_TOKEN` used by model discovery. Focused installer/provider
+coverage passes 19/19, including a subprocess proof that prompted values land
+in global settings without appearing in stdout or stderr; TypeScript and diff
+hygiene pass.
+
+Fresh final evidence is green: removed-surface, repository-structure, and
+architecture checks pass; 42 SDK files / 513 tests and 1,040 retained Node
+tests pass; E2E passes 13/13; clean-check passes 5/5; TypeScript and diff
+hygiene pass. No operator configuration or preserved untracked file was
+modified.
+
+The required staged `/simplify` review reported no blockers. Its one cosmetic
+observation is being closed before commit: provider listing should recognize a
+legacy router-only URL just as installer detection does.
+The listing fallback and its regression test are complete; focused coverage
+passes 14/14 and TypeScript remains green.
+
 ## In Progress — adaptive skills, bounded learning, and completion reliability (2026-09-01)
 
 The current comprehensive audit covers proactive skill selection, the shipped

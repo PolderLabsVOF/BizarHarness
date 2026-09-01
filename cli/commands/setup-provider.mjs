@@ -2,7 +2,7 @@
  * Configure Claude Code's provider environment in settings.json.
  *
  * Bizar does not maintain a parallel provider registry. Claude Code reads
- * ANTHROPIC_BASE_URL, ANTHROPIC_API_KEY, and ANTHROPIC_MODEL directly.
+ * ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, and ANTHROPIC_MODEL directly.
  */
 import chalk from 'chalk';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -41,10 +41,16 @@ export function parseProviderArgs(args = []) {
 
 export function updateProviderSettings(current, options) {
   const next = { ...current, env: { ...(current.env || {}) } };
-  if (options.gateway !== undefined) next.env.ANTHROPIC_BASE_URL = options.gateway;
-  if (options.key !== undefined) next.env.ANTHROPIC_API_KEY = options.key;
+  if (options.gateway !== undefined) {
+    next.env.ANTHROPIC_BASE_URL = options.gateway;
+    next.env.BIZAR_MODEL_ROUTER_URL = options.gateway;
+  }
+  if (options.key !== undefined) next.env.ANTHROPIC_AUTH_TOKEN = options.key;
   if (options.model !== undefined) next.env.ANTHROPIC_MODEL = options.model;
-  if (options.removeKey) delete next.env.ANTHROPIC_API_KEY;
+  if (options.removeKey) {
+    delete next.env.ANTHROPIC_AUTH_TOKEN;
+    delete next.env.ANTHROPIC_API_KEY;
+  }
   return next;
 }
 
@@ -81,9 +87,9 @@ export async function runSetupProvider(args = []) {
 
   if (options.list) {
     console.log(`  Settings: ${path}`);
-    console.log(`  Gateway: ${current.env?.ANTHROPIC_BASE_URL || '(Anthropic default)'}`);
+    console.log(`  Gateway: ${current.env?.ANTHROPIC_BASE_URL || current.env?.BIZAR_MODEL_ROUTER_URL || '(Anthropic default)'}`);
     console.log(`  Model:   ${current.env?.ANTHROPIC_MODEL || '(Claude Code default)'}`);
-    console.log(`  API key: ${redact(current.env?.ANTHROPIC_API_KEY)}`);
+    console.log(`  API key: ${redact(current.env?.ANTHROPIC_AUTH_TOKEN || current.env?.ANTHROPIC_API_KEY)}`);
     return { ok: true, path, settings: current };
   }
 

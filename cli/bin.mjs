@@ -113,7 +113,7 @@ function showHelp() {
     backup                 Create / list / verify / delete backups of BizarHarness state
     restore                Restore BizarHarness from a backup
     validate               Validate the Bizar install
-    setup-provider         Configure a provider in ~/.claude/settings.json (since v6.2.2 installer doesn't touch providers)
+    setup-provider         Configure the global provider used by Bizar and Claude Code
     release-provenance     Generate SBOM + provenance + minisig for a release (audit #83)
     verify-release         Verify a release artifact set against the pinned allowlist
     spec-list              List SDK schemas, policy docs, and mirror sync status (audit #84)

@@ -29,7 +29,8 @@ export function showInstallHelp() {
                                         from the repo. Preserves ~/.config/bizar/
                                         login state. Combine with --yes to skip prompts.
     bizar install --deep                Alias for --force (clean-install semantics)
-    bizar install --yes                 Assume yes for any non-destructive prompt
+    bizar install --yes                 Non-interactive install (CI/script friendly)
+    bizar install --non-interactive     Alias for --yes
     bizar install --help                Show this help
 
   Description:
@@ -59,8 +60,13 @@ export function showInstallHelp() {
     4. Registers the Bizar MCP server in ~/.claude/settings.json.
     5. Wires Claude Code lifecycle hooks (SessionStart / PreToolUse /
        PostToolUse / UserPromptSubmit) under ~/.claude/hooks/.
-    6. Runs 'bizar doctor' as a post-install health check.
-    No API key collection, no interactive prompts.
+    6. In a terminal, confirms the install and securely asks for a provider
+       URL and key only when they are not already configured.
+    7. Runs 'bizar doctor' as a post-install health check.
+
+    Provider settings are global (~/.claude/settings.json), so they work from
+    every project. Key input is hidden. Use --yes or --non-interactive to skip
+    all prompts; missing provider values then produce actionable guidance.
   `);
 }
 

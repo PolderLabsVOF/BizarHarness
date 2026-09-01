@@ -38,12 +38,30 @@ test('updates provider env without replacing unrelated settings', () => {
   assert.equal(next.env.KEEP, 'yes');
   assert.equal(next.env.ANTHROPIC_BASE_URL, 'http://local/v1');
   assert.equal(next.env.ANTHROPIC_MODEL, 'model-a');
-  assert.equal(next.env.ANTHROPIC_API_KEY, 'secret');
+  assert.equal(next.env.BIZAR_MODEL_ROUTER_URL, 'http://local/v1');
+  assert.equal(next.env.ANTHROPIC_AUTH_TOKEN, 'secret');
 });
 
 test('redacts provider keys', () => {
   assert.equal(redact('sk-ant-1234567890'), 'sk-a…7890');
   assert.doesNotMatch(redact('sk-ant-1234567890'), /123456/);
+});
+
+test('provider listing recognizes a router-only legacy URL', async () => {
+  work = mkdtempSync(join(tmpdir(), 'bizar-provider-'));
+  process.env.CLAUDE_CONFIG_DIR = work;
+  mkdirSync(work, { recursive: true });
+  writeFileSync(join(work, 'settings.json'), JSON.stringify({ env: { BIZAR_MODEL_ROUTER_URL: 'https://router-only.example/v1' } }));
+  const writes = [];
+  const originalLog = console.log;
+  console.log = (...args) => writes.push(args.join(' '));
+  try {
+    const result = await runSetupProvider(['--list']);
+    assert.equal(result.ok, true);
+  } finally {
+    console.log = originalLog;
+  }
+  assert.match(writes.join('\n'), /https:\/\/router-only\.example\/v1/);
 });
 
 test('writes Claude settings and preserves existing hooks', async () => {
