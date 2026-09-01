@@ -43,7 +43,7 @@ e2e:  ## End-to-end tests (SDK + Claude Code integration)
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json
 	@echo "▶ Computing VCR ratio from feature_list.json..."
-	@bun -e "const f = JSON.parse(await Bun.file('feature_list.json').text()); const total = f.features.filter(x => x.state !== 'not_started').length; const passing = f.features.filter(x => x.state === 'passing').length; const ratio = total === 0 ? 1.0 : passing / total; console.log('VCR:', passing + '/' + total, '=', ratio.toFixed(3)); if (ratio < 1.0 && total > 0) process.exit(1);"
+	@node -e "const fs = require('node:fs'); const f = JSON.parse(fs.readFileSync('feature_list.json', 'utf8')); const total = f.features.filter(x => x.state !== 'not_started').length; const passing = f.features.filter(x => x.state === 'passing').length; const ratio = total === 0 ? 1.0 : passing / total; console.log('VCR:', passing + '/' + total, '=', ratio.toFixed(3)); if (ratio < 1.0 && total > 0) process.exit(1);"
 
 verify-feature:  ## Verify a feature by ID — usage: make verify-feature ID=F-001
 	@if [ -z "$(ID)" ]; then echo "Usage: make verify-feature ID=<feature-id>"; exit 1; fi

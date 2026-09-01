@@ -78,13 +78,14 @@ test('PreTool safety leaf failures deny while context leaf failures fail open', 
 
 test('event dispatcher preserves tool and agent matcher scopes', () => {
   assert.deepEqual(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Bash' })), [
-    'pretooluse-bash', 'git-workflow-guard',
+    'workflow-route-guard', 'pretooluse-bash', 'git-workflow-guard',
   ]);
   assert.deepEqual(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Edit' })), [
-    'pretooluse-editwrite', 'path-ownership-guard',
+    'workflow-route-guard', 'pretooluse-editwrite', 'path-ownership-guard',
   ]);
   assert.deepEqual(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Read' })), []);
   assert.deepEqual(selectEventChain('post-tool-use', JSON.stringify({ tool_name: 'Bash' })), []);
+  assert.deepEqual(selectEventChain('post-tool-use', JSON.stringify({ tool_name: 'Workflow' })), ['workflow-route-guard']);
   assert.deepEqual(selectEventChain('subagent-start', JSON.stringify({ agent_type: 'greg' })), ['agent-grounding']);
   // advisor-context only fires for reviewers/debug specialists (@linda, @carl).
   // @karen is a fresh-task implementer and no longer receives the parent dump.

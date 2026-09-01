@@ -2,6 +2,67 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — workflow-first primary routing (2026-09-01)
+
+The installed 10.23.5 routing policy is too permissive: its lexical fast path
+accepts broad `fix`, `change`, and `update` prompts, while the normal route
+still tells Mike it may implement deterministic work directly. The correction
+will reserve direct execution for unmistakably tiny, single-line, single-scope
+copy/style/format edits and bounded read-only lookups. Every other primary
+request must enter a matching native Bizar workflow before editing, with at
+least one explicitly modeled worktree-isolated implementation subagent and
+parallel writers for genuinely independent scopes. Baseline `make check`
+passes; existing untracked operator files remain untouched.
+
+Inspection found a second direct cause: Mike's shipped agent frontmatter did
+not include Claude Code's native `Workflow` tool, even though its routing docs
+told it to use native workflows. The fix aligns both layers: strict
+workflow-required context for every non-tiny request and an explicit
+`Workflow` capability on the office manager, protected by drift coverage.
+
+The installed-session audit found the decisive cause: 10.23.5 copied Mike's
+agent definition globally but did not set Claude Code's global `agent` setting,
+so ordinary `claude` launches still ran the default main thread. Source now
+provisions `agent: "mike"` (the agent frontmatter name), explicitly selects
+Mike for `bizar run`,
+enables current native workflows with a small size guideline, and aligns all
+SessionStart variants with workflow-first routing. A session-scoped hook marker
+now denies primary Edit/Write/Bash/ad-hoc Agent calls for substantive prompts
+until a native Workflow succeeds; read-only inspection and workflow subagents
+remain available. The tiny classifier rejects behavioral, broad, interrogative,
+negated, `/quick`, and pasted-notification bypasses. `bizar-implement` now uses
+one isolated writer by default and fans out only explicitly supplied disjoint
+lanes; `bizar-debug`'s fix writer is worktree-isolated. Focused routing,
+provision, workflow-payload, session-start, and hook tests pass 120/120, and
+TypeScript passes.
+
+Fresh completion evidence is green: structure and removed-surface checks pass,
+architecture and TypeScript pass, 42 SDK files / 513 tests pass, 1,065 retained
+Node/harness tests pass, Claude Code E2E passes 13/13, and clean-check passes
+5/5. The working tree build was installed globally without publishing. Live
+settings select `agent: "mike"`, an operator-configured provider model, native
+workflows, the small workflow guideline, and auto-compaction. A live installed
+hook smoke denied a primary Edit before Workflow and allowed it after a
+successful Workflow event. A real Claude Code 2.1.257 startup returned
+`@mike — Workflow tool is available.` without warnings or errors.
+The VCR target also no longer assumes an uninstalled Bun runtime; it now uses
+the repository's required Node toolchain and reports 75/75 passing.
+The staged simplify invocation exposed and prevented a filename/name mismatch:
+Claude's `--agent` accepts `mike`, not the `office-manager.md` filename. Global
+settings, `bizar team`, and `bizar run` now consistently use `mike`.
+
+Final `/simplify` tracing found and fixed a read-only deadlock before commit:
+the route guard denied every primary Bash call, including the staged `git diff`
+needed by the reviewer, despite the policy allowing bounded read-only work.
+The guard now admits only redirect-free Git status/diff/log/show/revision/file
+inspection (plus inert separator echoes); pipelines, other shell commands,
+write-capable Git actions, and output redirection remain denied until Workflow.
+The completed staged review then found one unlock edge case: PostToolUse alone
+proved that the Workflow tool returned, not that its structured outcome
+succeeded. The marker now clears only for explicit successful terminal statuses;
+blocked, failed, cancelled, budget-exhausted, errored, nested-failure, and
+missing-status responses keep primary mutation locked.
+
 ## In Progress — 10.23.5 publication (2026-09-01)
 
 The user authorized publication of the completed interactive installer. npm

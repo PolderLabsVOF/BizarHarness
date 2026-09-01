@@ -448,7 +448,10 @@ test('advisor hook injects bounded parent context', () => {
 test('project settings wire portable guarded-autonomy hooks', () => {
   const settings = JSON.parse(readFileSync(join(hooksDir, '..', 'settings.json'), 'utf8'));
   assert.equal(settings.permissions.defaultMode, 'bypassPermissions');
+  assert.equal(settings.agent, 'mike');
   assert.equal(settings.enableWorkflows, true);
+  assert.equal(settings.disableWorkflows, false);
+  assert.equal(settings.workflowSizeGuideline, 'small');
   assert.equal(settings.disableAutoCompact, false);
   assert.ok(settings.hooks.PreCompact);
   assert.ok(settings.hooks.SubagentStart);

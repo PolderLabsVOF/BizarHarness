@@ -28,6 +28,7 @@ const GROUNDING_HOOK = join(ROOT, 'config/claude/hooks/agent-grounding.mjs');
 const ADVISOR_HOOK = join(ROOT, 'config/claude/hooks/advisor-context.mjs');
 const OFFICE_MANAGER = join(ROOT, 'config/claude/agents/office-manager.md');
 const PROVISION = join(ROOT, 'cli/provision.mjs');
+const CLAUDE_CMD = join(ROOT, 'cli/commands/claude-cmd.mjs');
 
 function agentFiles() {
   return readdirSync(AGENTS_DIR).filter((f) => f.endsWith('.md') && f !== '_shared');
@@ -41,6 +42,20 @@ describe('prompt-trim v10.20.0', () => {
   test('office-manager.md is under 300 lines', () => {
     const lines = readFileSync(OFFICE_MANAGER, 'utf8').split('\n').length;
     assert.ok(lines <= 300, `office-manager.md is ${lines} lines, must be <= 300`);
+  });
+
+  test('office-manager has the native Workflow tool and requires it outside tiny edits', () => {
+    const source = readFileSync(OFFICE_MANAGER, 'utf8');
+    const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+    assert.match(frontmatter, /^tools:.*\bWorkflow\b/m);
+    assert.match(source, /invoke a workflow\s+before editing/);
+    assert.match(source, /at least one editing worker/);
+    assert.match(source, /isolation: "worktree"/);
+  });
+
+  test('global provision and bizar run both select Mike by frontmatter name', () => {
+    assert.match(readFileSync(PROVISION, 'utf8'), /merged\.agent = 'mike'/);
+    assert.match(readFileSync(CLAUDE_CMD, 'utf8'), /\['-p', '--agent', 'mike', prompt\]/);
   });
 
   test('AGENT_BASELINE.md has External APIs + Git sections', () => {

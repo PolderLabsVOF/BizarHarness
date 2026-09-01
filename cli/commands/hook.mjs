@@ -19,6 +19,7 @@ const PRETOOL_SAFETY_LEAVES = new Set([
   'pretooluse-editwrite', 'path-ownership-guard',
   'pretooluse-bash', 'git-workflow-guard',
   'agent-model-guard',
+  'workflow-route-guard',
 ]);
 
 export const HOOK_PROGRAMS = Object.freeze({
@@ -47,6 +48,7 @@ export const HOOK_PROGRAMS = Object.freeze({
   'team-lifecycle': 'team-lifecycle.mjs',
   'verify-deliverables': 'verify-deliverables.mjs',
   'worker-suggest': 'worker-suggest.mjs',
+  'workflow-route-guard': 'workflow-route-guard.mjs',
   'worktree-archive': 'worktree-archive.mjs',
   'worktree-bootstrap': 'worktree-bootstrap.mjs',
 });
@@ -55,6 +57,7 @@ export const EVENT_CHAINS = Object.freeze({
   'user-prompt-submit': Object.freeze([
     'control-inbox',
     'keyword-router',
+    'workflow-route-guard',
     'worker-suggest',
     'thinking-route',
     'telemetry',
@@ -230,16 +233,17 @@ export function selectEventChain(eventKey, input = '') {
 
   if (eventKey === 'pre-tool-use') {
     if (/^(Write|Edit|MultiEdit)$/.test(toolName)) {
-      return ['pretooluse-editwrite', 'path-ownership-guard'];
+      return ['workflow-route-guard', 'pretooluse-editwrite', 'path-ownership-guard'];
     }
     if (toolName === 'Bash') {
-      return ['pretooluse-bash', 'git-workflow-guard'];
+      return ['workflow-route-guard', 'pretooluse-bash', 'git-workflow-guard'];
     }
-    if (toolName === 'Agent') return ['agent-model-guard'];
+    if (toolName === 'Agent') return ['workflow-route-guard', 'agent-model-guard'];
     return [];
   }
 
   if (eventKey === 'post-tool-use') {
+    if (toolName === 'Workflow') return ['workflow-route-guard'];
     if (/^(Write|Edit|MultiEdit)$/.test(toolName)) return ['posttooluse-editwrite'];
     if (toolName === 'Bash') return [];
     return [];

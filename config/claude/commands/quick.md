@@ -11,16 +11,16 @@ Run `$ARGUMENTS` directly in this session. Do NOT delegate to subagents.
 
 ## Mechanism
 
-The `worker-suggest` hook recognizes `/quick` directly and skips orchestration
-for this command only. Legacy `.bizar/.quick-once` sentinels are consumed and
-deleted on their first prompt, so they cannot disable routing for a session.
+The `worker-suggest` hook recognizes `/quick` directly, but honors the bypass
+only when the argument still qualifies as an unmistakably tiny edit. Legacy
+`.bizar/.quick-once` sentinels are consumed on their first prompt and cannot
+bypass routing for substantive work.
 
 ## What this is for
 
 - One-line file edits
 - Quick lookups ("find X", "show me Y")
-- Mechanical renames
-- Single-tool invocations
+- One-token style adjustments
 
 ## What this is NOT for
 

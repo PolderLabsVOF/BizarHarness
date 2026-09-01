@@ -56,7 +56,7 @@ export async function runClaudeTeam(args = []) {
     console.error(chalk.red(`  ✗ Missing ${router}; run bizar install`));
     return 1;
   }
-  return spawnClaude(['-p', '--name', name, '--agent', 'office-manager', mission, ...rest]);
+  return spawnClaude(['-p', '--name', name, '--agent', 'mike', mission, ...rest]);
 }
 
 export async function runClaudeSubagent(args = []) {
@@ -80,7 +80,9 @@ export async function runClaudeRun(args = []) {
     console.log('  Usage: bizar run [--bg] <prompt>');
     return 2;
   }
-  return spawnClaude(background ? ['--bg', '-p', prompt] : ['-p', prompt]);
+  return spawnClaude(background
+    ? ['--bg', '-p', '--agent', 'mike', prompt]
+    : ['-p', '--agent', 'mike', prompt]);
 }
 
 export async function run(name, args, isHelpRequest) {

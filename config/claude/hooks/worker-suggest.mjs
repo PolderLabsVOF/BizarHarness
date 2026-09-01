@@ -4,9 +4,9 @@
  *
  * Bizar Background Workers — UserPromptSubmit hook.
  *
- * Runs on every user prompt. Small, repository-local requests take a cheap
- * fast path without loading the worker/learning modules. Larger requests get
- * routing and specialized suggestions from cli/worker-dispatcher.mjs.
+ * Runs on every user prompt. Only unmistakably tiny, single-scope edits take
+ * a cheap fast path. Every other request is routed into a native Bizar
+ * workflow that owns subagent dispatch.
  *
  * Uses import.meta.url + dynamic import() to resolve the sibling CLI module so
  * the hook works regardless of install path (fixes ERR_MODULE_NOT_FOUND after
@@ -37,6 +37,7 @@
 import { dirname, join } from 'node:path';
 import { existsSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { isTinyDirectTask } from './workflow-route-state.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -46,17 +47,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * normal routing path. Keeping the classifier lexical makes it free on the
  * UserPromptSubmit hot path and easy to explain to the model.
  */
-function isFastLocalTask(prompt) {
-  if (prompt.length > 500 || prompt.split('\n').length > 3) return false;
-  if (!/\b(fix|correct|rename|remove|delete|format|typo|style|padding|margin|color|spacing|align|change|update)\b/i.test(prompt)) return false;
-  return !/\b(api|sdk|library|framework|dependency|version|migration|architecture|security|auth|credential|deploy|publish|release|database|workflow|agent team|hook|performance|benchmark|all files|every file|failing|failure|error|crash|root cause|regression)\b/i.test(prompt);
-}
+const isFastLocalTask = isTinyDirectTask;
 
 const FAST_ROUTE_POLICY = [
-  'Bizar fast path:',
-  '- This is a small, bounded, repository-local request. The primary orchestrator may execute it directly; otherwise dispatch exactly one @brenda worker with call-level `isolation: "worktree"`. Do not research, plan, or review first.',
-  '- Inspect the named/local code, make the smallest reversible change, add or adjust only the directly relevant regression test when behavior changes, and run the smallest proving check. Use current official documentation only if the change touches an external or version-sensitive API.',
-  '- Do not fan out duplicate analysis. Parallelize only independent file scopes; a single-file fix stays single-worker to avoid worktree and merge overhead.',
+  'Bizar tiny direct path:',
+  '- Direct execution is allowed only because this request is an unmistakably tiny, single-scope copy/style/format edit. Inspect the exact target, make one minimal reversible edit, and run the smallest proving check. Do not plan, research, or dispatch a subagent.',
+  '- If inspection reveals behavioral logic, more than one target, ambiguity, a required test change, or any interaction beyond the named micro-edit, stop the direct path and invoke the matching native Bizar workflow before editing further.',
+].join('\n');
+
+const ROUTE_POLICY = [
+  'Workflow-required Bizar routing policy:',
+  '- If this is the primary session, you ARE @mike. Do not implement this request directly in the primary session. Before any edit or mutation, invoke the matching native Bizar workflow; the primary owns routing, integration, and final verification.',
+  '- Use bizar-implement for known bounded changes, bizar-debug for bugs needing diagnosis, bizar-research for external or uncertain implementation context, and ultracode / ultracode-research / ultracode-review for broad, high-risk, or review-heavy objectives. Use only phases that reduce a concrete risk.',
+  '- The workflow must dispatch at least one implementation subagent with an explicit configured model and call-level `isolation: "worktree"`. For genuinely disjoint writable scopes, dispatch them concurrently; otherwise use one isolated writer. Never create duplicate workers merely to satisfy fan-out.',
+  '- Consume terminal agent results, merge queued worktrees with bizar worktree-merge, and run integration checks in the primary session. A subagent may not recursively dispatch itself.',
+  '- Do NOT execute any tool you do not have. If a tool you need is missing from your tools list, dispatch to a subagent that has it — do not pretend you have it.',
+  '- If you are already running as a Bizar custom agent, follow your assigned role and do not recursively dispatch yourself.',
 ].join('\n');
 
 let raw = '';
@@ -72,7 +78,7 @@ process.stdin.on('end', async () => {
 
   const prompt = String(input.prompt ?? input.user_prompt ?? '').trim();
 
-  if (input.task_notification || /<task-notification\b[\s\S]*<result\b/i.test(prompt)) {
+  if (input.task_notification || /^<task-notification\b[\s\S]*<result\b[\s\S]*<\/task-notification>\s*$/i.test(prompt)) {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
@@ -83,7 +89,9 @@ process.stdin.on('end', async () => {
   }
 
   if (/^\/quick(?:\s|$)/i.test(prompt)) {
-    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: '' } }) + '\n');
+    const quickTask = prompt.replace(/^\/quick(?:\s+|$)/i, '').trim();
+    const context = !quickTask || isFastLocalTask(quickTask) ? FAST_ROUTE_POLICY : ROUTE_POLICY;
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } }) + '\n');
     return;
   }
 
@@ -93,10 +101,11 @@ process.stdin.on('end', async () => {
   const quickSentinel = join(input.cwd || process.cwd(), '.bizar', '.quick-once');
   if (existsSync(quickSentinel)) {
     try { unlinkSync(quickSentinel); } catch { /* best-effort one-shot cleanup */ }
+    const context = isFastLocalTask(prompt) ? FAST_ROUTE_POLICY : ROUTE_POLICY;
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: '',
+        additionalContext: context,
       },
     }) + '\n');
     process.exit(0);
@@ -130,15 +139,6 @@ process.stdin.on('end', async () => {
     return;
   }
 
-  const routePolicy = [
-    'Adaptive Bizar routing policy:',
-    '- If this is the primary session, you ARE @mike. Execute small deterministic repository work directly, or use the Agent tool for one @brenda worktree worker when isolation helps. Do not add research, planning, review, or a second worker unless the task needs it.',
-    '- For a known, multi-file change, first split only genuinely disjoint edit scopes and dispatch those writers concurrently with call-level `isolation: "worktree"`. A monolithic scope gets one writer, not artificial parallelism.',
-    '- Use research and planning only when external/version-sensitive behavior, an unclear root cause, an architectural decision, or interacting scopes make them decision-reducing. When required, run independent research in parallel with repository inspection.',
-    '- Do NOT execute any tool you do not have. If a tool you need is missing from your tools list, dispatch to a subagent that has it — do not pretend you have it.',
-    '- If you are already running as a Bizar custom agent, follow your assigned role and do not recursively dispatch yourself.',
-  ].join('\n');
-
   let dispatch;
   let recordSuggestion;
   try {
@@ -150,7 +150,7 @@ process.stdin.on('end', async () => {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: routePolicy,
+        additionalContext: ROUTE_POLICY,
       },
     }) + '\n');
     process.exit(0);
@@ -167,7 +167,7 @@ process.stdin.on('end', async () => {
     process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
-        additionalContext: routePolicy,
+        additionalContext: ROUTE_POLICY,
       },
     }) + '\n');
     process.exit(0);
@@ -204,7 +204,7 @@ process.stdin.on('end', async () => {
 
   // Build additionalContext for the model so Bizar routing is mandatory even
   // when no specialized worker pattern matches.
-  let note = routePolicy;
+  let note = ROUTE_POLICY;
   if (suggestions.length > 0) {
     const lines = suggestions.map((s) => {
       const skillPart = s.skill ? `, skill=${s.skill}` : '';

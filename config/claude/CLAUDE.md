@@ -70,11 +70,13 @@ actions with `permissionDecision: "ask"`; that escalation list is the
 authoritative floor, not a starting point.
 
 Native dynamic workflows under `config/workflows/` and `~/.claude/workflows/`
-are the primary dispatch mechanism for shaped work (research / implement /
-debug / review). Small, deterministic, repository-local tasks go directly to
-one isolated worker: inspect, make the smallest change, and run the smallest
-proving check. Do not add research, planning, review, or duplicate workers to
-such tasks. For work that needs 3+ long-lived workers with bounded cross-talk,
+are the required dispatch mechanism for every primary request except an
+unmistakably tiny single-target copy/style/format edit with no behavior or test
+change. Mike may execute that narrow exception directly. All other work enters
+the matching research / implement / debug / review workflow and uses at least
+one explicitly modeled editing subagent with call-level worktree isolation.
+Do not add unnecessary phases or duplicate workers. For work that needs 3+
+long-lived workers with bounded cross-talk,
 Mike invokes a workflow that fans out as a native agent team; the team is
 host-side state under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, and per
 Anthropic's docs `team_name` is deprecated and ignored. When two or more
@@ -143,10 +145,15 @@ guess-and-try remains prohibited.
 The autonomy and approval policy above governs this execution model. The project defaults to `acceptEdits`; eligible operators may opt into Claude Code Auto mode.
 
 Every non-empty primary request enters Bizar through `office-manager` (`@mike`).
-Mike handles small, deterministic repository-local changes directly and uses
-the smallest proving check. It delegates when worktree isolation, specialist
-expertise, or real parallelism materially helps. A Bizar custom agent already
-executing its assigned role does not recursively dispatch itself.
+The installer sets Claude Code's global `agent` setting to Mike's frontmatter
+name (`mike`),
+and a session-scoped routing guard requires a successful native Workflow before
+substantive primary-session mutation. Read-only inspection remains available.
+Mike directly executes only the tiny edit exception above. Every other request
+must invoke a native Bizar workflow before mutation; the workflow dispatches
+worktree-isolated subagents while Mike owns integration and final verification.
+A Bizar custom agent already executing its assigned role does not recursively
+dispatch itself.
 
 Every shipped agent has `WebSearch` access. Before proposing, explaining,
 troubleshooting, or implementing behavior from an external API, library,
@@ -156,8 +163,8 @@ relevant page. Guess-and-try integration work is prohibited. When official
 documentation is unavailable or ambiguous, inspect authoritative source code
 and report the evidence gap.
 
-For shaped requests, `office-manager` uses only the phases that reduce a known
-risk; direct tasks skip this pipeline:
+For workflow-routed requests, `office-manager` uses only the phases that reduce
+a known risk; only the tiny edit exception skips this pipeline:
 
 1. Research: `greg` (`research-analyst.md`) plus an implementation-context specialist.
 2. Plan: `planner` drafts; `qa-reviewer` challenges assumptions and test shape.

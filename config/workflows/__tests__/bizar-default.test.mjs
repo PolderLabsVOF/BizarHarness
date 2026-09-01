@@ -9,7 +9,7 @@ const workflowsDir = resolve(here, '..');
 
 const SCRIPTS = [
   { name: 'bizar-research', file: 'bizar-research.js', args: { topic: 'stub-topic' } },
-  { name: 'bizar-implement', file: 'bizar-implement.js', args: { topic: 'stub-topic', scope: ['a', 'b'] } },
+  { name: 'bizar-implement', file: 'bizar-implement.js', args: { topic: 'stub-topic', scope: ['a', 'b'] }, minPhases: 1 },
   { name: 'bizar-debug', file: 'bizar-debug.js', args: { bug_id: 'BUG-1' } },
   { name: 'ultracode', file: 'ultracode.js', args: { task: 'stub-task' } },
   { name: 'ultracode-research', file: 'ultracode-research.js', args: { question: 'stub-question' } },
@@ -262,7 +262,7 @@ test('bizar-research: pipeline + parallel fan-out with sequential verify', async
   assert.ok(pipelineCalls.length >= 1, 'bizar-research.js must use pipeline()');
 });
 
-test('bizar-implement: parallel-only barrier + synthesis (no pipeline)', async () => {
+test('bizar-implement: one bounded writer by default (no planning or review ceremony)', async () => {
   const source = loadSource('bizar-implement.js');
   assert.ok(!/\bpipeline\s*\(/.test(source.replace(/pipeline\(/g, '')),
     'bizar-implement.js must not contain pipeline(');
@@ -270,18 +270,26 @@ test('bizar-implement: parallel-only barrier + synthesis (no pipeline)', async (
   const { result, calls } = await runWorkflow('bizar-implement.js', { topic: 'stub-topic', scope: ['a', 'b'] });
   assert.equal(result.status, 'ready-for-integration');
   assert.equal(result.topic, 'stub-topic');
-  assert.ok(Array.isArray(result.lanes) && result.lanes.length >= 1);
-  assert.ok(Array.isArray(result.implementations));
-  assert.ok(result.barrier);
-  assert.ok(result.verify);
-  assert.ok(result.synthesis);
+  assert.equal(result.lanes.length, 1);
+  assert.equal(result.implementations.length, 1);
 
   const agentCalls = calls.filter((c) => c.primitive === 'agent');
-  assert.ok(agentCalls.length >= 2, `expected >=2 agent() calls, saw ${agentCalls.length}`);
+  assert.equal(agentCalls.length, 1, 'bounded workflow must use exactly one writer');
   const parallelCalls = calls.filter((c) => c.primitive === 'parallel');
-  assert.ok(parallelCalls.some((c) => c.count >= 1), 'bizar-implement.js must use parallel()');
+  assert.equal(parallelCalls.length, 0, 'one bounded lane must not pay parallel fan-out overhead');
   const pipelineCalls = calls.filter((c) => c.primitive === 'pipeline');
   assert.equal(pipelineCalls.length, 0, 'bizar-implement.js must not invoke pipeline() at runtime');
+});
+
+test('bizar-implement: explicit disjoint lanes run concurrently', async () => {
+  const lanes = [
+    { name: 'a', scope: ['a/**'], task: 'change a' },
+    { name: 'b', scope: ['b/**'], task: 'change b' },
+  ];
+  const { result, calls } = await runWorkflow('bizar-implement.js', { topic: 'stub-topic', lanes });
+  assert.equal(result.lanes.length, 2);
+  assert.equal(result.implementations.length, 2);
+  assert.ok(calls.some((call) => call.primitive === 'parallel' && call.count === 2));
 });
 
 test('bizar-debug: bounded loop-until-dry (no pipeline)', async () => {

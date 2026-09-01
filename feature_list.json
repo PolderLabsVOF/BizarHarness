@@ -689,6 +689,7 @@
       "commit": "12c660b",
       "category": "harness",
       "scope": [
+        "Makefile",
         "config/claude/settings.json",
         "config/claude/hooks/bizar-hook-wrapper.sh",
         "config/claude/hooks/__tests__/bizar-hook-wrapper.test.mjs",
@@ -1228,7 +1229,7 @@
       "passed": "2026-08-28",
       "commit": "6bb6e09",
       "wip_holder": "@mike",
-      "wip": 1,
+      "wip": 0,
       "category": "routing",
       "layer": "sdk",
       "owner": "@todd",
@@ -1250,11 +1251,40 @@
       ],
       "created": "2026-08-28",
       "evidence": "Branch wt/todd-imp022-e2e-matrix (1 commit, worktree salvage from Todd agent killed by 429 rate limit). ec2bc01 feat(sdk,scripts) F-193 model-selection E2E matrix (4 vitest suites — direct-selection (9 cases), matrix (12 cases), team-selection (3 cases), workflow-selection (12 cases) — plus 5 fixtures: agent-tool-stub.mjs (Agent tool deterministic stub with install/restore + captureLimit), provider-stub.mjs (4 modes: agree/substitute/fail/auth with typed transport + auth errors), team-spawn-stub.mjs (per-spawn dispatchId + members[]), evidence-store-stub.mjs (mirrors F-191 EvidenceStore contract — append/get/findByRunId/attachOutcome/verifyIntegrity/tail + DuplicateEvidenceError/OutcomeConflictError/EvidenceNotFoundError/EvidenceStoreError), dispatch-context.mjs (createE2EHarness({mode, profiles}) wiring selectDispatchModel + dispatchAgent + Agent tool + provider + team + evidence store); 5 autonomy-contract-e2e.test.mjs cases: no production source under packages/sdk/src/ imports an E2E fixture (strip-comments-and-strings regex probe), each stub exposes the documented interface, drift probe injects a fixture import and confirms the guard fires). Verification: npx vitest run --root packages/sdk 481/481; node --test scripts/__tests__/autonomy-contract-e2e.test.mjs 5/5; npm run test:node 671/671 (1 pre-existing cli/install/prune.test.mjs:159 mkdir failure unrelated to this work); npx tsc --noEmit exit 0. VCR bumped from 71/72 to 72/73."
+    },
+    {
+      "id": "F-195",
+      "title": "Workflow-first primary routing",
+      "description": "Make the globally installed Mike agent the default Claude main-thread agent, reserve direct execution for unmistakably tiny edits, and require a native Bizar workflow with worktree-isolated implementation for all substantive changes without artificial fan-out.",
+      "behavior": "Normal Claude sessions start as Mike; non-tiny prompts route through Workflow before primary mutation; bounded implementation can use one isolated writer; broad, behavioral, interrogative, negated, and deceptive notification prompts cannot enter the direct path.",
+      "verification": "node --test config/claude/hooks/__tests__/worker-suggest.test.mjs config/claude/hooks/__tests__/workflow-route-guard.test.mjs cli/provision.test.mjs cli/__tests__/prompt-trim.test.mjs scripts/__tests__/autonomy-contract-workflow.test.mjs; make check; make e2e",
+      "state": "passing",
+      "passed": "2026-09-01",
+      "commit": "current-change",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "routing",
+      "layer": "harness",
+      "owner": "@mike",
+      "scope": [
+        "config/claude/settings.json",
+        "config/claude/agents/office-manager.md",
+        "config/claude/hooks/worker-suggest.mjs",
+        "config/claude/hooks/workflow-route-guard.mjs",
+        "config/claude/hooks/sessionstart-prime.mjs",
+        "config/workflows/bizar-implement.js",
+        "config/workflows/bizar-debug.js",
+        "cli/provision.mjs",
+        "feature_list.json",
+        "PROGRESS.md"
+      ],
+      "created": "2026-09-01",
+      "evidence": "Audit reproduced installed 10.23.5 starting default Claude because global settings omitted the Mike agent. Fixed global/default and bizar-run agent selection, Workflow capability, strict tiny classification, session-scoped pre-workflow mutation enforcement, SessionStart drift, debug worktree isolation, and the bounded one-worker implementation path. Final live tracing also removed a /simplify deadlock by allowing narrowly whitelisted read-only Git inspection before Workflow while continuing to deny redirects, pipelines, tests, and mutations. Staged review further hardened unlock semantics: only explicit successful Workflow terminal statuses clear the marker; blocked, failed, cancelled, budget-exhausted, errored, nested-failure, and status-less responses stay locked. Fresh evidence: focused routing/provision/workflow tests 120/120; SDK 513/513; retained Node/harness 1066/1066; E2E 13/13; clean-check 5/5; TypeScript, architecture, structure, and removed-surface gates pass. Installed working-tree build live smoke: pre-Workflow Edit denied, post-Workflow Edit allowed; Claude Code 2.1.257 reports @mike with Workflow available."
     }
   ],
   "vcr": {
-    "passing": 72,
-    "activated": 73,
-    "ratio": 0.9863013698630136
+    "passing": 75,
+    "activated": 75,
+    "ratio": 1
   }
 }

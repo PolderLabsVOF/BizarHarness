@@ -11,6 +11,7 @@ All hooks read Claude Code JSON from stdin and emit either no decision, addition
 | `simplify-guard.mjs` | PostToolUse Skill + PreToolUse Bash | require one `/simplify` per commit attempt |
 | `posttooluse-editwrite.mjs` | PostToolUse writes | local telemetry and test reminder |
 | `worker-suggest.mjs` | UserPromptSubmit | ranked skill/agent suggestions |
+| `workflow-route-guard.mjs` | UserPromptSubmit, PreToolUse, PostToolUse | requires a proven successful native workflow before substantive primary mutation; permits narrowly whitelisted, redirect-free Git inspection |
 | `thinking-route.mjs` | UserPromptSubmit | slash and mental-model routing |
 | `telemetry.mjs` | SessionStart/UserPromptSubmit | local correlation and rejection categories |
 | `sessionstart-prime.mjs` | SessionStart | bounded project and handoff context |

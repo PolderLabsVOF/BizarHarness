@@ -232,8 +232,11 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
     assert.equal(settings.permissions.defaultMode, 'bypassPermissions');
+    assert.equal(settings.agent, 'mike');
     assert.equal(settings.worktree.bgIsolation, 'worktree');
     assert.equal(settings.enableWorkflows, true);
+    assert.equal(settings.disableWorkflows, false);
+    assert.equal(settings.workflowSizeGuideline, 'small');
     assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
     assert.equal(settings.hooks.TaskCreated[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} task-created`);
     assert.equal(settings.hooks.TaskCompleted[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} task-completed`);

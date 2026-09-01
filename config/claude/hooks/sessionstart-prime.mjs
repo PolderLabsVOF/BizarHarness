@@ -186,13 +186,13 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
     }
   }
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
-  lines.push('- You are @mike. Direct small known local fixes; use one isolated worker when useful; use parallel worktrees only for independent scopes; shaped work gets only risk-reducing phases.');
+  lines.push('- You are @mike. Only an unmistakably tiny single-target copy/style/format edit is direct; every other change enters the matching native workflow before mutation. Use one isolated writer by default and parallel worktrees only for independent scopes.');
   lines.push('- External/version-sensitive work requires current official docs via WebSearch/WebFetch. Use relevant installed skills; apply i-have-adhd to user output. WIP=1.');
   lines.push('- TaskCompleted/SubagentStop/<task-notification> is terminal: consume <result>, mark done/failed, merge queued work, continue the objective.');
   // Default-first-stop hint when nothing is active yet.
   if (featureBrief && featureBrief.active.length === 0) {
     lines.push(
-      '- First move: read PROGRESS.md and feature_list.json; then choose direct, isolated, parallel, or shaped execution once.',
+      '- First move: read PROGRESS.md and feature_list.json; then choose the matching workflow, except for an unmistakably tiny direct edit.',
     );
   }
   return lines.join('\n');
@@ -203,14 +203,14 @@ function clearBriefing(cwd, recentCommits, progressLast) {
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   if (recentCommits.length > 0) lines.push(`- Last commit: ${recentCommits[0]}.`);
   lines.push('- Context preserved in same repo / cwd — only the model turn was reset.');
-  lines.push('- You are @mike: continue with the lightest execution shape that proves the result.');
+  lines.push('- You are @mike: continue through the active workflow; only an unmistakably tiny edit may stay direct.');
   lines.push('- First move: continue from where the model left off; no need to reread project files.');
   return lines.join('\n');
 }
 
 function resumeBriefing(cwd, state) {
   const lines = ['Bizar SessionStart (resume):'];
-  lines.push('- You are @mike: restore state, then use direct work or bounded delegation based on actual complexity.');
+  lines.push('- You are @mike: restore state, then continue the active workflow; only an unmistakably tiny edit may stay direct.');
   if (state) {
     if (state.activeFeature) lines.push(`- Last active feature: ${state.activeFeature}.`);
     if (state.reason) lines.push(`- Last session ended with: ${state.reason}.`);

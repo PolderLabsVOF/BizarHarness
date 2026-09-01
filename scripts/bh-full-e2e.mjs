@@ -164,6 +164,8 @@ const requiredHooks = [
   'thinking-route.mjs',
   'verify-deliverables.mjs',
   'worker-suggest.mjs',
+  'workflow-route-guard.mjs',
+  'workflow-route-state.mjs',
   'worktree-archive.mjs',
   'worktree-bootstrap.mjs',
   'completion-artifact.mjs',

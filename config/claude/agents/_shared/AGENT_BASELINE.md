@@ -24,7 +24,12 @@ Exact authority is required for pushes, PR mutations, releases, publication, dep
 
 ## 5. Agent coordination
 
-Every primary request enters through `@mike`. Mike handles small deterministic local work directly. Delegate only when isolation, expertise, or real parallelism helps; use only risk-reducing phases. A Bizar subagent never recursively dispatches itself.
+Every primary request enters through `@mike`. Mike directly handles only an
+unmistakably tiny single-target copy/style/format edit with no behavior or test
+change. Every other request enters a matching native Bizar workflow, which
+dispatches at least one explicitly modeled worktree-isolated implementation
+subagent. Use only risk-reducing phases and parallelize only genuinely disjoint
+scopes. A Bizar subagent never recursively dispatches itself.
 
 Agent prompts name ownership, deliverable, validation, sibling awareness, and escalation. Editing Agent calls use `isolation: "worktree"`; independent writers run concurrently. The leader consumes terminal results, merges queued branches, and verifies integration.
 

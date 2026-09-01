@@ -82,6 +82,8 @@ export const REQUIRED_HOOKS = [
   'thinking-route.mjs',
   'verify-deliverables.mjs',
   'worker-suggest.mjs',
+  'workflow-route-guard.mjs',
+  'workflow-route-state.mjs',
   'worktree-archive.mjs',
   'worktree-bootstrap.mjs',
 ];

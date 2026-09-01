@@ -82,7 +82,7 @@ if (!accepted) {
 }
 
 phase('Fix')
-const fix = await dispatchAgent(agent, 'fix-author', `Produce the smallest fix + regression test for bug ${BUG_ID} based on the accepted hypothesis. Do not commit, push, publish, or deploy.\n${barrierRef({ runId: RUN_ID, phase: 'Hypothesis', label: 'hypothesis:initial', summary: accepted.hypothesis?.cause ? accepted.hypothesis.cause.slice(0, 200) : 'accepted hypothesis' }).promptBlock}`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'fix', phase: 'Fix' })
+const fix = await dispatchAgent(agent, 'fix-author', `Implement the smallest fix + regression test for bug ${BUG_ID} based on the accepted hypothesis. Edit and test in your isolated worktree. Do not commit, push, publish, or deploy.\n${barrierRef({ runId: RUN_ID, phase: 'Hypothesis', label: 'hypothesis:initial', summary: accepted.hypothesis?.cause ? accepted.hypothesis.cause.slice(0, 200) : 'accepted hypothesis' }).promptBlock}`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'fix', phase: 'Fix', isolation: 'worktree' })
 writeArtifact({ runId: RUN_ID, phase: 'Fix', label: 'fix', payload: fix, summary: typeof fix === 'string' ? fix.slice(0, 200) : 'fix proposed', role: 'implementer' })
 
 phase('Verify')

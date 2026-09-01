@@ -1,5 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "agent": "mike",
   "mcpServers": {
     "bizar": {
       "command": "npx",
@@ -65,6 +66,8 @@
   "askUserQuestionTimeout": "5m",
   "showThinkingSummaries": true,
   "enableWorkflows": true,
+  "disableWorkflows": false,
+  "workflowSizeGuideline": "small",
   "disableAutoCompact": false,
   "autoDreamEnabled": true,
   "env": {

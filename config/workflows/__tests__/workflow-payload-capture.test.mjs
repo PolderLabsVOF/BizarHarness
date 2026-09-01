@@ -254,10 +254,11 @@ for (const script of SCRIPTS) {
     await runCapturedWorkflow(script.file, script.args, captured, ctx);
 
     const highRisk = captured.filter((entry) => entry.risk === 'high');
-    assert.ok(
-      highRisk.length >= 1,
-      `${script.name}: fixture must declare at least one high-risk lane (saw ${highRisk.length})`,
-    );
+    if (script.name === 'bizar-implement') {
+      assert.equal(highRisk.length, 0, 'bounded implementation must not add artificial high-risk review lanes');
+    } else {
+      assert.ok(highRisk.length >= 1, `${script.name}: fixture must declare at least one high-risk lane`);
+    }
     for (const entry of highRisk) {
       assert.notEqual(
         entry.payload.model, undefined,
@@ -297,7 +298,18 @@ test('workflow-payload-capture: all workflows together -> routingDecisionId is u
   assert.equal(unique.size, ids.length, `every routingDecisionId must be unique (saw ${ids.length} calls, ${unique.size} unique)`);
 });
 
-test('workflow-payload-capture: every fixture workflow has at least 2 high-risk captures', async () => {
+test('workflow-payload-capture: every editing lane is worktree isolated', async () => {
+  for (const script of SCRIPTS) {
+    const captured = [];
+    await runCapturedWorkflow(script.file, script.args, captured, makeFixtureContext());
+    const editing = captured.filter((entry) => entry.label === 'fix' || String(entry.label).startsWith('implement:'));
+    for (const entry of editing) {
+      assert.equal(entry.payload.isolation, 'worktree', `${script.name}/${entry.label}`);
+    }
+  }
+});
+
+test('workflow-payload-capture: shaped workflows retain high-risk review while bounded implementation stays lean', async () => {
   // IMP-014 acceptance gate requires high-risk lanes to always pick a
   // concrete model. Each workflow must declare at least 2 high-risk
   // lanes (e.g., auditor + reviewer/verifier) so the invariant is
@@ -307,9 +319,7 @@ test('workflow-payload-capture: every fixture workflow has at least 2 high-risk 
     const ctx = makeFixtureContext();
     await runCapturedWorkflow(script.file, script.args, captured, ctx);
     const highRiskCount = captured.filter((entry) => entry.risk === 'high').length;
-    assert.ok(
-      highRiskCount >= 1,
-      `${script.name}: must capture at least 1 high-risk dispatch (saw ${highRiskCount})`,
-    );
+    if (script.name === 'bizar-implement') assert.equal(highRiskCount, 0);
+    else assert.ok(highRiskCount >= 1, `${script.name}: must capture at least 1 high-risk dispatch`);
   }
 });

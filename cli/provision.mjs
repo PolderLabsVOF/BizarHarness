@@ -608,6 +608,8 @@ const LEGACY_BIZAR_HOOK_FILES = new Set([
   'thinking-route.mjs',
   'verify-deliverables.mjs',
   'worker-suggest.mjs',
+  'workflow-route-guard.mjs',
+  'workflow-route-state.mjs',
   'worktree-bootstrap.mjs',
 ]);
 
@@ -835,7 +837,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const hook = (name, timeout = 15) => resolveHookCommand(name, timeout);
 
   // The shipped settings template (`config/claude/settings.json`) is the
-  // source of truth for defaultMode, worktree, enableWorkflows, etc. We
+  // source of truth for the main agent, worktree, workflows, etc. We
   // overlay Bizar-owned keys (mcpServers, hooks, env) on top so the installer
   // honors user preferences without having to fork the template here.
   // 10.22.0 / Phase 4 spirit-of-constraint fix: `model` and
@@ -848,6 +850,10 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const bizarSettings = {
     ...shipped,
     $schema: shipped.$schema || 'https://json.schemastore.org/claude-code-settings.json',
+    // Bizar must own the primary thread globally. A routing hook can add
+    // context, but only the agent setting applies Mike's system prompt and
+    // tool surface (including Workflow) to ordinary `claude` launches.
+    agent: 'mike',
     mcpServers: {
       bizar: {
         type: 'stdio',
@@ -892,6 +898,8 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       cleanupPeriodDays: 7,
     },
     enableWorkflows: shipped.enableWorkflows !== undefined ? shipped.enableWorkflows : true,
+    disableWorkflows: false,
+    workflowSizeGuideline: shipped.workflowSizeGuideline || 'small',
     alwaysThinkingEnabled: shipped.alwaysThinkingEnabled !== undefined ? shipped.alwaysThinkingEnabled : true,
     autoDreamEnabled: shipped.autoDreamEnabled !== undefined ? shipped.autoDreamEnabled : true,
     showThinkingSummaries: shipped.showThinkingSummaries !== undefined ? shipped.showThinkingSummaries : true,
@@ -990,10 +998,14 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     merged.autoMode = existing.autoMode || bizarSettings.autoMode;
     merged.attribution = existing.attribution || bizarSettings.attribution;
     merged.worktree = { ...(bizarSettings.worktree || {}), ...(existing.worktree || {}) };
-    for (const key of ['enableWorkflows', 'alwaysThinkingEnabled', 'autoDreamEnabled', 'showThinkingSummaries']) {
+    for (const key of ['enableWorkflows', 'disableWorkflows', 'workflowSizeGuideline', 'alwaysThinkingEnabled', 'autoDreamEnabled', 'showThinkingSummaries']) {
       if (merged[key] === undefined) merged[key] = bizarSettings[key];
     }
   }
+
+  // The installed harness owns the default main-thread role. Operators can
+  // still override it for one session with `claude --agent <name>`.
+  merged.agent = 'mike';
 
   // `model` is Bizar-owned routing policy, so refresh it on both ordinary and
   // forced provision runs. Do not erase an existing operator model if a

@@ -255,7 +255,7 @@ test('sessionstart-prime: external/version-sensitive docs bullet is in briefing 
   );
   assert.match(
     src,
-    /Direct small known local fixes; use one isolated worker when useful; use parallel worktrees only for independent scopes/,
-    'expected fast-path boundary in sessionstart-prime.mjs',
+    /Only an unmistakably tiny single-target copy\/style\/format edit is direct; every other change enters the matching native workflow/,
+    'expected workflow-first boundary in sessionstart-prime.mjs',
   );
 });
