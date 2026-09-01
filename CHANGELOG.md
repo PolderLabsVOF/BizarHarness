@@ -1,5 +1,17 @@
 # Changelog
 
+## [10.23.6] - 2026-09-01
+
+### Fixed
+
+- Start ordinary Claude sessions as Mike and require a successful native Bizar
+  workflow before substantive primary-session mutation; only unmistakably tiny
+  single-target copy, style, or formatting edits remain direct.
+- Keep failed, blocked, cancelled, budget-exhausted, errored, and status-less
+  workflow results locked while allowing narrowly scoped read-only Git review.
+- Use one isolated implementation worker for bounded tasks and parallel
+  worktree lanes only when writable scopes are genuinely independent.
+
 ## [10.23.5] - 2026-09-01
 
 ### Added

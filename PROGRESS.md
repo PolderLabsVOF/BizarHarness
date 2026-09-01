@@ -2,6 +2,25 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — 10.23.6 workflow-routing release (2026-09-01)
+
+The user authorized push and publication of commit `c7734b1`. Registry, tag,
+and workspace versions are aligned at 10.23.5; npm authentication is valid as
+`drb0rk`, and `master` targets `origin`. Release 10.23.6 will synchronize the
+root package, SDK package, SDK constant, and changelog; rerun package and
+integration gates; commit and tag; push `master` plus the tag; publish SDK
+before the root package; then install the registry build and verify doctor and
+Claude startup. Existing untracked operator files remain excluded.
+
+Release preparation is complete. Versions and changelog are synchronized at
+10.23.6. Removed-surface, repository-structure, architecture, and TypeScript
+gates pass; SDK tests pass 513/513, retained Node/harness tests pass 1,067/1,067,
+E2E passes 13/13, and clean-check passes 5/5. npm dry-pack identifies the root
+artifact as `@polderlabs/bizar@10.23.6` with 375 files and both new routing
+hooks, and the SDK artifact as `@polderlabs/bizar-sdk@10.23.6` with 196 files
+and its required runtime exports. Next: staged simplify review, release commit,
+tag, push, ordered publication, registry verification, and clean install smoke.
+
 ## In Progress — workflow-first primary routing (2026-09-01)
 
 The installed 10.23.5 routing policy is too permissive: its lexical fast path
