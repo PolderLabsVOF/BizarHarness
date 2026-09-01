@@ -84,7 +84,7 @@ test('event dispatcher preserves tool and agent matcher scopes', () => {
     'pretooluse-editwrite', 'path-ownership-guard',
   ]);
   assert.deepEqual(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Read' })), []);
-  assert.deepEqual(selectEventChain('post-tool-use', JSON.stringify({ tool_name: 'Bash' })), ['auto-instinct']);
+  assert.deepEqual(selectEventChain('post-tool-use', JSON.stringify({ tool_name: 'Bash' })), []);
   assert.deepEqual(selectEventChain('subagent-start', JSON.stringify({ agent_type: 'greg' })), ['agent-grounding']);
   // advisor-context only fires for reviewers/debug specialists (@linda, @carl).
   // @karen is a fresh-task implementer and no longer receives the parent dump.
@@ -102,7 +102,7 @@ test('event dispatcher preserves tool and agent matcher scopes', () => {
     'agent-grounding', 'advisor-context', 'worktree-bootstrap',
   ]);
   assert.deepEqual(selectEventChain('subagent-stop', JSON.stringify({ agent_type: 'karen' })), [
-    'verify-deliverables', 'worktree-archive',
+    'team-lifecycle', 'verify-deliverables', 'worktree-archive',
   ]);
 });
 

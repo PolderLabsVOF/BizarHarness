@@ -43,9 +43,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
-
-const HOOK_LOG_DIR = join(homedir(), '.config', 'bizar', 'hook-logs');
+import { resolveBizarHome, resolveClaudeConfigDir, resolveGlobalModelRouter } from '../../../cli/config-paths.mjs';
 
 function readJsonIfObject(path) {
   if (!existsSync(path)) return null;
@@ -58,11 +56,7 @@ function readJsonIfObject(path) {
 }
 
 function readRouterPath() {
-  const envOverride = process.env.BIZAR_MODEL_ROUTER_CONFIG;
-  if (envOverride && typeof envOverride === 'string' && envOverride.trim()) {
-    return envOverride;
-  }
-  return join(homedir(), '.config', 'bizar', 'config', 'claude', 'model-router.json');
+  return resolveGlobalModelRouter();
 }
 
 /**
@@ -76,7 +70,7 @@ function readRouterPath() {
  */
 function readDisabledProviders() {
   const bizarPath = readRouterPath();
-  const legacyPath = join(homedir(), '.claude', 'model-router.json');
+  const legacyPath = join(resolveClaudeConfigDir(), 'model-router.json');
   const extract = (parsed) => {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     if (!Array.isArray(parsed.disabledProviders)) return null;
@@ -129,7 +123,7 @@ function filterDisabled(ids, disabled) {
 }
 
 function readSettingsPath() {
-  return join(homedir(), '.claude', 'settings.json');
+  return join(resolveClaudeConfigDir(), 'settings.json');
 }
 
 // Mirrors `cli/commands/models.mjs#deriveModelLabel` without the profile
@@ -161,10 +155,11 @@ function atomicWriteJson(path, value) {
 
 function logEvent(entry) {
   try {
-    mkdirSync(HOOK_LOG_DIR, { recursive: true });
+    const hookLogDir = join(resolveBizarHome(), 'hook-logs');
+    mkdirSync(hookLogDir, { recursive: true, mode: 0o700 });
     const today = new Date().toISOString().slice(0, 10);
     appendFileSync(
-      join(HOOK_LOG_DIR, `model-sync-${today}.jsonl`),
+      join(hookLogDir, `model-sync-${today}.jsonl`),
       JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n',
     );
   } catch {
@@ -197,12 +192,18 @@ function syncOnce() {
   // surfaces e.g. `anthropic/*` after a session restart. Dual-path read
   // matches `cli/commands/models.mjs#readDisabledProviders`.
   const disabled = readDisabledProviders();
-  const liveIds = filterDisabled(
+  const selectedIds = filterDisabled(
     models.filter((id) => typeof id === 'string' && id.trim()),
     disabled,
   );
+  const tierIds = Object.values(router?.tiers || {}).flatMap((tier) => (
+    Array.isArray(tier?.models) ? tier.models : []
+  ));
+  // Explicit picks lead; otherwise synchronize the configured tier pool so a
+  // fresh install cannot fall back to Claude Code's provider default.
+  const liveIds = [...new Set([...selectedIds, ...filterDisabled(tierIds, disabled)])];
   if (liveIds.length === 0) {
-    return { applied: 0, modelAfter: null, skipped: 'no-userSelected' };
+    return { applied: 0, modelAfter: null, skipped: 'no-enabled-configured-model' };
   }
 
   const settingsPath = readSettingsPath();
@@ -226,7 +227,7 @@ function syncOnce() {
   settings.modelOverrides = Object.fromEntries(liveIds.map((id) => [id, id]));
 
   let modelChanged = false;
-  if (typeof settings.model === 'string' && !liveIds.includes(settings.model)) {
+  if (typeof settings.model !== 'string' || !liveIds.includes(settings.model)) {
     settings.model = liveIds[0];
     modelChanged = true;
   }

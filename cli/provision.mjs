@@ -31,6 +31,7 @@ import {
 import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveBizarHome } from './config-paths.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -72,8 +73,7 @@ export const CLAUDE_DIR = resolveClaudeDir();
  * lazily so callers can override `BIZAR_HOME` per-invocation via the
  * process environment, e.g. `BIZAR_HOME=/tmp/bizar node cli/bin.mjs install`. */
 function computeBizarHome() {
-  return process.env.BIZAR_HOME
-    || join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'bizar');
+  return resolveBizarHome();
 }
 /** Back-compat: `BIZAR_HOME` is re-evaluated on every read. Use this everywhere
  * instead of capturing the value at module load. */
@@ -753,6 +753,30 @@ export function normalizePermissionLists(existing = {}, desired = {}) {
   };
 }
 
+export function configuredInstallModel(router) {
+  if (!router || typeof router !== 'object') return undefined;
+  const disabled = new Set(
+    (Array.isArray(router.disabledProviders) ? router.disabledProviders : [])
+      .filter((prefix) => typeof prefix === 'string' && prefix.trim())
+      .map((prefix) => prefix.trim().toLowerCase()),
+  );
+  const enabled = (id) => typeof id === 'string' && id.trim()
+    && ![...disabled].some((prefix) => id.trim().toLowerCase().startsWith(prefix));
+  const userModels = Array.isArray(router.userSelected?.models) ? router.userSelected.models : [];
+  const picked = userModels.find(enabled);
+  if (picked) return picked.trim();
+  for (const tier of Object.values(router.tiers || {})) {
+    const candidate = Array.isArray(tier?.models) ? tier.models.find(enabled) : undefined;
+    if (candidate) return candidate.trim();
+  }
+  return undefined;
+}
+
+export function configuredModelContextTokens(router, modelId) {
+  const value = router?.userSelected?.profiles?.[modelId]?.limits?.contextTokens;
+  return Number.isSafeInteger(value) && value >= 100_000 ? value : undefined;
+}
+
 export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const fp = join(CLAUDE_DIR, 'settings.json');
   const existing = readJsonSafe(fp, {}) || {};
@@ -833,7 +857,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       semble: { type: 'stdio', command: 'semble', args: ['mcp'] },
       'agent-browser': { type: 'stdio', command: 'agent-browser', args: ['mcp'] },
     },
-    // The shipped template `config/claude/settings.json` always defines
+  // The shipped template `config/claude/settings.json` always defines
     // `permissions` (it is part of the invariant surface required by the
     // F-176 "full permissions + advisory hooks" policy). We assign
     // directly so an accidental deletion in the template fails fast at
@@ -908,32 +932,33 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     },
   };
 
-  // 10.22.0 / Phase 4: derive `model` and `modelOverrides` from the
-  // operator's `userSelected.models[0]`. Both keys are omitted entirely
-  // when the operator has not picked anything — Claude Code inherits its
-  // session default. Dual-path read matches
+  // Use an explicit configured model for the parent session. A user pick
+  // wins; otherwise the first enabled configured tier candidate is used.
+  // This prevents Claude Code from falling through to an unconfigured
+  // provider default when `userSelected.models` is intentionally empty.
+  // Dual-path read matches
   // `cli/commands/models.mjs#readDisabledProviders` and
   // `cli/commands/upgrade-defaults.mjs#readUserSelectedModels`.
   const bizarRouterPath = process.env.BIZAR_MODEL_ROUTER_CONFIG?.trim()
     || join(BIZAR_HOME(), 'config', 'claude', 'model-router.json');
   const legacyRouterPath = join(CLAUDE_DIR, 'model-router.json');
-  let userSelectedModels = [];
+  let installModel;
+  let installContextTokens;
   for (const p of [bizarRouterPath, legacyRouterPath]) {
     if (!existsSync(p)) continue;
     const parsed = readJsonSafe(p, null);
     if (!parsed || typeof parsed !== 'object') continue;
-    const list = Array.isArray(parsed?.userSelected?.models)
-      ? parsed.userSelected.models.filter((id) => typeof id === 'string' && id && id.trim())
-      : [];
-    if (list.length > 0) { userSelectedModels = list; break; }
-    // Bizar path exists with explicit empty `userSelected.models` —
-    // honour that intent and stop the fallback walk.
+    installModel = configuredInstallModel(parsed);
+    installContextTokens = installModel ? configuredModelContextTokens(parsed, installModel) : undefined;
+    if (installModel) break;
+    // The Bizar path is authoritative even when it has no enabled candidates.
     if (p === bizarRouterPath) break;
   }
-  const installModel = userSelectedModels[0];
   if (installModel) {
     bizarSettings.model = installModel;
     bizarSettings.modelOverrides = { [installModel]: installModel };
+    const configuredContext = pickEnv('CLAUDE_CODE_MAX_CONTEXT_TOKENS') || installContextTokens;
+    if (configuredContext) bizarSettings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(configuredContext);
   } else {
     delete bizarSettings.model;
     delete bizarSettings.modelOverrides;
@@ -966,6 +991,23 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
       if (merged[key] === undefined) merged[key] = bizarSettings[key];
     }
   }
+
+  // `model` is Bizar-owned routing policy, so refresh it on both ordinary and
+  // forced provision runs. Do not erase an existing operator model if a
+  // malformed router has no enabled candidate; dispatch will fail closed.
+  if (installModel) {
+    merged.model = installModel;
+    merged.modelOverrides = { [installModel]: installModel };
+  }
+
+  // Auto-compaction is part of the Bizar reliability contract. Remove legacy
+  // opt-out environment flags when provisioning so long sessions compact
+  // before the context limit; `/compact` remains available for manual use.
+  if (merged.env && typeof merged.env === 'object') {
+    delete merged.env.DISABLE_AUTO_COMPACT;
+    delete merged.env.DISABLE_COMPACT;
+  }
+  merged.disableAutoCompact = false;
 
   if (dryRun) return { ok: true, message: `[dry-run] would write ${fp}` };
   ensureDir(CLAUDE_DIR);
@@ -1320,6 +1362,7 @@ export const FORCE_CLEAN_PRESERVE_ENV_KEYS = Object.freeze([
   'ANTHROPIC_MODEL',
   'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',
   'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS',
+  'CLAUDE_CODE_MAX_CONTEXT_TOKENS',
 ]);
 
 /**

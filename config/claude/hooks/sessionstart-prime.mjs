@@ -31,10 +31,11 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildLearningContext } from '../../../cli/commands/learn.mjs';
+import { resolveBizarHome } from '../../../cli/config-paths.mjs';
 
 const MAX_BRIEFING = 800; // hard cap, characters
 const PROJECT_NAME = 'BizarHarness';
-const HOOK_LOG_DIR = '.config/bizar/hook-logs';
 const SESSION_STATE = '.bizar/session-state.json';
 
 // ── Tiny helpers (no external deps) ────────────────────────────────────────
@@ -79,10 +80,10 @@ function firstParagraphAfter(src, marker) {
 
 function logLifecycle(cwd, sessionId, source) {
   try {
-    const dir = join(cwd, HOOK_LOG_DIR);
+    const dir = join(resolveBizarHome({ cwd }), 'hook-logs');
     const today = new Date().toISOString().slice(0, 10);
     const logFile = join(dir, `task-start-${today}.jsonl`);
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
     appendFileSync(
       logFile,
       JSON.stringify({
@@ -90,6 +91,7 @@ function logLifecycle(cwd, sessionId, source) {
         sessionId: sessionId || null,
         source,
       }) + '\n',
+      { mode: 0o600 },
     );
   } catch {
     /* best-effort */
@@ -184,15 +186,13 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
     }
   }
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
-  lines.push('- Rules: every request routes through Bizar agents; external APIs require current official docs via WebSearch/WebFetch; WIP=1 honored.');
-  lines.push('- Always fetch official docs (WebSearch + WebFetch) before non-trivial work and when uncertain — never guess at API names or command syntax.');
-  lines.push('- **You ARE @mike**, the Office Manager and default primary session agent. You are a team lead, NOT an engineer. You NEVER develop, debug, or research directly. Your only direct tools are `Agent`, `Read`, `WebFetch`, `WebSearch`. Everything else is dispatched to subagents in parallel.');
-  lines.push('- First move: confirm scope, then read PROGRESS.md and feature_list.json.');
-  lines.push('- When `<task-notification>` arrives, read the `<result>` and continue — do not skip past it as background noise.');
+  lines.push('- You are @mike. Direct small known local fixes; use one isolated worker when useful; use parallel worktrees only for independent scopes; shaped work gets only risk-reducing phases.');
+  lines.push('- External/version-sensitive work requires current official docs via WebSearch/WebFetch. Use relevant installed skills; apply i-have-adhd to user output. WIP=1.');
+  lines.push('- TaskCompleted/SubagentStop/<task-notification> is terminal: consume <result>, mark done/failed, merge queued work, continue the objective.');
   // Default-first-stop hint when nothing is active yet.
   if (featureBrief && featureBrief.active.length === 0) {
     lines.push(
-      '- Default pipeline: user → @mike → Phase 1 (@greg + @oscar research) → Phase 2 (@paul plan, @linda audit) → Phase 3 (@todd + @karen, with @ria when UI scope; then @linda post-impl + @kevin E2E + @todd test gate; final atomic commit by @steve). Trivial asks skip straight to @brenda.',
+      '- First move: read PROGRESS.md and feature_list.json; then choose direct, isolated, parallel, or shaped execution once.',
     );
   }
   return lines.join('\n');
@@ -203,14 +203,14 @@ function clearBriefing(cwd, recentCommits, progressLast) {
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   if (recentCommits.length > 0) lines.push(`- Last commit: ${recentCommits[0]}.`);
   lines.push('- Context preserved in same repo / cwd — only the model turn was reset.');
-  lines.push('- **You ARE @mike**. Team lead only — never develop, debug, or research directly.');
+  lines.push('- You are @mike: continue with the lightest execution shape that proves the result.');
   lines.push('- First move: continue from where the model left off; no need to reread project files.');
   return lines.join('\n');
 }
 
 function resumeBriefing(cwd, state) {
   const lines = ['Bizar SessionStart (resume):'];
-  lines.push('- **You ARE @mike**. Team lead only — never develop, debug, or research directly. Only `Agent`, `Read`, `WebFetch`, `WebSearch` are direct; everything else is dispatched in parallel.');
+  lines.push('- You are @mike: restore state, then use direct work or bounded delegation based on actual complexity.');
   if (state) {
     if (state.activeFeature) lines.push(`- Last active feature: ${state.activeFeature}.`);
     if (state.reason) lines.push(`- Last session ended with: ${state.reason}.`);
@@ -238,7 +238,7 @@ function buildBriefing(input) {
 
   if (source === 'resume') {
     const state = sessionState(cwd);
-    return clip(resumeBriefing(cwd, state), MAX_BRIEFING);
+    return clip([resumeBriefing(cwd, state), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
   }
 
   const progressSrc = readIfExists(join(cwd, 'PROGRESS.md'));
@@ -248,12 +248,12 @@ function buildBriefing(input) {
   const projectLine = projectSummary(cwd);
 
   if (source === 'clear') {
-    return clip(clearBriefing(cwd, recentCommits, progressLast), MAX_BRIEFING);
+    return clip([clearBriefing(cwd, recentCommits, progressLast), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
   }
 
   // Default: startup.
   return clip(
-    startupBriefing(cwd, featureBrief, recentCommits, projectLine, progressLast),
+    [startupBriefing(cwd, featureBrief, recentCommits, projectLine, progressLast), buildLearningContext({ cwd })].filter(Boolean).join('\n'),
     MAX_BRIEFING,
   );
 }

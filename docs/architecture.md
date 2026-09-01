@@ -149,7 +149,10 @@ ONLY the user-selected models from `model-router.json#userSelected` (plus a
 total-available count for context) — never the raw gateway inventory. This
 prevents dozens of unrelated gateway IDs from flooding the model's context.
 
-The MCP server exposes nine tools only: plan CRUD, loop state, graph query/path, and read-only instinct/decision records. Tool handlers operate on local files and do not call a local HTTP service.
+The MCP server exposes 14 tools: plan actions, loop state, graph query/path,
+read-only instinct/decision records, and explicit task, workflow, control,
+audit, and model-list boundaries. Tool handlers operate on local files and do
+not call a local HTTP service.
 
 ## Autonomy and approval
 

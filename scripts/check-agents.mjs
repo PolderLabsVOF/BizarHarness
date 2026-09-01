@@ -26,7 +26,9 @@ const AGENT_FILES = readdirSync(agentsDir)
 let failed = 0;
 const rows = [];
 const names = new Map();
-const NON_ISOLATED_WRITERS = new Set(['it-lead.md']);
+// Primary integration agents write in the user's current worktree. Dispatched
+// writers still require call-level worktree isolation.
+const NON_ISOLATED_WRITERS = new Set(['it-lead.md', 'office-manager.md']);
 
 for (const file of AGENT_FILES) {
   const path = join(agentsDir, file);

@@ -12,14 +12,13 @@
 
 import chalk from 'chalk';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HOME = homedir();
+import { resolveClaudeConfigDir, resolveGlobalModelRouter } from '../config-paths.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, '..', '..');
-const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR?.trim() || join(HOME, '.claude');
+const CLAUDE_DIR = resolveClaudeConfigDir();
 
 function listDir(dir, ext) {
   if (!existsSync(dir)) return [];
@@ -81,7 +80,7 @@ export async function runTools(cmdArgs) {
 
   const settingsPath = join(CLAUDE_DIR, 'settings.json');
   const hasSettings = existsSync(settingsPath);
-  const modelRouterPath = join(CLAUDE_DIR, 'model-router.json');
+  const modelRouterPath = resolveGlobalModelRouter();
   const hasModelRouter = existsSync(modelRouterPath);
 
   const summary = {
@@ -121,4 +120,10 @@ export async function runTools(cmdArgs) {
   console.log(`    ${hasSettings ? '✓' : '✗'} ${settingsPath}`);
   console.log(chalk.bold('  model-router'));
   console.log(`    ${hasModelRouter ? '✓' : '✗'} ${modelRouterPath}`);
+}
+
+export async function run(name, args, isHelpRequest) {
+  if (name !== 'tools') return false;
+  await runTools(isHelpRequest ? ['--help'] : args);
+  return true;
 }

@@ -1,15 +1,11 @@
 ---
-description: Update Bizar, the SDK, and the agent-browser binary to the latest pinned versions.
+description: Re-provision the currently installed Bizar package into Claude Code.
 allowed-tools: Read, Bash
 ---
 
-# /update — refresh Bizar + SDK + agent-browser
+# /update
 
-Runs `bizar update`, which:
-
-1. Installs the latest matching `@polderlabs/bizar` and `@polderlabs/bizar-sdk` from npm.
-2. Refreshes `agent-browser` (the Playwright-driven browser harness used by the `support-tech` agent and `verify-deliverables` hook).
-3. Re-runs `bizar install` so the new SDK and binary paths land in `~/.claude/settings.json`.
-
-If a Claude Code release breaks the bundled MCP registration, run
-`bizar repair` afterwards.
+Run `bizar update`. This re-emits the assets from the currently executing Bizar
+package; it does not download a newer npm version. To upgrade first, install the
+desired `@polderlabs/bizar` version with npm, then run `bizar update --force
+--yes` and `bizar validate`.

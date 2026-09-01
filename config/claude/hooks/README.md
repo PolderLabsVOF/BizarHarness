@@ -15,8 +15,8 @@ All hooks read Claude Code JSON from stdin and emit either no decision, addition
 | `telemetry.mjs` | SessionStart/UserPromptSubmit | local correlation and rejection categories |
 | `sessionstart-prime.mjs` | SessionStart | bounded project and handoff context |
 | `sessionend-recall.mjs` | SessionEnd | bounded session record and handoff |
-| `learning-extract.mjs`, `auto-instinct.sh` | lifecycle/tool events | compact learning evidence |
-| `precompact-priorities.sh` | PreCompact | preserve questions, causes, exact evidence, decisions, and approvals |
+| `telemetry.mjs` | lifecycle/prompt events | fingerprint-only bounded correlation evidence |
+| `precompact-priorities.sh` | PreCompact | atomically checkpoint bounded state and preserve questions, causes, exact evidence, decisions, and approvals |
 | `advisor-context.mjs` | SubagentStart | bounded parent transcript for reviewers/debuggers |
 
 Project hook commands use `$CLAUDE_PROJECT_DIR`. `cli/provision.mjs` writes user-level settings with absolute paths under `~/.claude/hooks`, so the same scripts work outside this checkout.

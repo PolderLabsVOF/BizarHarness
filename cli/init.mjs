@@ -87,6 +87,17 @@ export function writePrePushNotesFile(bizarDir) {
   console.log(chalk.green(`  ✓ Created ${ppnPath}`));
 }
 
+export function initializeProjectLearningStore(bizarDir) {
+  const learningDir = join(bizarDir, 'learning');
+  mkdirSync(learningDir, { recursive: true, mode: 0o700 });
+  const projectLessons = join(learningDir, 'project-lessons.json');
+  if (!existsSync(projectLessons)) {
+    writeFileSync(projectLessons, `${JSON.stringify({ schema: 'bizar.learning.v1', scope: 'project', items: [], updatedAt: null }, null, 2)}\n`, { mode: 0o600 });
+    return { created: true, path: projectLessons };
+  }
+  return { created: false, path: projectLessons };
+}
+
 export async function runInit(cwd, opts = {}) {
   console.log(chalk.bold.hex('#10b981')('\n  ᛗ BIZARHARNESS INIT ᛗ\n'));
 
@@ -166,68 +177,11 @@ ${stack.runner ? `- Dev: \`${stack.runner}\`` : ''}
   writeFileSync(projPath, projectMd);
   console.log(chalk.green(`  ✓ Created ${projPath}`));
 
-  // Generate AGENTS_SELF_IMPROVEMENT.md if not exists
-  const siPath = join(bizarDir, 'AGENTS_SELF_IMPROVEMENT.md');
-  if (!existsSync(siPath)) {
-    writeFileSync(siPath, `# Agents Self-Improvement Log
-
-## Active Rules
-- Use BizarHarness Always-On Rules
-- Cost-aware routing: prefer cheapest capable agent
-- Always split implementation across 2+ parallel agents
-
-## Entries
-`);
-    console.log(chalk.green(`  ✓ Created ${siPath}`));
-  }
+  const projectLearning = initializeProjectLearningStore(bizarDir);
+  if (projectLearning.created) process.stdout.write(`${chalk.green(`  ✓ Created ${projectLearning.path}`)}\n`);
 
   // Generate PRE_PUSH_NOTES.md
   writePrePushNotesFile(bizarDir);
-
-  // Build per-project knowledge graph (graphify -> .bizar/graph/)
-  // Soft step: never fails init. If graphify is missing or build errors,
-  // the user can retry manually with `bizar graph build`.
-  console.log(chalk.bold('\n--- Graph ---\n'));
-
-  // Check for the graphify binary on PATH first (uv tool install shim).
-  // Falls back to python -m for pip/pipx installs.
-  const whichCmd = process.platform === 'win32' ? 'where' : 'which';
-  const whichCheck = spawnSync(whichCmd, ['graphify'], { encoding: 'utf8', timeout: 5000 });
-  let graphifyAvailable = whichCheck.status === 0 && (whichCheck.stdout || '').trim().length > 0;
-
-  if (!graphifyAvailable) {
-    const python = process.platform === 'win32' ? 'py' : 'python3';
-    const detectGraphify = spawnSync(python, ['-c', 'import graphify; print(graphify.__version__)'], {
-      cwd,
-      encoding: 'utf8',
-      timeout: 5000,
-    });
-    graphifyAvailable = detectGraphify.status === 0 && (detectGraphify.stdout || '').trim().length > 0;
-  }
-
-  if (!graphifyAvailable) {
-    console.log(chalk.yellow('  graphify not detected — skipping project graph build.'));
-    console.log(chalk.dim('  Install with: pip install graphifyy  (or pipx install graphifyy)'));
-    console.log(chalk.dim('  Then re-run:  bizar graph build'));
-    console.log(chalk.dim('  The graph will land in .bizar/graph/ inside this project.'));
-  } else {
-    console.log(chalk.dim('  Building project knowledge graph (.bizar/graph/)...'));
-    // npx resolves "bizar" via local package.json bin field (or global install).
-    // Fallback for environments without global bizar: node <repo>/cli/bin.mjs graph build
-    const buildResult = spawnSync('npx', ['bizar', 'graph', 'build'], {
-      cwd,
-      stdio: 'inherit',
-      timeout: 5 * 60 * 1000,
-    });
-    if (buildResult.status === 0) {
-      console.log(chalk.green('  ✓ Graph built at .bizar/graph/ — query with: bizar graph query "<concept>"'));
-    } else {
-      const code = buildResult.status !== null ? buildResult.status : (buildResult.signal || '?');
-      console.log(chalk.yellow(`  Graph build failed (exit ${code}). You can retry manually:`));
-      console.log(chalk.dim('    bizar graph build'));
-      console.log(chalk.dim('  The graph will land in .bizar/graph/ inside this project.'));
-    }
-  }
 
   console.log(chalk.dim('\n  Project initialized. Run `@susan` to ask questions about the codebase.\n'));
   return true;

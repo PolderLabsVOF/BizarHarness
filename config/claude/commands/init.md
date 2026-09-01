@@ -9,7 +9,6 @@ Run `bizar init` from the project root to:
 1. Detect the project stack (language, framework, database, tools)
 2. Install relevant skills from the skills registry
 3. Create `.bizar/PROJECT.md` with stack and conventions
-4. Create `.bizar/AGENTS_SELF_IMPROVEMENT.md` (only if missing)
-5. Build the per-project knowledge graph in `.bizar/graph/` (powered by graphify; skipped gracefully if graphify is not installed)
+4. Create the bounded `.bizar/learning/project-lessons.json` store (only if missing)
 
 After init, run `bizar doctor` to validate setup.

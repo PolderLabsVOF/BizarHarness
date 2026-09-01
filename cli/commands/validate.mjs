@@ -16,7 +16,7 @@
  *   - guarded autonomy hooks, including approval, compaction, and advisor context
  *   - shipped slash commands in `~/.claude/commands/`
  *   - permissions.allow includes mcp__bizar__*
- *   - permissions.deny covers dangerous patterns
+ *   - the complete hook-enforced approval floor is wired
  *   - ~/.config/bizar/ exists (loop/runtime state)
  *
  * Exits non-zero if any check fails. Use `--json` for machine output.
@@ -26,37 +26,15 @@ import chalk from 'chalk';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { homedir } from 'node:os';
+import { resolveBizarHome, resolveClaudeConfigDir, resolveGlobalModelRouter } from '../config-paths.mjs';
+import { configuredFallbackModels } from './models.mjs';
 
-const HOME = homedir();
-
-/**
- * Resolve the Claude Code global config directory.
- * Mirrors `cli/utils.mjs:claudeConfigDir()` → `~/.claude/`.
- */
-function claudeDir() {
-  if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {
-    return process.env.CLAUDE_CONFIG_DIR.trim();
-  }
-  if (process.platform === 'win32') {
-    return process.env.APPDATA
-      ? join(process.env.APPDATA, 'Claude')
-      : join(HOME, '.claude');
-  }
-  return join(HOME, '.claude');
-}
-
-/**
- * Resolve the Bizar runtime-state directory.
- */
-function bizarHome() {
-  return process.env.BIZAR_HOME
-    || join(process.env.XDG_CONFIG_HOME || join(HOME, '.config'), 'bizar');
-}
+function claudeDir() { return resolveClaudeConfigDir(); }
+function bizarHome() { return resolveBizarHome(); }
 
 const REPO_ROOT = process.env.BIZAR_REPO_ROOT || process.cwd();
 
-const REQUIRED_AGENTS = [
+export const REQUIRED_AGENTS = [
   'brand-designer.md', 'debug-specialist.md', 'exec-assistant.md',
   'help-desk.md', 'it-lead.md', 'knowledge-manager.md',
   'office-coordinator.md', 'office-greeter.md', 'office-manager.md',
@@ -65,30 +43,47 @@ const REQUIRED_AGENTS = [
   'ui-designer.md',
 ];
 
-const REQUIRED_COMMANDS = [
-  'audit.md', 'bizar.md', 'cron.md', 'explain.md', 'init.md', 'learn.md',
-  'plan.md', 'plow-through.md', 'pr-review.md', 'setup-provider.md',
-  'spec.md', 'sprint.md', 'tailscale-serve.md', 'team.md', 'test.md',
-  'use-default.md', 'use-premium.md', 'validate.md',
+export const REQUIRED_COMMANDS = [
+  'artifact.md', 'audit.md', 'autopilot.md', 'backup.md', 'bizar.md',
+  'browser.md', 'cancel.md', 'cron.md', 'doctor.md', 'explain.md', 'init.md',
+  'learn.md', 'migrate.md', 'plan.md', 'plow-through.md', 'pr-review.md',
+  'quick.md', 'ralph.md', 'ralplan.md', 'rca.md', 'repair.md', 'restore.md',
+  'setup-provider.md', 'spec.md', 'sprint.md', 'tailscale-serve.md', 'team.md',
+  'test.md', 'tier.md', 'tools.md', 'ultracode.md', 'ultraqa.md',
+  'ultrawork.md', 'update.md', 'upgrade-defaults.md', 'use-default.md',
+  'use-premium.md', 'validate.md', 'verify.md',
 ];
 
 // v6.3.0 — Claude Code hook adapter scripts (executable, .mjs extension).
-const REQUIRED_HOOKS = [
+export const REQUIRED_HOOKS = [
   'agent-grounding.mjs',
+  'agent-model-guard.mjs',
   'advisor-context.mjs',
+  'bizar-hook-wrapper.sh',
+  'completion-artifact.mjs',
   'content-style-guard.mjs',
+  'control-inbox.mjs',
   'git-workflow-guard.mjs',
-  'learning-extract.mjs',
+  'keyword-router.mjs',
+  'path-ownership-guard.mjs',
+  'permission-request.mjs',
+  'persistent-mode.mjs',
+  'post-tool-use-failure.mjs',
   'posttooluse-editwrite.mjs',
   'precompact-priorities.sh',
   'pretooluse-bash.mjs',
   'pretooluse-editwrite.mjs',
   'sessionend-recall.mjs',
+  'sessionstart-model-sync.mjs',
   'sessionstart-prime.mjs',
   'simplify-guard.mjs',
+  'team-lifecycle.mjs',
   'telemetry.mjs',
   'thinking-route.mjs',
+  'verify-deliverables.mjs',
   'worker-suggest.mjs',
+  'worktree-archive.mjs',
+  'worktree-bootstrap.mjs',
 ];
 
 function check(name, fn) {
@@ -176,18 +171,15 @@ const CHECKS = {
 
   'permissions-deny-dangerous': async () => {
     const cfg = readJsonSafe(settingsJsonPath());
-    const deny = cfg?.permissions?.deny || [];
-    const required = [
-      'Read(./.env)',
-      'Bash(rm -rf /)',
-      'Bash(sudo *)',
-      'Write(./node_modules/**)',
-    ];
-    const missing = required.filter((r) => !deny.includes(r));
-    if (missing.length > 0) {
-      return `missing ${missing.length} deny pattern(s) (advisory): ${missing.join(', ')}`;
+    const permissionHooks = cfg?.hooks?.PermissionRequest;
+    const preToolHooks = cfg?.hooks?.PreToolUse;
+    if (!Array.isArray(permissionHooks) || permissionHooks.length === 0) {
+      throw new Error('PermissionRequest approval-floor hook is not wired');
     }
-    return `${deny.length} deny pattern(s) — all required present`;
+    if (!Array.isArray(preToolHooks) || preToolHooks.length === 0) {
+      throw new Error('PreToolUse safety hooks are not wired');
+    }
+    return 'hook-enforced approval and destructive-action floor wired';
   },
 
   'hooks-pretooluse-wired': async () => {
@@ -232,9 +224,22 @@ const CHECKS = {
     const cfg = readJsonSafe(settingsJsonPath());
     const arr = cfg?.hooks?.SessionEnd;
     if (!Array.isArray(arr) || arr.length === 0) {
-      return 'no SessionEnd hook wired (advisory)';
+      throw new Error('no SessionEnd hook wired in settings.json');
     }
     return `${arr.length} SessionEnd hook(s) wired`;
+  },
+
+  'hooks-complete-lifecycle': async () => {
+    const cfg = readJsonSafe(settingsJsonPath());
+    const required = [
+      'UserPromptSubmit', 'SessionStart', 'PreToolUse', 'PermissionRequest',
+      'PostToolUse', 'PostToolUseFailure', 'SubagentStart', 'SubagentStop',
+      'TaskCreated', 'TaskCompleted', 'TeammateIdle', 'PreCompact', 'Stop',
+      'SessionEnd',
+    ];
+    const missing = required.filter((event) => !Array.isArray(cfg?.hooks?.[event]) || cfg.hooks[event].length === 0);
+    if (missing.length > 0) throw new Error(`missing lifecycle events: ${missing.join(', ')}`);
+    return `all ${required.length} lifecycle events wired`;
   },
 
   'agent-files-installed': async () => {
@@ -345,7 +350,13 @@ const CHECKS = {
   'provider-reachable': async () => {
     const url = process.env.ANTHROPIC_BASE_URL || process.env.BIZAR_MODEL_ROUTER_URL;
     if (!url) {
-      return 'provider gateway not configured (using session default)';
+      const path = resolveGlobalModelRouter();
+      const router = readJsonSafe(path);
+      const fallback = router ? configuredFallbackModels(router) : [];
+      if (fallback.length === 0) {
+        throw new Error(`no gateway URL or enabled configured model in ${path}; implicit defaults are prohibited`);
+      }
+      return `no gateway URL; explicit configured fallback is ${fallback[0]}`;
     }
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 4000);
@@ -383,6 +394,7 @@ const CHECK_ORDER = [
   'hooks-sessionstart-wired',
   'hooks-userpromptsubmit-wired',
   'hooks-sessionend-wired',
+  'hooks-complete-lifecycle',
   'agent-files-installed',
   'agent-frontmatter-format',
   'slash-commands-installed',
@@ -400,8 +412,6 @@ const CHECK_ORDER = [
 const LENIENT_CHECKS = new Set([
   'claude-cli-reachable', // Claude Code CLI is normally on $PATH only on dev hosts; CI containers without it shouldn't fail validation
   'provider-reachable',
-  'permissions-deny-dangerous', // advisory — user may have intentionally customized
-  'hooks-sessionend-wired', // advisory — SessionEnd is optional
   'claude-settings-schema', // advisory — schema field is documentation
 ]);
 
@@ -422,9 +432,8 @@ export function showValidateHelp() {
       • claude CLI reachable + version
       • ~/.claude/settings.json parses + Bizar MCP server registered
       • permissions.allow includes mcp__bizar__*
-      • permissions.deny covers dangerous patterns
-      • hooks (PreToolUse / PostToolUse / SessionStart / UserPromptSubmit
-        / SessionEnd) wired in settings.json
+      • hook-enforced approval and destructive-action floor
+      • all 14 Claude Code lifecycle events wired in settings.json
       • all 16 agent files installed with unique Claude Code names
       • all shipped slash commands
       • all skills / rules / hooks mirrored to ~/.claude/
@@ -437,7 +446,7 @@ export function showValidateHelp() {
     2  Invalid --only argument
 
   Related:
-    bizar doctor          Simpler 8-point check (legacy)
+    bizar doctor          Concise install-integrity check
     bizar update          Refresh the install (re-runs the provisioner)
     bizar repair          Fix common issues (stale symlinks, version drift)
   `);

@@ -258,10 +258,10 @@ test('behavior-capture.ts exposes BEHAVIOR_DIR_MODE=0o700 + FORBIDDEN_BEHAVIOR_K
   }
 });
 
-test('worker-suggest.mjs reads via buildLearningContext and never echoes a prompt field', () => {
+test('worker-suggest.mjs reads bounded explicit learning and never echoes a prompt field', () => {
   const src = readFileSync(WORKER_SUGGEST_PATH, 'utf8');
   assert.match(src, /buildLearningContext/);
-  assert.match(src, /learning-behavior\.mjs/);
+  assert.match(src, /commands['"], 'learn\.mjs/);
   // Q4 invariant: no prompt-shaped field name appears in the hook source.
   for (const forbidden of ['promptText', 'rawPrompt', 'promptRedacted']) {
     assert.equal(

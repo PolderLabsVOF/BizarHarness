@@ -94,6 +94,7 @@ test('applyRefresh: updates profiles whose expiresAt < now, leaves fresh ones un
         { id: 'anthropic/claude-opus' },
       ],
       catalog: makeCatalog(),
+      disabledProviders: [],
       now: new Date('2026-08-26T12:00:00.000Z'),
     });
     assert.deepEqual(summary.refreshed, ['anthropic/claude-haiku']);
@@ -137,6 +138,7 @@ test('applyRefresh: operator overrides survive a refresh that would otherwise ov
       routerPath,
       candidates: [{ id: 'anthropic/claude-haiku' }],
       catalog: makeCatalog(),
+      disabledProviders: [],
       now: new Date('2026-08-26T12:00:00.000Z'),
     });
     assert.deepEqual(summary.refreshed, ['anthropic/claude-haiku']);
@@ -286,6 +288,29 @@ test('fetchModelsDevCatalog: stub server 200 returns parsed JSON body', async ()
   }
 });
 
+test('Models.dev catalog shape: nested models and full metadata are preserved', () => {
+  const enriched = modelsCmd.enrichModelsWithCapabilities([
+    { id: 'provider/demo' },
+  ], {
+    models: {
+      'provider/demo': {
+        id: 'provider/demo', name: 'Demo', description: 'desc', family: 'demo',
+        reasoning: true, tool_call: true, structured_output: true,
+        modalities: { input: ['text', 'image'], output: ['text'] },
+        limit: { context: 128000, output: 8192 }, cost: { input: 1, output: 2 },
+        knowledge: '2026-01', open_weights: true,
+      },
+    },
+  });
+  const [model] = enriched;
+  assert.equal(model.profile.name, 'Demo');
+  assert.deepEqual(model.profile.capabilities.inputModalities, ['text', 'image']);
+  assert.equal(model.profile.limits.contextTokens, 128000);
+  assert.deepEqual(model.profile.cost, { input: 1, output: 2 });
+  assert.equal(model.profile.knowledge, '2026-01');
+  assert.equal(model.profile.openWeights, true);
+});
+
 // ── 10.19.8 Phase 2: lazy Models.dev fetch + per-id enrichment ────────────
 
 test('enrichPicksByMetadata: enriches each picked id with bounded concurrency', async () => {
@@ -317,6 +342,19 @@ test('enrichPicksByMetadata: enriches each picked id with bounded concurrency', 
   }
   assert.equal(fetchCalls, 1, 'wholesale fetchFn called exactly once (not per-id)');
   assert.deepEqual(modelsDev, {}, 'wholesale fetch result echoed back');
+});
+
+test('enrichPicksByMetadata: merges provider catalog envelope with base metadata', async () => {
+  const { profiles } = await enrichPicksByMetadata({
+    candidates: [{ id: 'provider/demo' }],
+    pickedIds: ['provider/demo'],
+    fetchFn: async () => ({ models: { 'provider/demo': { id: 'provider/demo', name: 'Base', limit: { context: 32000 } } } }),
+    providerFetchFn: async () => ({ providers: { provider: { models: { 'provider/demo': { id: 'provider/demo', cost: { input: 3, output: 4 } } } } } }),
+  });
+  const profile = profiles.get('provider/demo');
+  assert.equal(profile.name, 'Base');
+  assert.equal(profile.limits.contextTokens, 32000);
+  assert.deepEqual(profile.cost, { input: 3, output: 4 });
 });
 
 test('enrichPicksByMetadata: per-id timeout falls back to _gateway.name', async () => {

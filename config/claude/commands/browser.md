@@ -12,7 +12,6 @@ Runs `bizar browser <subcommand>`:
 - `bizar browser update` — pulls the latest pinned release.
 - `bizar browser status` — prints version, Chromium revision, and the
   path the MCP server is registered at in `~/.claude/settings.json`.
-- `bizar browser uninstall` — removes the binary and clears the MCP entry.
 
 The agent-browser binary is registered as the `agent-browser` MCP server in
 `~/.claude/settings.json` during `bizar install`. Re-run `bizar repair` if

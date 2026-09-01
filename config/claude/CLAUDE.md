@@ -70,23 +70,26 @@ actions with `permissionDecision: "ask"`; that escalation list is the
 authoritative floor, not a starting point.
 
 Native dynamic workflows under `config/workflows/` and `~/.claude/workflows/`
-are the primary dispatch mechanism for non-trivial tasks. Mike dispatches a
-named workflow when the request maps to a research / implement / debug /
-review shape. For work that needs 3+ long-lived workers with bounded cross-
-talk, Mike invokes a workflow that fans out as a native agent team; the team
-is host-side state under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, and per
-Anthropic's docs `team_name` is deprecated and ignored. Plain `Agent` calls
-are reserved for trivial, single-shot, or fully isolated work. When two or
-more subtasks within a workflow have non-overlapping file scopes and no data
-dependency on each other's intermediate output, the orchestrator MUST dispatch
-them concurrently through `parallel([...])`. Sequential dispatch is reserved
-for dependent phases and integration.
+are the primary dispatch mechanism for shaped work (research / implement /
+debug / review). Small, deterministic, repository-local tasks go directly to
+one isolated worker: inspect, make the smallest change, and run the smallest
+proving check. Do not add research, planning, review, or duplicate workers to
+such tasks. For work that needs 3+ long-lived workers with bounded cross-talk,
+Mike invokes a workflow that fans out as a native agent team; the team is
+host-side state under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, and per
+Anthropic's docs `team_name` is deprecated and ignored. When two or more
+subtasks have non-overlapping writable scopes and no data dependency, the
+orchestrator MUST dispatch them concurrently through `parallel([...])`, each
+with call-level `isolation: "worktree"`. Sequential dispatch is reserved for
+dependent phases and integration; never create artificial parallel work.
 
-Agent roles are model-agnostic. Mike selects the cheapest sufficient tier for
-each dispatch. It passes a concrete model only when live discovery proves a
-configured tier candidate; otherwise it omits `model` and inherits the active
-session. Bizar never retries a failed dispatch by cycling aliases, providers, or
-tiers.
+Agent roles are model-agnostic. Mike selects the cheapest sufficient enabled
+configured-tier model for each dispatch, with explicit user picks taking
+precedence. It never omits `model` merely because live discovery is unavailable:
+an omitted override would let Claude Code select an unconfigured provider
+default. If no enabled configured candidate exists, dispatch fails with an
+actionable configuration error. Bizar never retries a failed dispatch by cycling
+aliases, providers, or tiers.
 
 The authoritative hard approval list (cannot be auto-approved) is: pushes, pull-request
 mutations, releases, package publication, deployments, production/shared-
@@ -122,26 +125,28 @@ not by Claude Code prompts.
 > - `Bash(wrangler deploy *)`
 > - `Bash(flyctl deploy *)`
 
-> Note: `disableAutoCompact: true` is shipped by default. Sessions rely on
-> manual `/compact` instead. Hook `precompact-priorities.sh` preserves
-> evidence and decisions on compaction.
+> Note: `disableAutoCompact: false` is shipped by default so Claude Code can
+> compact automatically before the context limit. Hook `precompact-priorities.sh`
+> snapshots bounded state and preserves evidence and decisions on compaction.
 Local `git commit` is always allowed silently via `permissions.allow`; the seven
 HITL categories above are gated by `permission-request.mjs` plus the advisory
 hook chain.
 
-Agents always fetch current official documentation via WebSearch + WebFetch at
-task start and whenever uncertainty appears during work. Guess-and-try is
-prohibited.
+Agents fetch current official documentation via WebSearch + WebFetch before
+acting on an external API, library, framework, CLI, configuration format, or
+version-sensitive behavior, and whenever such uncertainty appears. Purely
+repository-local fixes use source and tests directly; speculative
+guess-and-try remains prohibited.
 
 ## Execution model
 
 The autonomy and approval policy above governs this execution model. The project defaults to `acceptEdits`; eligible operators may opt into Claude Code Auto mode.
 
-Every non-empty primary request must use Claude Code's Agent tool to enter the
-Bizar agent pipeline through `office-manager` (`@mike`) before task analysis or
-implementation. Mike routes trivial work to `@brenda` and non-trivial work
-through the phased team. A session already running as a Bizar custom agent
-follows its assigned role and does not recursively dispatch itself.
+Every non-empty primary request enters Bizar through `office-manager` (`@mike`).
+Mike handles small, deterministic repository-local changes directly and uses
+the smallest proving check. It delegates when worktree isolation, specialist
+expertise, or real parallelism materially helps. A Bizar custom agent already
+executing its assigned role does not recursively dispatch itself.
 
 Every shipped agent has `WebSearch` access. Before proposing, explaining,
 troubleshooting, or implementing behavior from an external API, library,
@@ -151,15 +156,16 @@ relevant page. Guess-and-try integration work is prohibited. When official
 documentation is unavailable or ambiguous, inspect authoritative source code
 and report the evidence gap.
 
-For non-trivial requests, `office-manager` coordinates three ordered phases:
+For shaped requests, `office-manager` uses only the phases that reduce a known
+risk; direct tasks skip this pipeline:
 
 1. Research: `greg` (`research-analyst.md`) plus an implementation-context specialist.
 2. Plan: `planner` drafts; `qa-reviewer` challenges assumptions and test shape.
 3. Implement: engineering agents edit and test; review and verification follow before `commit-staged` asks for the final human commit confirmation.
 
-Use Claude Code's native Agent tool for Bizar routing on every request.
-Additional parallel fan-out remains bounded to scopes that materially improve
-speed, quality, or safety.
+Additional Agent fan-out remains bounded to scopes that materially improve
+speed, quality, or safety; concurrent writers always use call-level worktree
+isolation.
 
 ## Architecture
 
@@ -167,7 +173,7 @@ speed, quality, or safety.
 - `config/skills/` — canonical skills; `.claude/skills/` is the verified project mirror.
 - `.claude/commands/` — user-invoked workflows.
 - `.claude/hooks/` + `.claude/settings.json` — safety, routing, lifecycle, telemetry, compaction, reviewer-context, simplify, and HITL gates.
-- `packages/sdk/` — typed autonomy primitives and the nine-tool stdio MCP surface: plans, loops, graph queries, instincts, and decisions.
+- `packages/sdk/` — typed autonomy primitives and the 14-tool stdio MCP surface: plans, loops, graph queries, learning reads, tasks, workflows, control, audits, and model inventory.
 - `cli/` — install/provision, audit, validation, backup, cost/claim/task, OpenKan control, sandbox, and repair utilities.
 - `scripts/` + `.harness/` + `templates/` — verification, feature/eval state, audit output, and reusable contracts.
 

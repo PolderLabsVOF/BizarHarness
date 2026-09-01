@@ -18,12 +18,18 @@ const GATEWAY_KEYS = [
   'ANTHROPIC_AUTH_TOKEN',
 ];
 
-function runProductionWriter({ existing, force = false, env = {} } = {}) {
+function runProductionWriter({ existing, force = false, env = {}, router } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'bizar-settings-merge-'));
   const claudeDir = join(home, '.claude');
   const settingsPath = join(claudeDir, 'settings.json');
   mkdirSync(claudeDir, { recursive: true });
   if (existing) writeFileSync(settingsPath, `${JSON.stringify(existing)}\n`);
+  if (router) {
+    const routerDir = join(home, '.config', 'bizar', 'config', 'claude');
+    const routerPath = join(routerDir, 'model-router.json');
+    mkdirSync(routerDir, { recursive: true });
+    writeFileSync(routerPath, `${JSON.stringify(router)}\n`);
+  }
 
   const childEnv = {
     ...process.env,
@@ -83,6 +89,21 @@ describe('writeClaudeSettings gateway environment', () => {
       'gateway discovery env must not be emitted by the production writer',
     );
     assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
+  });
+
+  it('selected model metadata configures Claude Code context-window enforcement', () => {
+    const settings = runProductionWriter({
+      router: {
+        disabledProviders: [],
+        userSelected: {
+          models: ['provider/long-context'],
+          profiles: { 'provider/long-context': { limits: { contextTokens: 1048576 } } },
+        },
+        tiers: {},
+      },
+    });
+    assert.equal(settings.model, 'provider/long-context');
+    assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1048576');
   });
 
   it('normal updates preserve user values and omit gateway keys that were never set', () => {

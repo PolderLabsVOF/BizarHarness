@@ -28,6 +28,7 @@ function runHook(inputJson, cwd) {
     input: JSON.stringify(inputJson),
     encoding: 'utf8',
     cwd: cwd || process.cwd(),
+    env: { ...process.env, BIZAR_HOME: join(cwd || process.cwd(), '.test-bizar-home') },
     timeout: 8000,
   });
   return {
@@ -112,10 +113,10 @@ test('SessionStart: startup source emits structured briefing', () => {
     assert.match(ctx, /A test fixture for the SessionStart hook/);
     assert.match(ctx, /Active feature: F-103/);
     assert.match(ctx, /rewrite sessionstart-prime/);
-    assert.match(ctx, /WIP=1 honored/);
-    assert.match(ctx, /every request routes through Bizar agents/);
-    assert.match(ctx, /official docs via WebSearch\/WebFetch/);
-    assert.match(ctx, /First move:/);
+    assert.match(ctx, /WIP=1/);
+    assert.match(ctx, /You are @mike/);
+    assert.match(ctx, /External\/version-sensitive work requires current official docs via WebSearch\/WebFetch/);
+    assert.match(ctx, /Direct small known local fixes/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -260,6 +261,7 @@ test('SessionStart: invalid JSON on stdin exits 0 with empty briefing', () => {
       input: '{not valid json',
       encoding: 'utf8',
       cwd: dir,
+      env: { ...process.env, BIZAR_HOME: join(dir, '.test-bizar-home') },
       timeout: 8000,
     });
     assert.equal(r.status, 0);

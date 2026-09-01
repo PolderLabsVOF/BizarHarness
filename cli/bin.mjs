@@ -105,6 +105,11 @@ function showHelp() {
     repair              Fix common install issues
     heads-up <subcommand>  Manage pre-push / pre-release heads-ups
     browser                Install, update, and verify agent-browser
+    artifact               Toggle global browser completion artifacts
+    learn                  Manage bounded global preferences and project lessons
+    tools                  Inventory installed agents, skills, hooks, commands, and MCP tools
+    tier                   Explain the explicit configured model tier for a task
+    upgrade-defaults       Reapply safe Bizar-owned Claude defaults
     backup                 Create / list / verify / delete backups of BizarHarness state
     restore                Restore BizarHarness from a backup
     validate               Validate the Bizar install
@@ -124,6 +129,12 @@ function showHelp() {
     workflow <subcommand>  Session-bound autopilot workflow state
     hook <name>            Run a portable Claude Code hook
     worktree-merge <branch>  Merge a feature branch with archive tag (no work lost)
+    models                 Configure the global model picker and Models.dev metadata
+    evidence <subcommand>  Inspect model-routing evidence
+    improve <subcommand>   Propose and verify bounded self-edits
+    sandbox <subcommand>   Manage local execution sandboxes
+    explain-run <id>       Explain a recorded run
+    model                  Deprecated alias for models
 
   Examples:
     bizar install
@@ -434,6 +445,29 @@ async function main() {
         console.error(chalk.red(`  ✗ Usage: bizar models [--list|--set|--clear|--json] — run 'bizar models --help'`));
         process.exit(EXIT_USAGE);
       }
+      break;
+    }
+
+    case 'artifact': {
+      const mod = await importCommand('artifact');
+      if (!mod) { process.exit(EXIT_ERROR); return; }
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      break;
+    }
+
+    case 'learn': {
+      const mod = await importCommand('learn');
+      if (!mod) { process.exit(EXIT_ERROR); return; }
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      break;
+    }
+
+    case 'tools':
+    case 'tier':
+    case 'upgrade-defaults': {
+      const mod = await importCommand(cmd);
+      if (!mod) { process.exit(EXIT_ERROR); return; }
+      await mod.run(cmd, cmdArgs, isHelpRequest);
       break;
     }
 

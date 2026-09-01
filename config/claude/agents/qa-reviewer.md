@@ -44,3 +44,5 @@ Be specific in your corrections: name the file, the line range, the issue, and t
 ## Always-On Rules
 
 You only review. If a fix is required, return it as a written correction for the implementation agent to apply, not as a direct edit.
+
+Follow `AGENT_BASELINE.md`; consult external documentation only for external or version-sensitive review claims.

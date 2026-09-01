@@ -10,7 +10,7 @@ worktree-based background isolation:
 
 - `permissions.defaultMode = "bypassPermissions"`
 - `worktree.bgIsolation = "worktree"`
-- `model = "claude/minimax/MiniMax-M3"`
+- `model = first enabled user-selected or configured-tier model`
 - `alwaysThinkingEnabled = true`
 - `effortLevel = "high"`
 - `skipDangerousModePermissionPrompt = true`
@@ -24,13 +24,11 @@ unrelated key — `mcpServers`, `hooks`, `env`, `attribution`, `enabledPlugins`,
 
 ```bash
 # Preview the diff without writing.
-node "$(npm root -g)/@polderlabs/bizar/cli/commands/upgrade-defaults.mjs" --dry-run
+bizar upgrade-defaults --dry-run
 
 # Apply (writes a timestamped .bak-<stamp> alongside settings.json first).
-node "$(npm root -g)/@polderlabs/bizar/cli/commands/upgrade-defaults.mjs"
+bizar upgrade-defaults
 ```
 
-Why this is a separate command: `cli/provision.mjs` is currently locked to
-the F-163 scope and the runtime installer still emits `defaultMode:
-"acceptEdits"`. This command applies the user-favored defaults on top of
-the existing merge without depending on the installer change.
+This command preserves unrelated settings and creates a timestamped backup
+before changing Bizar-owned defaults.

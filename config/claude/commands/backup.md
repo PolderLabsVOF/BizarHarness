@@ -1,19 +1,16 @@
 ---
-description: Snapshot the Bizar runtime state under ~/.config/bizar/ and any project-level .bizar/ + .claude/skills/ mirror.
+description: Snapshot global Bizar state and relevant project-local state.
 allowed-tools: Read, Bash
 ---
 
 # /backup — snapshot Bizar state
 
-Runs `bizar backup`. It writes a timestamped tarball to
-`~/.config/bizar/backups/<UTC>/` containing:
+Run `bizar backup [label]`. It writes a timestamped directory under
+`~/.local/share/bizar/backups/` containing:
 
-- `~/.config/bizar/` — runtime config, telemetry, audit ledger, instinct log.
-- `<projectRoot>/.bizar/` — current project's operational records
-  (PROGRESS.md, control/, tasks.sqlite, learning/).
-- `<projectRoot>/.claude/skills/` and `<projectRoot>/.agents/skills/` —
-  any project-scoped skill mirrors.
-- `cli/__tests__/fixtures/` is excluded; no test fixture is shipped
-  in the archive.
+- `~/.config/bizar/` — user-global Bizar configuration and bounded runtime state.
+- `<projectRoot>/.bizar/` — current project's Bizar state.
+- Project-scoped Claude and agent skill mirrors when present.
 
-Backups are never overwritten — each invocation creates a new directory.
+The manifest records a SHA-256 hash for every copied file. Use
+`bizar backup verify <path>` before restoring. Backups are never overwritten.

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 /**
- * /tmp/test-cli-commands.mjs
  * Comprehensive validation of every `bizar` CLI command.
  *
  * Tests:
@@ -8,30 +7,17 @@
  *   - All case branches in cli/commands/util.mjs respond to --help
  *   - Module exports are loadable
  *
- * Usage:  node /tmp/test-cli-commands.mjs
+ * Usage:  node cli/cli-commands-validation.test.mjs
  */
 
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 const REPO = process.cwd();
 const BIN = `${REPO}/cli/bin.mjs`;
 
-const ALL_COMMANDS = [
-  // Util-based (live in cli/commands/util.mjs)
-  'audit', 'init', 'export', 'test-gate',
-  'doctor', 'repair', 'heads-up', 'backup', 'restore',
-  'browser',
-  // Own module
-  'install', 'update', 'migrate', 'validate',
-  'setup-provider', 'team', 'subagent', 'run',
-  'rca', 'sandbox', 'cost', 'claim', 'task', 'control',
-];
-
-const NON_OWN_MODULE = new Set([
-  'audit', 'init', 'export', 'test-gate',
-  'doctor', 'repair', 'heads-up', 'backup', 'restore',
-  'browser', 'install', 'update',
-]);
+const ALL_COMMANDS = [...readFileSync(BIN, 'utf8').matchAll(/case\s+['"]([^'"]+)['"]\s*:/g)]
+  .map((match) => match[1]);
 
 const seen = new Set();
 const passed = [];

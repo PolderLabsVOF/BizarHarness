@@ -2,17 +2,15 @@
 /**
  * Validate orchestrator-selected Agent model overrides without pinning roles.
  *
- * Bizar agents inherit the active session model by default. Mike may pass an
- * explicit model only when it is one of the configured tier candidates OR a
- * model the user explicitly selected via `bizar models` (the picker IS the
- * discovery surface for user picks — live gateway discovery is not required).
+ * Bizar agents must use an explicit enabled configured model. Mike selects
+ * from the configured tiers, with a `bizar models` user pick taking priority.
  *
  * For non-user-selected models, live discovery is still required when the
  * caller passes `options.availableModelIds` (defensive: someone may have
  * manually added a tier candidate that no longer exists).
  *
- * Discovery failure never blocks dispatch and never triggers alias retries:
- * omit `model` and inherit the session instead.
+ * Discovery failure never triggers alias retries: dispatch keeps the selected
+ * configured candidate rather than falling through to a provider default.
  *
  * ── F-185 / IMP-019 health-aware failover contract ─────────────────────────
  *
@@ -56,6 +54,16 @@ function advise(reason) {
       hookEventName: 'PreToolUse',
       permissionDecision: 'allow',
       additionalContext: `🟡 Model override guidance: ${reason} The dispatch will proceed regardless.`,
+    },
+  };
+}
+
+function deny(reason) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason,
     },
   };
 }
@@ -163,7 +171,8 @@ export async function guardAgentModel(input, options = {}) {
   const failoverBlock = readFailoverBlock(toolInput);
   const hasFailoverContract = Boolean(failoverBlock.routingDecisionId) && Boolean(failoverBlock.fallback);
 
-  // No override is the canonical safe path: Claude Code inherits the session.
+  // The workflow dispatcher enforces a model override. This permissive branch
+  // keeps the hook compatible with non-Bizar Agent callers.
   if (!requested) return {};
   if (requested === 'inherit') return {};
 
@@ -176,15 +185,12 @@ export async function guardAgentModel(input, options = {}) {
     return {};
   }
 
-  // 10.22.0 / Phase 4: silent-filter contract — if the operator's
-  // `disabledProviders` list covers the requested id, fall through
-  // without advising. The orchestrator already chose the id; the
-  // operator's disable intent overrides user picks at config time, not
-  // dispatch time. Pin: see
-  // `config/claude/hooks/__tests__/agent-model-guard.test.mjs#Agent
-  // model guard filters disabled-provider user picks silently`.
+  // Disabled is an enforceable operator boundary. Falling through here would
+  // still invoke the explicitly disabled provider; it is not a substitution.
   const disabled = readDisabledProvidersFromRegistry(registry);
-  if (isDisabledId(requested, disabled)) return {};
+  if (isDisabledId(requested, disabled)) {
+    return deny(`Bizar Agent dispatch blocked: ${requested} matches disabledProviders. Select an enabled configured model.`);
+  }
 
   const allowed = configuredModels(registry);
   const userPicks = userSelectedModels(registry);
@@ -195,17 +201,17 @@ export async function guardAgentModel(input, options = {}) {
   // already computed by `pickFailover` against this same registry.
   if (hasFailoverContract) {
     if (!userPicks.has(failoverBlock.fallback)) {
-      return advise(`Bizar Agent dispatch: fallback ${failoverBlock.fallback} is outside the user-selected pool; omit fallback to inherit the session.`);
+      return advise(`Bizar Agent dispatch: fallback ${failoverBlock.fallback} is outside the user-selected pool; select an enabled configured fallback.`);
     }
     if (!allowed.has(requested)) {
-      return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Omit model to inherit the session or pick it via \`bizar models\`.`);
+      return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Pick it via \`bizar models\`.`);
     }
     // Both IDs are user-selected. Accept without re-probing the gateway.
     return {};
   }
 
   if (!allowed.has(requested)) {
-    return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Omit model to inherit the session or pick it via \`bizar models\`.`);
+    return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Pick it via \`bizar models\`.`);
   }
 
   // User-selected models bypass live-discovery validation. The picker is the
@@ -214,7 +220,7 @@ export async function guardAgentModel(input, options = {}) {
   if (!fromUserPick && Array.isArray(options.availableModelIds)) {
     const available = new Set(options.availableModelIds);
     if (!available.has(requested)) {
-      return advise(`Bizar Agent dispatch blocked: ${requested} was not reported by live discovery. Omit model to inherit the active session; do not retry aliases.`);
+      return advise(`Bizar Agent dispatch blocked: ${requested} was not reported by live discovery. Select another enabled configured model; do not retry aliases.`);
     }
   }
 

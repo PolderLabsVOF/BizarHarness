@@ -102,6 +102,13 @@ test('provisioner reports the root package version', async () => {
   assert.equal(BIZAR_VERSION, pkg.version);
 });
 
+test('configured model metadata supplies Claude Code context-window enforcement', async () => {
+  const { configuredModelContextTokens } = await import('./provision.mjs');
+  const router = { userSelected: { profiles: { 'provider/model': { limits: { contextTokens: 1048576 } } } } };
+  assert.equal(configuredModelContextTokens(router, 'provider/model'), 1048576);
+  assert.equal(configuredModelContextTokens(router, 'provider/missing'), undefined);
+});
+
 test('model router ownership recognizes Bizar schemas and preserves foreign schemas', async () => {
   const { isBizarManagedModelRouter } = await import('./provision.mjs');
   assert.equal(isBizarManagedModelRouter({ $schema: 'https://bizar.dev/schema/model-router.v1.json' }), true);
@@ -218,7 +225,7 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.hooks.TeammateIdle[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} teammate-idle`);
     assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
     assert.equal(settings.env.BIZAR_HOME, join(home, '.config', 'bizar'));
-    assert.equal(settings.disableAutoCompact, true);
+    assert.equal(settings.disableAutoCompact, false);
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));
     // F-176: full permissions by default — deny/ask ship empty; external
     // actions are gated by policy text and advisory hooks, not prompts.
@@ -436,11 +443,11 @@ describe('writeClaudeSettings — hook wrapper path (F-169 + F-180)', () => {
     }
   });
 
-  test('emitted settings.json contains disableAutoCompact: true', () => {
+  test('emitted settings.json enables automatic compaction', () => {
     installWrapper();
     runWriteClaudeSettings();
     const settings = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'));
-    assert.equal(settings.disableAutoCompact, true);
+    assert.equal(settings.disableAutoCompact, false);
   });
 
   // ── F-180 ────────────────────────────────────────────────────────────

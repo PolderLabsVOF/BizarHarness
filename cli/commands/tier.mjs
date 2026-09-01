@@ -15,14 +15,11 @@
 
 import chalk from 'chalk';
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { resolveGlobalModelRouter } from '../config-paths.mjs';
 
-const HOME = homedir();
 const ROUTER_PATHS = [
   process.env.BIZAR_MODEL_ROUTER_PATH,
-  join(HOME, '.claude', 'model-router.json'),
-  process.env.CLAUDE_CONFIG_DIR && join(process.env.CLAUDE_CONFIG_DIR, 'model-router.json'),
+  resolveGlobalModelRouter(),
 ].filter(Boolean);
 
 function loadRouter() {
@@ -77,7 +74,7 @@ export async function runTier(cmdArgs) {
 
   Returns the dynamic tier and ordered model candidates for the named role
   (defaults to "mike"). Mike uses a concrete candidate only after live
-  discovery; otherwise Claude Code inherits the active session model.
+  routing. Every dispatch keeps an explicit configured model.
 `);
     return;
   }
@@ -114,7 +111,12 @@ export async function runTier(cmdArgs) {
   const chosenTier = adjusted.tier === 'high' && defaultTier === 'premium'
     ? 'premium'
     : adjusted.tier;
-  const candidates = config.tiers?.[chosenTier]?.models || [];
+  const disabled = (config.disabledProviders || []).map((value) => String(value).toLowerCase());
+  const enabled = (id) => !disabled.some((prefix) => String(id).toLowerCase().startsWith(prefix));
+  const selected = (config.userSelected?.models || []).filter(enabled);
+  const hints = config.userSelected?.tierHints || {};
+  const preferred = selected.filter((id) => hints[id] === chosenTier);
+  const candidates = [...new Set([...(preferred.length ? preferred : selected), ...(config.tiers?.[chosenTier]?.models || []).filter(enabled)])];
   const endpoint = process.env.BIZAR_MODEL_ROUTER_URL
     || process.env.ANTHROPIC_BASE_URL
     || config.endpoint;
@@ -125,7 +127,7 @@ export async function runTier(cmdArgs) {
       defaultTier,
       chosenTier,
       candidates,
-      selection: 'first-live-candidate-or-inherit-session',
+      selection: 'first-enabled-configured-candidate',
       endpoint,
       source: path,
       reason: adjusted.reason,
@@ -137,10 +139,16 @@ export async function runTier(cmdArgs) {
   console.log(chalk.bold(`  task       ${task}`));
   console.log(`  role       ${agentName} (default tier: ${defaultTier})`);
   console.log(`  tier       ${chosenTier} — ${adjusted.reason}`);
-  console.log(`  candidates ${candidates.join(', ') || '(none; inherit session)'}`);
-  console.log('  selection  first live candidate, otherwise inherit active session');
+  process.stdout.write(`  candidates ${candidates.join(', ') || '(none configured — dispatch blocked)'}\n`);
+  process.stdout.write('  selection  first enabled configured candidate; always explicit\n');
   console.log(`  endpoint   ${endpoint}`);
   console.log(`  source     ${path}`);
+}
+
+export async function run(name, args, isHelpRequest) {
+  if (name !== 'tier') return false;
+  await runTier(isHelpRequest ? ['--help'] : args);
+  return true;
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {

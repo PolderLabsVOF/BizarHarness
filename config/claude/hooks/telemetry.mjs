@@ -6,8 +6,8 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { resolveBizarHome } from '../../../cli/config-paths.mjs';
 
 const categories = [
   ['wrong_target', /\b(?:wrong (?:file|repo|branch|directory)|not that|i meant)\b/i],
@@ -37,8 +37,8 @@ function recentReject(path) {
 let input = {};
 try { input = JSON.parse(readFileSync(0, 'utf8') || '{}'); } catch { input = {}; }
 const cwd = String(input.cwd || process.cwd());
-const stateDir = join(homedir(), '.config', 'bizar', 'telemetry');
-mkdirSync(stateDir, { recursive: true });
+const stateDir = join(resolveBizarHome({ cwd }), 'telemetry');
+mkdirSync(stateDir, { recursive: true, mode: 0o700 });
 const projectId = createHash('sha256').update(cwd).digest('hex').slice(0, 12);
 const chatFile = join(stateDir, `chat-${projectId}`);
 
@@ -58,12 +58,17 @@ if (input.hook_event_name === 'SessionStart') {
   const tool = recentReject(input.transcript_path);
   if (!tool || !prompt) process.exit(0);
   const category = categories.find(([, pattern]) => pattern.test(prompt))?.[0] || 'uncategorized';
-  appendFileSync(join(stateDir, 'reject-feedback.jsonl'), JSON.stringify({
+  const feedbackPath = join(stateDir, 'reject-feedback.jsonl');
+  appendFileSync(feedbackPath, JSON.stringify({
     timestamp: new Date().toISOString(),
     sessionId: input.session_id || null,
     chatId: existsSync(chatFile) ? readFileSync(chatFile, 'utf8').trim() : null,
     tool,
     category,
-    excerpt: prompt.slice(0, 200),
-  }) + '\n');
+    promptFingerprint: createHash('sha256').update(prompt.replace(/\s+/g, ' ').trim()).digest('hex').slice(0, 16),
+  }) + '\n', { mode: 0o600 });
+  try {
+    const rows = readFileSync(feedbackPath, 'utf8').split('\n').filter(Boolean);
+    if (rows.length > 256) writeFileSync(feedbackPath, `${rows.slice(-256).join('\n')}\n`, { mode: 0o600 });
+  } catch { /* telemetry never blocks */ }
 }

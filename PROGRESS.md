@@ -2,6 +2,256 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — adaptive skills, bounded learning, and completion reliability (2026-09-01)
+
+The current comprehensive audit covers proactive skill selection, the shipped
+`i-have-adhd` response discipline, opt-in completion artifacts, bounded global
+user preferences and project-local debugging knowledge, global model/config
+persistence, adaptive task sizing, and reliable subagent progress/completion
+handling. It also validates every shipped Claude command, CLI command, hook,
+agent, skill mirror, and release surface. Three read-only audit lanes are
+running in parallel; code changes remain WIP=1 and will be integrated in
+logical, regression-tested batches. Baseline: `make check` passed before edits.
+Existing dirty work from the latency, model-routing, compaction, and Models.dev
+audits is preserved.
+
+Release preparation targets `10.23.0`: complete the staged simplify review,
+rerun the full evidence suite, publish both package surfaces as applicable,
+install the released CLI globally, and verify a clean Claude startup.
+
+Final staged review found one remaining release blocker: model selection updated
+Claude's active model but could retain Bizar's context-window value from the
+previous model. The model/settings sync is being made atomic and regression-
+tested; contradictory init and fallback policy text will be corrected in the
+same bounded release-readiness change.
+
+The blocker is resolved. Model selection now replaces or removes Bizar-managed
+context tokens together with the active model, while a differing operator value
+is preserved. Clear, direct-set, and interactive paths supply prior and current
+trusted profiles. The focused sync suite passes 9/9, `make check` and diff
+hygiene are green, and init/router copy now describes the implemented behavior.
+
+### Complete — installer-test isolation
+
+The release gate exposed that the force-install flag test redirected `HOME` and
+`BIZAR_HOME` after importing a module with cached install paths. Its temporary
+state and doctor checks diverged, and the test re-synced the operator's live
+Claude managed directories. The regression fix will require one explicit,
+consistent path context per installer run and prove the real home is untouched.
+The installer test now establishes one suite-scoped `HOME`, Claude config dir,
+XDG config dir, and Bizar home before the provisioner is first imported. Its
+force case is a confined dry run and asserts every reported wipe stays under
+that suite root. Focused installer coverage passes 30/30 and `make check` is
+green; the test no longer installs Claude globally or touches operator config.
+
+### Complete — release-candidate evidence
+
+Fresh post-isolation evidence for `10.23.0`: removed-surface, repository-
+structure, and architecture checks pass; 42 SDK files with 513 tests pass;
+1,020 retained Node tests pass; the full E2E harness passes 13/13 across all
+14 lifecycle events, 28 hook programs, 16 agents, 66 mirrored skills, and 14
+MCP tools; clean-check passes 5/5; TypeScript and `git diff --check` pass. The
+generated `.test-bizar-home` fixture was removed. No implementation blocker
+remains before staged simplify review, commit, publication, and clean install.
+
+### Complete — staged simplify findings
+
+The required staged review identified release blockers that green unit gates did
+not expose: copied workflows imported a package-relative CLI module; configured
+tier fallbacks were mixed into explicit user picks; init emitted an obsolete
+learning schema; PreCompact retained unbounded custom instructions; restore
+accepted integrity failures; and npm test arguments lacked the npm separator.
+These are being fixed with regression coverage before the release gates rerun.
+The first real Claude `/simplify` call also exposed an unknown-model warning in
+the installed settings, which must be eliminated before the clean-start claim.
+
+Native workflow dispatch is self-contained after provisioning and a copied-tree
+import regression passes. Explicit user picks are now the only primary pool;
+configured tiers populate it only when picks are empty. Init writes the canonical
+bounded learning schema. PreCompact stores only a hash and byte count for custom
+instructions. Backup v2 restore fails before mutation on missing, modified, or
+extra files. Test-gate inserts exactly one npm forwarding separator. Provisioning
+sets Claude's context-window enforcement from trusted selected-model metadata,
+preserving an explicit operator override. Focused coverage passes: dispatch
+23/23, provision 21/21, compaction 1/1, plus backup, learning, and test-gate
+suites; TypeScript and diff checks are green.
+
+Post-simplify full evidence is green: 42 SDK files / 513 tests, 1,028 retained
+Node tests, E2E 13/13, clean-check 5/5, removed-surface, structure,
+architecture, TypeScript, and diff gates. No test touched the live Claude config.
+
+Final post-review evidence is green after the context-sync correction: 42 SDK
+files / 513 tests, 1,030 retained Node tests, E2E 13/13, all architecture,
+removed-surface, structure, clean, TypeScript, and diff gates. The independent
+staged simplify reviewer verified its previous findings and found no remaining
+security or packaging blocker. The installed 10.22.x Claude configuration still
+reports `minimax/MiniMax-M3` as unrecognized; clean-install verification is the
+remaining release operation and must prove 10.23.0 removes that warning.
+
+### Complete — skill activation and global/safe state foundations
+
+The bundled `i-have-adhd` skill is now a compact default output contract rather
+than a 6 KB always-loaded prompt. Every subagent receives a sub-240-character
+instruction to use relevant installed skills, apply the ADHD-readable final
+shape, and search skills.sh only for difficult/stuck work with no local match.
+The canonical and Claude skill mirrors are synchronized and the skill validates
+against the skill-creator schema. Focused tests pass 9/9 outside the restricted
+child-process sandbox; `make check` remains green.
+
+A single config-path resolver now anchors Bizar state under absolute
+`BIZAR_HOME` / XDG / home paths. Workflow dispatch and `workflow start` consume
+the same global model router written by `bizar models`, including from unrelated
+project directories; they never fall back to a cwd router or implicit provider
+default. Regression coverage includes cross-cwd global selection.
+
+Backup/restore now rejects traversal labels, confines deletion to a direct
+`bizar-*` child of the configured backup root, ignores manifest-supplied restore
+destinations, restores only canonical global/project labels, and records and
+verifies per-file SHA-256 integrity hashes. CLI backup/restore includes current
+project state and respects global Bizar home. Focused backup/config tests pass;
+`make check` and `git diff --check` pass.
+
+### Complete — adaptive execution, liveness, and completion artifacts
+
+Mike now handles small deterministic local fixes directly and reserves isolated
+workers, shaped workflows, and parallel worktree fan-out for scopes where they
+materially help. Every Agent dispatch still carries an explicit configured
+model. Task-completion notifications are terminal signals, while bounded
+per-session lifecycle state makes repeated idle events trigger inspection,
+stop, or reassignment. A global default-on completion hook creates escaped,
+bounded HTML only for a genuine primary completion marker; `/artifact
+on|off|status` controls it.
+
+### Complete — bounded learning and private session continuity
+
+`bizar learn` owns global stable user preferences and project-local verified
+debugging lessons. Both stores are capped, deduplicated, secret-rejecting,
+atomically written, and injected only as a small untrusted summary. Automatic
+prompt-to-rule extraction was removed. SessionEnd retains active feature,
+touched files, tool counts, and blockers but persists only a one-way request
+fingerprint, never raw prompt text. Focused learning and lifecycle tests pass.
+
+### Complete — command and installation-diagnostics audit
+
+All 41 CLI switch branches now have executable `--help` coverage. Previously
+unreachable commands are routed, hook help uses stdout, bare `bizar backup`
+creates a snapshot, and stale slash-command claims were corrected. Doctor and
+validate use global path resolvers, verify installed agents, commands, rules,
+hooks, and all lifecycle events, require `i-have-adhd`, and reject implicit
+provider-default fallback. Focused command, backup, sprint, and diagnostics
+checks pass.
+
+### Complete — final integration polish
+
+The release inventory now checks all 28 required hook programs, including the
+hook wrapper and thinking router, and stale workflow-test wording no longer
+describes configured fallback as session inheritance. Newly changed CLI output
+uses explicit stdout writes, preserving the repository clean-commit rule.
+Focused workflow, Models.dev, command-surface, compaction, and artifact tests
+pass sequentially; the TypeScript gate remains green.
+
+## In Progress — fast-path routing and parallel-worktree efficiency (2026-08-31)
+
+User-reported latency audit: the prompt hook currently injects a mandatory
+multi-phase delegation policy and eagerly loads worker/learning modules on
+every non-empty prompt. `office-manager` also requires a full research → plan
+→ audit sequence and two implementation agents for most work. The change will
+add a cheap local fast path for small, bounded repository changes; require
+documentation research only for external/version-sensitive work; and preserve
+parallel, call-level worktree isolation for independently writable scopes.
+Baseline: `make check` passed before edits. Existing untracked `.bizar/`,
+`.omc/`, `docs/plans/`, and `IMPROVEMENTS-2026-08-31.md` are preserved.
+
+### Complete — adaptive routing replaces mandatory heavyweight orchestration
+
+`worker-suggest.mjs` now classifies short, mechanically bounded local edits
+before it dynamically loads the worker dispatcher or learning feed. The fast
+path asks for exactly one `@brenda` writer with call-level worktree isolation,
+the smallest regression check, and no default research/plan/review fan-out.
+External, version-sensitive, uncertain, or cross-cutting requests retain the
+adaptive shaped route. `office-manager`, `AGENT_BASELINE`, `AGENTS.md`, and
+the generated Claude mirrors now make the same distinction: parallel writers
+are mandatory only for genuinely disjoint scopes; monolithic work stays with
+one isolated writer; docs research is conditional on external/version-sensitive
+behavior.
+
+The audit also repaired the shipped agent-grounding contract: all 16 agents
+now reference `AGENT_BASELINE.md`, allowing the full E2E harness to verify
+them. Verification: focused hook/agent tests 41/41 sequentially; agent policy
+check 16/16; mirror check; `make check`; `git diff --check`; and `make e2e`
+13/13. A concurrent focused-test + E2E attempt reproduced the known shared
+user-level learning-fixture collision, so validation was rerun sequentially;
+the test-fixture isolation item remains open in the improvement guide.
+
+## In Progress — prevent implicit provider-default model dispatch (2026-08-31)
+
+The productivity audit confirmed that an empty `userSelected.models` list made
+workflow dispatch omit `Agent.model`, and provisioning also removed
+`settings.model`. Claude Code could then choose its own provider default,
+including a provider explicitly listed in `disabledProviders`. The fix will
+make the configured dynamic tier candidates the deterministic fallback pool,
+filter disabled providers before selection, retain an explicit model on every
+normal orchestrated dispatch, and change independent workflow lanes from
+sequential `pipeline(...)` execution to bounded `parallel(...)` execution.
+Baseline before this change: `make check` passed. No user-selected model or
+provider credential will be added or changed by this repository work.
+
+### Complete — explicit enabled-model routing and parallel workflow lanes
+
+The audit confirmed the reported provider leak: both provisioning and the
+workflow dispatcher treated an empty `userSelected.models` list as permission
+to omit `model`, despite `disabledProviders: ["anthropic"]`. The configured
+dynamic tiers are now the fallback pool, user picks remain first priority, and
+disabled prefixes are filtered before a candidate enters that pool. The
+dispatcher fails closed with `NO_CONFIGURED_DISPATCH_MODEL` rather than issuing
+an Agent call without a model. Provisioning and SessionStart now also set the
+parent session to the first enabled configured candidate; routine provisioning
+refreshes that Bizar-owned setting. The Agent guard now denies an explicit
+disabled-provider override instead of silently allowing it through.
+
+`ultracode` implementation lanes and per-lane reviews, plus
+`ultracode-review` lenses, now use bounded `parallel(...)` fan-out. Their work
+already has disjoint ownership/worktree contracts, so this removes needless
+serial latency without broadening concurrency.
+
+Verification: targeted dispatch, model-guard, SessionStart, and workflow-bloat
+tests passed **50/50**; `git diff --check`; mirror check; `make check`; and
+`make e2e` **13/13** passed. A direct SDK test invocation still cannot load
+the TypeScript source because its generated `.js` sibling is absent; the E2E
+SDK typecheck passed, and this is unrelated to the routing change.
+
+## In Progress — automatic compaction and durable precompact recovery (2026-09-01)
+
+Audit found `disableAutoCompact: true`, contradicting the requested reliability
+behavior and current Claude Code defaults. The existing PreCompact script only
+printed generic instructions; it did not persist event metadata, a transcript
+pointer, or bounded project state. This change enables automatic compaction and
+adds an atomic, size-bounded checkpoint for recovery after compaction.
+
+### Complete — automatic compaction and Models.dev catalog correctness
+
+`config/claude/settings.json` now ships `disableAutoCompact: false`. Provisioning
+also repairs existing settings and removes legacy `DISABLE_AUTO_COMPACT` /
+`DISABLE_COMPACT` environment opt-outs, so automatic compaction is effective on
+fresh and updated installs. The PreCompact hook now consumes Claude Code's event
+JSON, atomically writes a `bizar.compaction-checkpoint.v1` file under the local
+Bizar compaction directory, bounds each retained project record, hashes the
+checkpoint, and emits a concise recovery instruction with its path and hash.
+
+The Models.dev audit found that the current `catalog.json` envelope uses a
+top-level `models` map and a nested `providers.<id>.models` map, while the
+existing flattener only handled the latter shape indirectly. The flattener now
+handles both envelopes. Confirmed profile fields now retain knowledge cutoff,
+open-weight status, reasoning options, interleaving, weights, benchmarks, and
+cost metadata. Confirmed picks fetch base and provider catalogs concurrently
+with independent bounded timeouts and merge the records without adding network
+work to injected/offline test paths.
+
+Verification: compaction, provisioning, hook, Models.dev refresh, and workflow
+tests passed **54/54**; live Models.dev `models.json` fetch returned 363 model
+records and matched current model IDs; `make check`; `git diff --check`; mirror
+check; and `make e2e` **13/13** passed.
+
 ## Complete — 10.22.0 patch: dynamic disable-providers (Phase 4)
 
 **Why:** The user constraint was explicit: *make sure bizar doesnt hardocdee things like this. eveyrhting should be dynamic*. Provider filtering lived (or risked living) as in-code `BLOCKED_PROVIDERS` lists and `if (id === 'claude-opus-5')` branches — both a foot-gun and a coupling between code and operator policy. Phase 4 ships a single JSON key, `disabledProviders: string[]`, and routes every reader site through it. Adding or removing a blocked provider is now a single JSON edit on the operator's `model-router.json`.

@@ -60,8 +60,39 @@ test('worker-suggest: exits 0 and emits parseable JSON on UserPromptSubmit with 
     'additionalContext must be a string');
   assert.ok(obj.hookSpecificOutput.additionalContext.length > 0,
     'additionalContext must not be empty for non-empty prompt');
-  assert.ok(obj.hookSpecificOutput.additionalContext.indexOf('Mandatory Bizar routing policy') !== -1,
+  assert.ok(obj.hookSpecificOutput.additionalContext.indexOf('Adaptive Bizar routing policy') !== -1,
     'routing policy missing from additionalContext');
+});
+
+test('worker-suggest: sends a small local fix through the no-import fast path', () => {
+  const { status, stdout, stderr } = runHook({
+    session_id: 'fast-session',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'fix the typo in this comment',
+  });
+  assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+  const obj = parseStdout(stdout);
+  assert.ok(obj);
+  const context = obj.hookSpecificOutput.additionalContext;
+  assert.match(context, /Bizar fast path/);
+  assert.match(context, /execute it directly|exactly one @brenda/);
+  assert.match(context, /isolation: "worktree"/);
+  assert.doesNotMatch(context, /Adaptive Bizar routing policy/);
+  assert.equal(stderr, '', 'fast path must not load worker suggestions');
+});
+
+test('worker-suggest: keeps external/version-sensitive work on the shaped route', () => {
+  const { status, stdout, stderr } = runHook({
+    session_id: 'shaped-session',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'fix the SDK API version migration',
+  });
+  assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+  const obj = parseStdout(stdout);
+  assert.ok(obj);
+  assert.match(obj.hookSpecificOutput.additionalContext, /Adaptive Bizar routing policy/);
 });
 
 test('worker-suggest: exits 0 and emits empty additionalContext on empty prompt', () => {
@@ -107,9 +138,22 @@ test('worker-suggest: short-circuits when .bizar/.quick-once sentinel exists', (
     const obj = parseStdout(stdout);
     assert.ok(obj, `stdout not parseable JSON: ${stdout}`);
     assert.equal(obj.hookSpecificOutput.additionalContext, '');
+    assert.equal(existsSync(join(sentinelDir, '.bizar', '.quick-once')), false);
   } finally {
     rmSync(sentinelDir, { recursive: true, force: true });
   }
+});
+
+test('worker-suggest: task completion is consumed instead of re-routed', () => {
+  const { status, stdout, stderr } = runHook({
+    session_id: 'done-session', cwd: '/tmp', hook_event_name: 'UserPromptSubmit',
+    prompt: '<task-notification status="completed"><result>tests pass</result></task-notification>',
+  });
+  assert.equal(status, 0, stderr);
+  const context = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(context, /terminal task update/);
+  assert.match(context, /consume.*<result>/);
+  assert.doesNotMatch(context, /Adaptive Bizar routing|Bizar workers suggest/);
 });
 
 test('worker-suggest: emits orchestrator prompt (you ARE @mike) when sentinel absent', () => {
@@ -129,23 +173,14 @@ test('worker-suggest: emits orchestrator prompt (you ARE @mike) when sentinel ab
   );
 });
 
-// F-194 Phase B.3: when the three learning feeds are present, the
-// hook must include them in additionalContext (no prompt text, only
-// worker ids + counts + reasons).
-test('worker-suggest: appends instincts + reject-feedback + behavior summary when feeds exist', () => {
+test('worker-suggest: appends only bounded explicit learning, not telemetry feeds', () => {
   const tmpHome = mkdtempSync(join(tmpdir(), 'bizar-worker-suggest-feeds-'));
   const learningDir = join(tmpHome, '.config', 'bizar', 'learning');
   mkdirSync(learningDir, { recursive: true, mode: 0o700 });
-  writeFileSync(join(learningDir, 'instincts.jsonl'),
-    JSON.stringify({ id: 'inst-001', trigger: 'npm test', action: 'run', confidence: 0.9 }) + '\n',
-  );
-  writeFileSync(join(learningDir, 'reject-feedback.jsonl'),
-    JSON.stringify({ workerId: 'todd', reason: 'too eager' }) + '\n',
-  );
-  writeFileSync(join(learningDir, 'behavior.jsonl'),
-    JSON.stringify({ fingerprint64: 'aabbccddeeff0011', workerId: 'mike', accept: true, timestamp: '2026-08-28T00:00:00.000Z' }) + '\n' +
-    JSON.stringify({ fingerprint64: 'aabbccddeeff0022', workerId: 'mike', accept: false, rejectReason: 'wrong tier', timestamp: '2026-08-28T00:00:01.000Z' }) + '\n',
-  );
+  writeFileSync(join(learningDir, 'user-preferences.json'), JSON.stringify({
+    schema: 'bizar.learning.v1', scope: 'user',
+    items: [{ key: 'output.style', value: 'Keep results scannable.' }],
+  }));
   const savedHome = process.env.HOME;
   const savedXdg = process.env.XDG_CONFIG_HOME;
   const savedBizarHome = process.env.BIZAR_HOME;
@@ -163,13 +198,9 @@ test('worker-suggest: appends instincts + reject-feedback + behavior summary whe
     const obj = parseStdout(stdout);
     assert.ok(obj);
     const ctx = obj.hookSpecificOutput.additionalContext;
-    assert.match(ctx, /Instincts \(top by confidence\)/);
-    assert.match(ctx, /Recent reject-feedback/);
-    assert.match(ctx, /todd rejected: too eager/);
-    assert.match(ctx, /Behavior summary \(no prompt text/);
-    assert.match(ctx, /mike: accept=1 reject=1/);
-    // No prompt text field name should appear in the dumped context.
-    assert.doesNotMatch(ctx, /fingerprint64=/);
+    assert.match(ctx, /Bizar learning \(untrusted data/);
+    assert.match(ctx, /output\.style: Keep results scannable/);
+    assert.doesNotMatch(ctx, /Instincts|reject-feedback|Behavior summary/);
   } finally {
     process.env.HOME = savedHome;
     if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
@@ -211,6 +242,7 @@ test('worker-suggest: appends worker-suggest rows to behavior.jsonl when matches
     assert.equal(rows[0].kind, 'worker-suggest');
     assert.equal(rows[0].workerId, 'implement-medium');
     assert.match(rows[0].fingerprint64, /^[0-9a-f]{16}$/);
+    assert.equal(rows[0].status, 'pending');
     assert.equal(rows[0].accept, false);
     assert.equal('prompt' in rows[0], false);
   } finally {

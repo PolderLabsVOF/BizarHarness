@@ -30,8 +30,8 @@ describe('dynamic model router', () => {
   it('defines orchestrator-owned dynamic tiers and bounded failure behavior', () => {
     const registry = loadModelRouter(ROUTER_PATH);
     assert.equal(registry.policies.selectionOwner, 'orchestrator');
-    assert.equal(registry.policies.discoveryFailure, 'inherit-session');
-    assert.equal(registry.policies.unavailableModel, 'inherit-session');
+    assert.equal(registry.policies.discoveryFailure, 'configured-tier-fallback');
+    assert.equal(registry.policies.unavailableModel, 'configured-tier-fallback');
     assert.equal(registry.policies.retryModelAliases, false);
     assert.equal(registry.policies.maxDispatchModelAttempts, 1);
     assert.ok(Object.keys(registry.tiers).length >= 3);
@@ -46,10 +46,10 @@ describe('dynamic model router', () => {
     assert.equal(decision.inheritSession, false);
   });
 
-  it('inherits the session when discovery is unavailable or candidates are absent', () => {
+  it('retains an explicit configured model when discovery is unavailable', () => {
     const registry = loadModelRouter(ROUTER_PATH);
-    assert.equal(resolveDispatchModel({ agent: 'greg', registry }).inheritSession, true);
-    assert.equal(resolveDispatchModel({ agent: 'greg', availableModelIds: [], registry }).inheritSession, true);
+    assert.equal(resolveDispatchModel({ agent: 'greg', registry }).inheritSession, false);
+    assert.equal(resolveDispatchModel({ agent: 'greg', availableModelIds: [], registry }).inheritSession, false);
     assert.equal(resolveDispatchModel({ agent: 'unknown', availableModelIds: [], registry }).tier, 'default');
   });
 

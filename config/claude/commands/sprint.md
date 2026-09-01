@@ -26,7 +26,7 @@ Example: `/sprint F-099`
    - **Title** → goal title
    - **Scope (in)** → key results (uncompleted first, completed below)
    - **Scope (out)** → empty (explicitly excluded items are sprint-specific)
-   - **Definition of Done (DoD)** → all 7 standard DoD checkboxes pre-checked
+   - **Definition of Done (DoD)** → standard checkboxes left open until evidence exists
 5. Writes to `.bizar/sprints/<goal-id>-YYYY-MM-DD.md`
 6. Prints the path so the agent can open/edit it
 
@@ -40,4 +40,4 @@ Example: `/sprint F-099`
 
 - Never overwrite an existing sprint file for the same goal+date
 - Always use today's date in the filename (ISO 8601: YYYY-MM-DD)
-- DoD checkboxes: all 7 standard items pre-checked; add more only if the sprint scope requires it
+- DoD checkboxes remain unchecked; mark them complete only after verification

@@ -115,7 +115,7 @@ export function buildLearningContext({
 
   if (existsSync(behPath)) {
     const cap = createFileBehaviorCapture({ filePath: behPath });
-    const rows = cap.list();
+    const rows = cap.list().filter((row) => row.kind !== 'worker-suggest' || row.feedbackResolved === true);
     if (rows.length > 0) {
       const summary = summarizeBehavior(rows);
       const lines = Object.entries(summary).map(
@@ -129,7 +129,7 @@ export function buildLearningContext({
   }
 
   if (sections.length === 0) return '';
-  return sections.join('\n\n');
+  return sections.join('\n\n').slice(0, 1200);
 }
 
 /**
@@ -169,6 +169,7 @@ export function appendWorkerSuggestion({ matches, cwd, env } = {}) {
         skill: m.skill ?? null,
         matchedPattern: m.matchedPattern ?? null,
         accept: false,
+        status: 'pending',
         timestamp: new Date().toISOString(),
       };
       validateBehaviorRecord(record);

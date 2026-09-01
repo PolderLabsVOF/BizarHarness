@@ -2,13 +2,27 @@
  * Thin, current Claude Code process wrappers.
  */
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import chalk from 'chalk';
+import { resolveClaudeConfigDir } from '../config-paths.mjs';
 
 export function resolveClaudeDir() {
-  return process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude');
+  return resolveClaudeConfigDir();
+}
+
+export function resolveInstalledAgent(agent, claudeDir = resolveClaudeDir()) {
+  const dir = join(claudeDir, 'agents');
+  const exact = join(dir, `${agent}.md`);
+  if (existsSync(exact)) return exact;
+  if (!existsSync(dir)) return null;
+  for (const file of readdirSync(dir).filter((name) => name.endsWith('.md'))) {
+    try {
+      const text = readFileSync(join(dir, file), 'utf8');
+      if (new RegExp(`^name:\\s*${String(agent).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm').test(text)) return join(dir, file);
+    } catch { /* unreadable definition */ }
+  }
+  return null;
 }
 
 export function spawnClaude(args, opts = {}) {
@@ -51,8 +65,8 @@ export async function runClaudeSubagent(args = []) {
     console.log('  Usage: bizar subagent <agent> <task>');
     return 2;
   }
-  const definition = join(resolveClaudeDir(), 'agents', `${agent}.md`);
-  if (!existsSync(definition)) {
+  const definition = resolveInstalledAgent(agent);
+  if (!definition) {
     console.error(chalk.red(`  ✗ Unknown installed agent: ${agent}`));
     return 1;
   }

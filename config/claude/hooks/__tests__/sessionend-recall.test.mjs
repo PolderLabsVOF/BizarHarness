@@ -27,6 +27,7 @@ function runHook(inputJson, cwd) {
     input: JSON.stringify(inputJson),
     encoding: 'utf8',
     cwd: cwd || process.cwd(),
+    env: { ...process.env, BIZAR_HOME: join(cwd || process.cwd(), '.test-bizar-home') },
     timeout: 8000,
   });
   return { status: r.status, stdout: r.stdout.trim(), stderr: r.stderr.trim() };
@@ -94,12 +95,14 @@ test('SessionEnd: writes session note + state from transcript', () => {
     assert.equal(state.lastSessionId, 'abc123def456789');
     assert.equal(state.reason, 'exit');
     assert.equal(state.activeFeature, 'F-103');
-    assert.match(state.nextStep, /implement F-103 hook overhaul/);
+    assert.match(state.nextStep, /Continue with F-103/);
+    assert.match(state.requestFingerprint, /^[a-f0-9]{16}$/);
     const note = readSessionNote(dir);
     assert.ok(note);
     assert.match(note.name, /\d{4}-\d{2}-\d{2}-abc123de\.md/);
     assert.match(note.body, /activeFeature: F-103/);
-    assert.match(note.body, /implement F-103 hook overhaul/);
+    assert.doesNotMatch(note.body, /implement F-103 hook overhaul/);
+    assert.match(note.body, /requestFingerprint: [a-f0-9]{16}/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -149,7 +152,7 @@ test('SessionEnd: captures errors as blockers', () => {
   }
 });
 
-test('SessionEnd: skips filler prompts when picking nextStep', () => {
+test('SessionEnd: prompts are fingerprinted and never persisted', () => {
   const dir = makeProject();
   const transcript = makeTranscript([
     { type: 'message', timestamp: '2026-07-22T18:00:00Z', message: { role: 'user', content: 'rewire the SessionStart briefing' } },
@@ -161,9 +164,10 @@ test('SessionEnd: skips filler prompts when picking nextStep', () => {
     runHook({ session_id: 'filer', reason: 'exit', cwd: dir, transcript_path: transcript });
     const state = readSessionState(dir);
     assert.ok(state);
-    assert.match(state.nextStep, /rewire the SessionStart briefing/);
-    assert.doesNotMatch(state.nextStep, /Resume: continue/);
-    assert.doesNotMatch(state.nextStep, /Resume: yes/);
+    assert.match(state.nextStep, /Continue with F-103/);
+    const note = readSessionNote(dir);
+    assert.doesNotMatch(note.body, /rewire the SessionStart briefing|continue|go on/);
+    assert.match(state.requestFingerprint, /^[a-f0-9]{16}$/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -195,7 +199,8 @@ test('SessionEnd: malformed JSONL lines are skipped, hook exits 0', () => {
     assert.equal(status, 0);
     const state = readSessionState(dir);
     assert.ok(state);
-    assert.match(state.nextStep, /real prompt/);
+    assert.match(state.nextStep, /Continue with F-103/);
+    assert.match(state.requestFingerprint, /^[a-f0-9]{16}$/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
 19  }
@@ -225,6 +230,7 @@ test('SessionEnd: invalid JSON on stdin exits 0 with empty state', () => {
       input: 'not json',
       encoding: 'utf8',
       cwd: dir,
+      env: { ...process.env, BIZAR_HOME: join(dir, '.test-bizar-home') },
       timeout: 8000,
     });
     assert.equal(r.status, 0);
@@ -249,7 +255,8 @@ test('SessionEnd: handles transcript with 200+ lines (cap respected)', () => {
     assert.equal(status, 0);
     const state = readSessionState(dir);
     assert.ok(state);
-    assert.match(state.nextStep, /final substantive prompt|Resume: final substantive prompt/);
+    assert.match(state.nextStep, /Continue with F-103/);
+    assert.match(state.requestFingerprint, /^[a-f0-9]{16}$/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -140,17 +140,18 @@ test('fixed descriptors expose only canonical profiles and stages', () => {
   assertCode('INVALID_PROFILE', () => createWorkflowDescriptor('custom-shell-stage'));
 });
 
-test('workflow starts snapshot dynamic routing decisions and inherit when discovery is unavailable', (t) => {
+test('workflow starts snapshot explicit configured models when discovery is unavailable', (t) => {
   const root = project(t);
   const inherited = startWorkflowCore({
     projectRoot: root,
     sessionId: 'session-inherit',
-    goal: 'Inherit session model when discovery is unavailable',
+    goal: 'Use configured model when discovery is unavailable',
     registry: testRegistry,
     requiredAgents: ['mike'],
   });
-  assert.equal(inherited.assignmentSnapshot.decisions.mike.model, null);
-  assert.equal(inherited.assignmentSnapshot.decisions.mike.inheritSession, true);
+  assert.equal(inherited.assignmentSnapshot.decisions.mike.model, testRegistry.tiers.premium.models[0]);
+  assert.equal(inherited.assignmentSnapshot.decisions.mike.inheritSession, false);
+  assert.equal(inherited.assignmentSnapshot.decisions.mike.reason, 'configured-tier-fallback');
 
   const state = startWorkflow({
     projectRoot: root,
@@ -438,17 +439,18 @@ test('routing snapshots reject cross-run reuse and fingerprint tampering', (t) =
   assertCode('ASSIGNMENT_INTEGRITY_ERROR', () => getWorkflowState({ projectRoot: secondRoot, sessionId: 'session-1' }));
 });
 
-test('workflow validation accepts session inheritance without discovery evidence', (t) => {
+test('workflow validation accepts configured fallback without discovery evidence', (t) => {
   const root = project(t);
   const state = startWorkflowCore({
     projectRoot: root,
     sessionId: 'session-1',
-    goal: 'Validate session-model inheritance',
+    goal: 'Validate configured fallback',
     registry: testRegistry,
     requiredAgents: ['mike'],
   });
   assert.equal(state.assignmentSnapshot.discoveryAttempted, false);
-  assert.equal(state.assignmentSnapshot.decisions.mike.inheritSession, true);
+  assert.equal(state.assignmentSnapshot.decisions.mike.inheritSession, false);
+  assert.equal(state.assignmentSnapshot.decisions.mike.model, testRegistry.tiers.premium.models[0]);
   assert.equal(validateWorkflowState(state, {
     projectRoot: root,
     sessionId: 'session-1',
@@ -620,7 +622,7 @@ test('CLI accepts matching profile aliases and rejects conflicts before probing'
   assert.equal(gateway.requests.length, 1, 'conflicting aliases must fail before a network probe');
 });
 
-test('CLI falls back to session inheritance when gateway coordinates are missing or mismatched', async (t) => {
+test('CLI keeps the configured fallback when discovery coordinates are missing or mismatched', async (t) => {
   const root = project(t);
   const gateway = await fakeModelGateway(t, root);
 
@@ -647,7 +649,7 @@ test('CLI falls back to session inheritance when gateway coordinates are missing
   assert.equal(gateway.requests.length, 0, 'coordinate failures must skip discovery rather than retry');
 });
 
-test('CLI starts with session inheritance when no configured tier model is available', async (t) => {
+test('CLI starts only with the configured fallback when discovery returns unrelated models', async (t) => {
   const root = project(t);
   const gateway = await fakeModelGateway(t, root, ['unconfigured/provider-model']);
   gateway.env.CLAUDE_SESSION_ID = 'inherit-session';

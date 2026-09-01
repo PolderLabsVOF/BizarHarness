@@ -7,9 +7,7 @@ allowed-tools: Read, Bash
 
 Prints one section per installed surface.
 
-```bash
-node "$(npm root -g)/@polderlabs/bizar/cli/commands/tools.mjs" --json
-```
+Run `bizar tools --json`.
 
 Sections:
 
@@ -18,14 +16,14 @@ Sections:
 - **Skills** — skills under `~/.claude/skills/`.
 - **Hooks** — lifecycle hooks under `~/.claude/hooks/` with their current
   event bindings from `~/.claude/settings.json`.
-- **MCP tools** — every tool the Bizar SDK exposes over stdio
-  (`plan_action`, `loop_*`, `graph_*`, `list_instincts`, `list_decisions`).
+- **MCP tools** — every tool the installed Bizar SDK exposes over stdio;
+  inventory is derived dynamically rather than pinned to a stale count.
 - **Wired `bizar` commands** — every `bizar <cmd>` you can run from the
   terminal (`install`, `update`, `doctor`, `repair`, `audit`, `validate`,
   `backup`, `restore`, `migrate`, `browser`, `rca`, `sandbox`,
   `model`, `cost`, `claim`, `task`, `control`, `workflow`, `hook`,
   `setup-provider`, `claude-cmd`, `heads-up`, `worktree-merge`, `init`,
-  `audit`).
+  `artifact`, `learn`, `tools`, `tier`, and `upgrade-defaults`).
 
 Anything missing from this output is missing from your user-level install —
 re-run `bizar repair`.

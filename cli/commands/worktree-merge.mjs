@@ -25,12 +25,14 @@ function parseArgs(args) {
     dryRun: false,
     keepBranch: false,
     json: false,
+    help: false,
     branch: null,
   };
   const positional = [];
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === "--all") flags.all = true;
+    else if (arg === "--help" || arg === "-h") flags.help = true;
     else if (arg === "--dry-run") flags.dryRun = true;
     else if (arg === "--keep-branch") flags.keepBranch = true;
     else if (arg === "--json") flags.json = true;
@@ -205,6 +207,11 @@ async function main() {
     console.error(err.message);
     console.error(usage());
     process.exit(2);
+  }
+
+  if (flags.help) {
+    process.stdout.write(`${usage()}\n`);
+    process.exit(0);
   }
 
   if (!flags.all && !flags.branch) {

@@ -7,34 +7,37 @@ import { spawnSync } from 'node:child_process';
 const hooksDir = join(import.meta.dirname, '..');
 
 function runHook(name, input) {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
   const result = spawnSync(process.execPath, [join(hooksDir, name)], {
     input: JSON.stringify(input),
     encoding: 'utf8',
     timeout: 5_000,
+    env,
   });
   assert.equal(result.status, 0, result.stderr);
   return JSON.parse(result.stdout);
 }
 
-test('every non-empty primary prompt receives mandatory Bizar routing', () => {
+test('every non-empty primary prompt receives adaptive Bizar routing', () => {
   const result = runHook('worker-suggest.mjs', {
     hook_event_name: 'UserPromptSubmit',
     prompt: 'Add a button to the navbar.',
   });
   const context = result.hookSpecificOutput.additionalContext;
-  assert.match(context, /mandatory Bizar routing/i);
+  assert.match(context, /adaptive Bizar routing/i);
   assert.match(context, /Agent tool/);
   assert.match(context, /@mike/);
   assert.match(context, /you ARE @mike/i);
 });
 
-test('specialized suggestions supplement rather than replace mandatory routing', () => {
+test('specialized suggestions supplement rather than replace adaptive routing', () => {
   const result = runHook('worker-suggest.mjs', {
     hook_event_name: 'UserPromptSubmit',
     prompt: 'Find the missing tests for authentication.',
   });
   const context = result.hookSpecificOutput.additionalContext;
-  assert.match(context, /mandatory Bizar routing/i);
+  assert.match(context, /adaptive Bizar routing/i);
   assert.match(context, /Bizar workers suggest/i);
 });
 
@@ -53,14 +56,14 @@ test('every subagent receives terse grounding', () => {
     agent_type: 'linda',
   });
   const context = result.hookSpecificOutput.additionalContext;
-  // v10.20.0: payload trimmed from ~700 chars / 6 bullets to ~80 chars / 1 line.
-  // Pin the agent-type echo, WebSearch mention, citation directive, and a
+  // Pin the agent-type echo, skill behavior, WebSearch directive, and a
   // hard size budget so a future edit cannot quietly re-bloat the prompt.
   assert.match(context, /@linda/);
   assert.match(context, /WebSearch/);
-  assert.match(context, /external-API/);
-  assert.match(context, /Cite/);
-  assert.ok(context.length <= 200, `payload ${context.length} chars exceeds 200`);
+  assert.match(context, /i-have-adhd/);
+  assert.match(context, /skills\.sh/);
+  assert.match(context, /hard\/stuck/);
+  assert.ok(context.length <= 240, `payload ${context.length} chars exceeds 240`);
 });
 
 test('project settings apply grounding to all subagents', () => {

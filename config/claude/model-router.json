@@ -3,7 +3,7 @@
   "version": "13.0.0",
   "endpoint": null,
   "disabledProviders": ["anthropic"],
-  "comment": "Mike selects the cheapest sufficient user-selected model per dispatch. Agent roles never carry fixed models. The orchestrator dispatches ONLY with IDs in `userSelected.models`. When `userSelected` is empty, omit the Agent model override and inherit the active session model instead of retrying aliases. The gateway endpoint is intentionally null in the shipped config — operators MUST configure it via the `ANTHROPIC_BASE_URL` or `BIZAR_MODEL_ROUTER_URL` environment variable. Bizar is provider-agnostic and ships no default provider. `disabledProviders` (top-level, optional) is a case-insensitive-at-write, case-sensitive-at-filter list of provider prefixes whose model ids are stripped from every read site (CLI sync, picker, settings.json sync, SessionStart hook, Agent model guard). Defaults to `[]`; ships with `[\"anthropic\"]` so a fresh install never dispatches `anthropic/*` ids even if a gateway reports them.",
+  "comment": "Mike selects the cheapest sufficient enabled configured model per dispatch. Explicit user-selected models take precedence; configured dynamic tiers are the fallback pool. The orchestrator always supplies an Agent model and fails closed when no enabled configured candidate exists, so Claude Code cannot select an unconfigured provider default. The gateway endpoint is intentionally null in the shipped config — operators MUST configure it via the `ANTHROPIC_BASE_URL` or `BIZAR_MODEL_ROUTER_URL` environment variable. Bizar is provider-agnostic and ships no default provider. `disabledProviders` (top-level, optional) is a case-insensitive-at-write, case-sensitive-at-filter list of provider prefixes whose model ids are stripped from every read site (CLI sync, picker, settings.json sync, SessionStart hook, Agent model guard). Defaults to `[]`; ships with `[\"anthropic\"]` so a fresh install never dispatches `anthropic/*` ids even if a gateway reports them.",
   "userSelected": {
     "models": [],
     "lastUpdated": null,
@@ -15,7 +15,7 @@
     "endpoint": null,
     "availabilityProbe": "/models",
     "discoveryTimeoutMs": 3000,
-    "unavailableBehavior": "inherit-session",
+    "unavailableBehavior": "configured-tier-fallback",
     "documentation": "https://code.claude.com/docs/en/llm-gateway"
   },
   "tiers": {
@@ -114,10 +114,10 @@
   "policies": {
     "mainOrchestrator": "mike",
     "selectionOwner": "orchestrator",
-    "dispatchModelOverride": "allowed-when-discovered",
-    "unknownAgent": "inherit-session",
-    "discoveryFailure": "inherit-session",
-    "unavailableModel": "inherit-session",
+    "dispatchModelOverride": "required-configured-candidate",
+    "unknownAgent": "configured-tier-fallback",
+    "discoveryFailure": "configured-tier-fallback",
+    "unavailableModel": "configured-tier-fallback",
     "silentProviderSubstitution": false,
     "retryModelAliases": false,
     "snapshotDecisions": true,
@@ -126,6 +126,6 @@
   "costControls": {
     "maxConcurrentAgents": 10,
     "maxPremiumAgentsPerWorkflow": 3,
-    "preferInheritanceWhenDiscoveryUnavailable": true
+    "preferInheritanceWhenDiscoveryUnavailable": false
   }
 }

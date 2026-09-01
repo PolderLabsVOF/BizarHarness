@@ -9,7 +9,7 @@
  *      to the provisioner (the bug that broke `bizar install --force`).
  */
 
-import { test, describe, beforeEach, afterEach } from 'node:test';
+import { test, describe, beforeEach, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mkdtempSync,
@@ -21,20 +21,22 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const ORIG_HOME = process.env.HOME;
+const ORIGINAL_ENV = Object.fromEntries(
+  ['HOME', 'CLAUDE_CONFIG_DIR', 'XDG_CONFIG_HOME', 'BIZAR_HOME'].map((key) => [key, process.env[key]]),
+);
+const SUITE_HOME = mkdtempSync(join(tmpdir(), 'bizar-prune-test-'));
+process.env.HOME = SUITE_HOME;
+process.env.CLAUDE_CONFIG_DIR = join(SUITE_HOME, '.claude');
+process.env.XDG_CONFIG_HOME = join(SUITE_HOME, '.config');
+process.env.BIZAR_HOME = join(SUITE_HOME, '.config', 'bizar');
 
-function freshHome() {
-  const home = mkdtempSync(join(tmpdir(), 'bizar-prune-test-'));
-  process.env.HOME = home;
-  delete process.env.CLAUDE_CONFIG_DIR;
-  delete process.env.XDG_CONFIG_HOME;
-  return home;
-}
-
-function restoreHome() {
-  if (ORIG_HOME === undefined) delete process.env.HOME;
-  else process.env.HOME = ORIG_HOME;
-}
+after(() => {
+  for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try { rmSync(SUITE_HOME, { recursive: true, force: true }); } catch { /* ignore */ }
+});
 
 function mkdirp(p) { mkdirSync(p, { recursive: true }); }
 function touch(p, content = '') { mkdirp(join(p, '..')); writeFileSync(p, content); }
@@ -133,14 +135,6 @@ describe('pruneStale()', () => {
 // ─── runInstaller flag wiring ────────────────────────────────────────────────
 
 describe('runInstaller() flag wiring (F-141)', () => {
-  let home;
-
-  beforeEach(() => { home = freshHome(); });
-  afterEach(() => {
-    restoreHome();
-    if (home) try { rmSync(home, { recursive: true, force: true }); } catch { /* ignore */ }
-  });
-
   test('quiet=true returns without running provisioner', async () => {
     const { runInstaller } = await import('./index.mjs');
     const result = await runInstaller({ quiet: true });
@@ -154,10 +148,11 @@ describe('runInstaller() flag wiring (F-141)', () => {
     assert.equal(result.ok, true);
   });
 
-  test('force=true accepted (no throw)', async () => {
+  test('force=true is accepted and remains confined to the suite home', async () => {
     const { runInstaller } = await import('./index.mjs');
-    const result = await runInstaller({ force: true });
+    const result = await runInstaller({ force: true, dryRun: true });
     assert.equal(result.ok, true);
+    assert.ok(result.clean.wiped.every((path) => path.startsWith(SUITE_HOME)));
   });
 });
 

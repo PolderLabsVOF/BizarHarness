@@ -29,8 +29,8 @@ export function showInitHelp() {
     bizar init
 
   Description:
-    Detects the project stack, creates .bizar/PROJECT.md and
-    .bizar/AGENTS_SELF_IMPROVEMENT.md and installs relevant skills.
+    Detects the project stack, creates .bizar/PROJECT.md and the bounded
+    project-learning directory, and installs relevant skills.
     The per-project knowledge graph (in .bizar/graph/) is provided
     by the graphify mod — install it from the mod registry for
     that feature.
@@ -57,9 +57,9 @@ export function showTestGateHelp() {
     bizar test-gate                Detect and run the test suite
 
   Description:
-    Inspects the project for known test runners (jest, vitest, mocha,
-    bun:test, bun run test, etc.) and runs them. Falls back to package.json
-    "scripts.test" when present. Exits non-zero on test failures.
+    Detects package.json, pyproject.toml, Cargo.toml, or go.mod and runs
+    npm test, pytest, cargo test, or go test respectively. Extra arguments
+    are forwarded to the selected runner.
 
   Exit codes:
     0  All tests passed
@@ -151,30 +151,42 @@ export function showRestoreHelp() {
 
 // ── Test gate ──────────────────────────────────────────────────────────────────
 
-export async function runTestGate() {
+export function buildTestGateArgs(suite, args = []) {
+  const forwarded = args[0] === '--' ? args.slice(1) : args;
+  return suite.command === 'npm' && forwarded.length
+    ? [...suite.baseArgs, '--', ...forwarded]
+    : [...suite.baseArgs, ...forwarded];
+}
+
+export async function runTestGate(args = []) {
   console.log(chalk.bold.hex('#a855f7')('\n  ᚦ TEST GATE ᚦ\n'));
-  const { execSync } = await import('node:child_process');
+  const { spawnSync } = await import('node:child_process');
   const cwd = process.cwd();
   const possible = [
-    { cmd: 'npm test', check: 'package.json' },
-    { cmd: 'pytest', check: 'pyproject.toml' },
-    { cmd: 'cargo test', check: 'Cargo.toml' },
-    { cmd: 'go test ./...', check: 'go.mod' },
+    { command: 'npm', baseArgs: ['test'], label: 'npm test', check: 'package.json' },
+    { command: 'pytest', baseArgs: [], label: 'pytest', check: 'pyproject.toml' },
+    { command: 'cargo', baseArgs: ['test'], label: 'cargo test', check: 'Cargo.toml' },
+    { command: 'go', baseArgs: ['test', './...'], label: 'go test ./...', check: 'go.mod' },
   ];
   for (const suite of possible) {
     try {
       if (existsSync(join(cwd, suite.check))) {
-        console.log(`  Running: ${suite.cmd}`);
-        execSync(suite.cmd, { stdio: 'inherit', timeout: 120000, cwd });
+        const forwarded = args[0] === '--' ? args.slice(1) : args;
+        const commandArgs = buildTestGateArgs(suite, args);
+        process.stdout.write(`  Running: ${suite.label}${forwarded.length ? ` ${forwarded.join(' ')}` : ''}\n`);
+        const result = spawnSync(suite.command, commandArgs, { stdio: 'inherit', timeout: 120000, cwd });
+        if (result.status !== 0) throw new Error(`${suite.label} exited ${result.status}`);
         console.log('\n  ✓ Test gate passed\n');
         return true;
       }
     } catch {
-      console.log(`\n  ✗ Test gate failed: ${suite.cmd}\n`);
-      process.exit(1);
+      process.stdout.write(`\n  ✗ Test gate failed: ${suite.label}\n\n`);
+      process.exitCode = 1;
+      return false;
     }
   }
   console.log('  No test suite detected. Install one to use the test gate.\n');
+  process.exitCode = 2;
   return false;
 }
 
@@ -211,14 +223,15 @@ export async function run(name, args, isHelpRequest) {
       if (isHelpRequest) showExportHelp();
       else {
         const { runExport } = await import('../export.mjs');
-        const targetFlag = args.includes('--target') ? args[args.indexOf('--target') + 1] : null;
-        await runExport(targetFlag);
+        const targetFlag = args.includes('--target') ? args[args.indexOf('--target') + 1] : args.find((arg) => !arg.startsWith('-'));
+        const ok = await runExport(targetFlag || null);
+        if (!ok) process.exitCode = 2;
       }
       break;
 
     case 'test-gate':
       if (isHelpRequest) showTestGateHelp();
-      else await runTestGate();
+      else await runTestGate(args);
       break;
 
     case 'doctor':
@@ -251,11 +264,11 @@ export async function run(name, args, isHelpRequest) {
       break;
 
     case 'backup': {
-      if (isHelpRequest || args.length === 0) {
+      if (isHelpRequest) {
         showBackupHelp();
         break;
       }
-      const sub = args[0];
+      const sub = args[0] || null;
       if (sub === 'list') {
         const { listBackups } = await import('../core/backup-store.mjs');
         const backups = await listBackups();
@@ -302,7 +315,7 @@ export async function run(name, args, isHelpRequest) {
       // Default: create backup
       const label = sub || null;
       const { createBackup } = await import('../core/backup-store.mjs');
-      const result = await createBackup({ label });
+      const result = await createBackup({ label, projectRoot: process.cwd() });
       if (result.ok) {
         console.log(chalk.green('  ✓ Backup created'));
         console.log(`  Path: ${result.path}`);
@@ -325,7 +338,7 @@ export async function run(name, args, isHelpRequest) {
       const dryRun = args.includes('--dry-run');
       const conflictStrategy = args.includes('--overwrite') ? 'overwrite' : args.includes('--skip') ? 'skip' : 'merge';
       const { restoreBackup } = await import('../core/backup-store.mjs');
-      const result = await restoreBackup({ backupPath: path, dryRun, conflictStrategy });
+      const result = await restoreBackup({ backupPath: path, dryRun, conflictStrategy, projectRoot: process.cwd() });
       if (dryRun) {
         console.log('  Dry-run mode — no files were modified.');
       }

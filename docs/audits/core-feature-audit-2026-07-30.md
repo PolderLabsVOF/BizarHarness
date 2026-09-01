@@ -6,7 +6,7 @@ Scope: every shipped Bizar feature after removal of the application control plan
 
 | Area | Feature IDs | Current implementation | Validation | Result / residual risk |
 | --- | --- | --- | --- | --- |
-| MCP and local plans/loops/graph | F-001, F-019 | `packages/sdk/src/mcp` | MCP unit inventory + E2E source/load check | Retained; nine tools only. File concurrency is intentionally simple. |
+| MCP and local plans/loops/graph | F-001, F-019 | `packages/sdk/src/mcp` | MCP unit inventory + E2E source/load check | Retained; nine tools at audit time (14 currently). File concurrency is intentionally simple. |
 | Safety and HITL | F-011, F-016 | settings + PreToolUse hooks | hook tests + settings assertions | Retained and strengthened. Claude Code schema/version drift remains an integration risk. |
 | Harness contracts | F-007–F-013, F-030 | Makefile, scripts, templates, docs, arch rules | script tests + architecture gate | Retained. Audit score is advisory; executable gates are authoritative. |
 | Runtime/toolchain | F-015, F-025, F-027 | Node/Bun constraints, provisioner, Claude Code surfaces | provision/install tests + E2E | Retained. Global binary availability is environment-dependent. |

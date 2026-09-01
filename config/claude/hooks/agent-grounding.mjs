@@ -22,10 +22,9 @@ process.stdin.on('end', () => {
   }
 
   const agentType = String(input.agent_type || 'unknown');
-  // v10.20.0: trim from 6 bullets / ~700 chars to one terse line.
-  // Full policy lives in AGENT_BASELINE.md §4 (research and tool routing)
-  // + agent-grounding.mjs context, referenced via the same hook on every dispatch.
-  const context = `Bizar grounding for @${agentType}: WebSearch before external-API proposals. Read repo for local facts. Cite docs.`;
+  // Keep universal context below 200 characters; detailed policy stays in the
+  // shared baseline and skill bodies load only when selected.
+  const context = `Bizar @${agentType}: use relevant installed skills and i-have-adhd. Search skills.sh only if hard/stuck with no match. WebSearch official docs externally; repo evidence locally.`;
 
   process.stdout.write(`${JSON.stringify({
     hookSpecificOutput: {

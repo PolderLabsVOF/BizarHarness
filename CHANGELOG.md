@@ -1,5 +1,41 @@
 # Changelog
 
+## [10.23.0] - 2026-09-01
+
+Productivity and reliability audit for autonomous Claude Code development.
+
+### Added
+
+- Default compact `i-have-adhd` response guidance and proactive installed-skill
+  selection with a reviewed skills.sh fallback for hard or stuck work.
+- Global `/artifact on|off|status` completion reports and bounded global-user /
+  project-debugging learning stores through `bizar learn`.
+- Global Bizar config-path resolution, traversal-safe integrity-checked backups,
+  and complete command, hook, agent, rule, and skill installation diagnostics.
+- Installer tests are fully fixture-confined and cannot wipe or re-sync an
+  operator's live Claude configuration.
+- Native copied workflows remain self-contained, v2 restores reject integrity
+  drift, npm test flags forward correctly, and selected-model context metadata
+  prevents Claude Code unknown-window warnings.
+
+### Changed
+
+- Small deterministic local work now takes a direct fast path; shaped workflows
+  and parallel worktree workers are reserved for scopes that benefit from them.
+- Every orchestrated Agent call uses an enabled configured model or fails closed;
+  disabled providers can no longer leak through Claude Code defaults.
+- Worker completion is terminal, repeated idle events trigger intervention, and
+  independent workflow lanes execute concurrently with isolated worktrees.
+- Auto-compaction is enabled and PreCompact writes a bounded recovery checkpoint.
+- Models.dev parsing supports current flat and nested catalog envelopes while
+  retaining richer capability, cost, benchmark, and reasoning metadata.
+- The shipped MCP and E2E inventories now cover all 14 tools and all lifecycle
+  events; the CLI help audit covers every routed command.
+
+### Removed
+
+- Automatic prompt-to-rule learning and legacy unbounded instinct extraction.
+
 ## [10.22.0] - 2026-08-31
 
 Phase 4 dynamic disable-providers mechanism. Adds an operator-controlled `disabledProviders: string[]` config key that filters out providers at every reader site. Adding or removing a blocked provider is a single JSON edit on the operator's `model-router.json` — no in-code `BLOCKED_PROVIDERS` constant, no `if (id === 'claude-opus-5')` branch, no compiled-in family allowlist.

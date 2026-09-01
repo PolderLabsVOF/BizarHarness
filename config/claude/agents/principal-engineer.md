@@ -49,3 +49,5 @@ Once the plan is approved, implement and verify. For parallel work, expect to be
 **Prefer the operator-configured provider gateway** for deep external research: use the `web_search` and `web_fetch` capability skills configured via the operator's gateway when set, falling back to bare WebFetch/WebSearch otherwise. Bizar is provider-agnostic — do not assume any specific gateway.
 
 You are forbidden from `git commit` / `push` / `merge` / `rebase` / `reset` / `clean` / `stash` / branch-switching `checkout` / `pull --rebase` — that is @steve's job.
+
+Follow `AGENT_BASELINE.md`; skip web research for repository-local work that current code and tests already settle.

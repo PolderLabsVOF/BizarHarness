@@ -25,12 +25,11 @@ export const HOOK_PROGRAMS = Object.freeze({
   'advisor-context': 'advisor-context.mjs',
   'agent-grounding': 'agent-grounding.mjs',
   'agent-model-guard': 'agent-model-guard.mjs',
-  'auto-instinct': 'auto-instinct.sh',
   'content-style-guard': 'content-style-guard.mjs',
+  'completion-artifact': 'completion-artifact.mjs',
   'control-inbox': 'control-inbox.mjs',
   'git-workflow-guard': 'git-workflow-guard.mjs',
   'keyword-router': 'keyword-router.mjs',
-  'learning-extract': 'learning-extract.mjs',
   'path-ownership-guard': 'path-ownership-guard.mjs',
   'permission-request-policy': 'permission-request.mjs',
   'persistent-mode': 'persistent-mode.mjs',
@@ -76,7 +75,6 @@ export const EVENT_CHAINS = Object.freeze({
   'permission-request': Object.freeze(['permission-request-policy']),
   'post-tool-use': Object.freeze([
     'posttooluse-editwrite',
-    'auto-instinct',
   ]),
   'post-tool-use-failure': Object.freeze(['post-tool-use-failure-policy']),
   'subagent-start': Object.freeze([
@@ -84,13 +82,13 @@ export const EVENT_CHAINS = Object.freeze({
     'advisor-context',
     'worktree-bootstrap',
   ]),
-  'subagent-stop': Object.freeze(['verify-deliverables', 'worktree-archive']),
+  'subagent-stop': Object.freeze(['team-lifecycle', 'verify-deliverables', 'worktree-archive']),
   'task-created': Object.freeze(['team-lifecycle']),
   'task-completed': Object.freeze(['team-lifecycle']),
   'teammate-idle': Object.freeze(['team-lifecycle']),
   'pre-compact': Object.freeze(['persistent-mode', 'precompact-priorities']),
-  stop: Object.freeze(['persistent-mode']),
-  'session-end': Object.freeze(['sessionend-recall', 'learning-extract']),
+  stop: Object.freeze(['persistent-mode', 'completion-artifact']),
+  'session-end': Object.freeze(['sessionend-recall']),
 });
 
 const EVENT_NAMES = Object.freeze({
@@ -243,7 +241,7 @@ export function selectEventChain(eventKey, input = '') {
 
   if (eventKey === 'post-tool-use') {
     if (/^(Write|Edit|MultiEdit)$/.test(toolName)) return ['posttooluse-editwrite'];
-    if (toolName === 'Bash') return ['auto-instinct'];
+    if (toolName === 'Bash') return [];
     return [];
   }
 
@@ -295,7 +293,7 @@ export function executeHook(name, input = '', options = {}) {
 }
 
 function showHelp() {
-  process.stderr.write('Usage: bizar hook <name>\n');
+  process.stdout.write('Usage: bizar hook <name>\n');
 }
 
 export async function run(name, args, isHelpRequest) {

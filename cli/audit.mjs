@@ -34,7 +34,7 @@ export async function runAudit() {
     const text = readFileSync(path, 'utf8');
     const meta = frontmatter(text);
     if (!meta) issues.push({ path, severity: 'HIGH', msg: 'missing YAML frontmatter' });
-    for (const field of ['name:', 'description:', 'tools:', 'model:']) {
+    for (const field of ['name:', 'description:', 'tools:']) {
       if (!meta.includes(field)) warnings.push({ path, severity: 'WARN', msg: `missing ${field.slice(0, -1)} field` });
     }
     if (/(?:sk-[A-Za-z0-9_-]{20,}|api[-_]?key\s*[:=]\s*["'][^"']{12,})/i.test(text)) {
@@ -42,9 +42,6 @@ export async function runAudit() {
     }
 
     const tools = meta.match(/^tools:\s*(.+)$/m)?.[1] || '';
-    if (file === 'office-manager.md' && /\b(?:Bash|Edit|Write)\b/.test(tools)) {
-      issues.push({ path, severity: 'HIGH', msg: 'primary router has execution tools' });
-    }
     if (['qa-reviewer.md', 'research-analyst.md'].includes(file) && /\b(?:Edit|Write)\b/.test(tools)) {
       issues.push({ path, severity: 'HIGH', msg: 'read-only reviewer has mutation tools' });
     }

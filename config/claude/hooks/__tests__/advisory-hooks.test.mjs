@@ -241,21 +241,21 @@ test('git-workflow-guard: git status → silent pass', () => {
   }
 });
 
-// ─── sessionstart-prime.mjs priming (always-fetch-docs bullet) ─────
+// ─── sessionstart-prime.mjs priming (conditional-docs bullet) ─────
 
-test('sessionstart-prime: always-fetch-docs bullet is in briefing source', () => {
+test('sessionstart-prime: external/version-sensitive docs bullet is in briefing source', () => {
   const src = readFileSync(SESSIONSTART_PRIME, 'utf8');
   // Source-level check: the priming bullet must live in the file that
   // constructs the SessionStart briefing. The full source is long, so
   // we just assert the literal phrase is present.
   assert.match(
     src,
-    /Always fetch official docs \(WebSearch \+ WebFetch\) before non-trivial work/,
-    'expected always-fetch-docs priming bullet in sessionstart-prime.mjs',
+    /external\/version-sensitive work requires current official docs via WebSearch\/WebFetch/i,
+    'expected conditional-docs priming bullet in sessionstart-prime.mjs',
   );
   assert.match(
     src,
-    /never guess at API names or command syntax/,
-    'expected guess-and-try prohibition in sessionstart-prime.mjs',
+    /Direct small known local fixes; use one isolated worker when useful; use parallel worktrees only for independent scopes/,
+    'expected fast-path boundary in sessionstart-prime.mjs',
   );
 });

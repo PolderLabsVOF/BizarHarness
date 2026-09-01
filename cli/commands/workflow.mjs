@@ -11,6 +11,7 @@ import {
   startWorkflow,
 } from '../core/workflow-state.mjs';
 import { loadModelRouter } from '../../config/agents/model-assignment.mjs';
+import { resolveGlobalModelRouter } from '../config-paths.mjs';
 
 const DEFAULT_PROBE_TIMEOUT_MS = 3_000;
 
@@ -216,14 +217,16 @@ export async function run(name, args, isHelpRequest) {
           '--profile and --workflow cannot specify different profiles',
         );
       }
-      const registry = loadModelRouter(flags.router || process.env.BIZAR_MODEL_ROUTER_PATH);
+      const registry = loadModelRouter(
+        flags.router || process.env.BIZAR_MODEL_ROUTER_PATH || resolveGlobalModelRouter(),
+      );
       let availableModelIds;
       try {
         requireEffectiveInferenceEndpoint(registry);
         availableModelIds = await probeAvailableModels({ registry });
       } catch {
-        // Dynamic routing deliberately fails open to session-model inheritance.
-        // Do not retry provider aliases or block workflow startup on discovery.
+        // Discovery is optional; the resolver still supplies an explicit
+        // enabled configured-tier model. Never inherit a provider default.
         availableModelIds = undefined;
       }
       state = startWorkflow({

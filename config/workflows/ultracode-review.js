@@ -58,12 +58,9 @@ const lensRole = {
 }
 
 phase('Review')
-const reviewed = await pipeline(
-  lenses,
-  (lens) => dispatchAgent(agent, `reviewer-${lens[0]}`, `Review ${TARGET} through the ${lens[0]} lens. ${lens[1]} Report only actionable defects with a concrete failure scenario; do not praise or speculate.`, { ...lensRole[lens[0]], label: `review:${lens[0]}`, phase: 'Review', schema: FINDINGS }),
-  (review, original) => (review?.findings || []).slice(0, 12).map((finding) => ({ ...finding, lens: original[0] })),
-  (findings) => parallel(findings.map((finding, index) => () => dispatchAgent(agent, `finding-verifier-${index + 1}`, `Try to refute this proposed finding. Inspect the exact code path and reject it if it is speculative, pre-existing, unreachable, or already covered.\n${barrierRef({ runId: RUN_ID, phase: 'Review', label: `review:${finding.lens || 'mixed'}`, summary: `${finding.summary ? finding.summary.slice(0, 200) : `finding in ${finding.file}`}` }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['reasoning', 'structured-output'], label: `verify:${index + 1}:${finding.file}`, phase: 'Verify', schema: VERDICT }).then((verdict) => ({ finding, verdict })))),
-)
+const lensReviews = await parallel(lenses.map((lens) => () => dispatchAgent(agent, `reviewer-${lens[0]}`, `Review ${TARGET} through the ${lens[0]} lens. ${lens[1]} Report only actionable defects with a concrete failure scenario; do not praise or speculate.`, { ...lensRole[lens[0]], label: `review:${lens[0]}`, phase: 'Review', schema: FINDINGS })))
+const findings = lensReviews.flatMap((review, index) => (review?.findings || []).slice(0, 12).map((finding) => ({ ...finding, lens: lenses[index][0] })))
+const reviewed = await parallel(findings.map((finding, index) => () => dispatchAgent(agent, `finding-verifier-${index + 1}`, `Try to refute this proposed finding. Inspect the exact code path and reject it if it is speculative, pre-existing, unreachable, or already covered.\n${barrierRef({ runId: RUN_ID, phase: 'Review', label: `review:${finding.lens || 'mixed'}`, summary: `${finding.summary ? finding.summary.slice(0, 200) : `finding in ${finding.file}`}` }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['reasoning', 'structured-output'], label: `verify:${index + 1}:${finding.file}`, phase: 'Verify', schema: VERDICT }).then((verdict) => ({ finding, verdict }))))
 
-const verified = reviewed.flat(2).filter(Boolean).filter((item) => item.verdict?.confirmed).map((item) => ({ ...item.finding, verification: item.verdict.reason }))
+const verified = reviewed.filter(Boolean).filter((item) => item.verdict?.confirmed).map((item) => ({ ...item.finding, verification: item.verdict.reason }))
 return { target: TARGET, findings: verified }

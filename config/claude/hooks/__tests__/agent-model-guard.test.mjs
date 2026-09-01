@@ -208,26 +208,18 @@ test('Agent model guard ignores additionalContext.fallback when routingDecisionI
 
 // ── 10.22.0 / Phase 4: disabled-providers filter contract ─────────────
 
-test('Agent model guard filters disabled-provider user picks silently', async () => {
-  // The hook's job is to silently filter, not advise: a model override
-  // for a disabled id falls back to "inherit session" (no error). The
-  // orchestrator already chose the id; Phase 4 lets the operator's
-  // disable intent override user picks without blocking dispatch.
+test('Agent model guard denies disabled-provider overrides', async () => {
   const registry = {
     disabledProviders: ['anthropic'],
     tiers: { premium: { models: ['tier/never'], purpose: 'p', effort: 'high' } },
     userSelected: { models: ['anthropic/claude-3-5-sonnet', 'claude-minimax/MiniMax-M3'] },
   };
-  // `anthropic/claude-3-5-sonnet` is disabled — the guard must NOT
-  // return an advisory block (silent-filter contract per stop-condition 1).
-  // Instead it falls through to the live-probe path, which has no
-  // availableModelIds → inherit-session.
   const out = await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model: 'anthropic/claude-3-5-sonnet' },
   }, { registry });
-  // No `additionalContext` → no advisory → silent-filter behaviour.
-  assert.equal(out.hookSpecificOutput, undefined, 'disabled id must NOT trigger advisory');
+  assert.equal(decision(out), 'deny');
+  assert.match(out.hookSpecificOutput?.permissionDecisionReason || '', /disabledProviders/);
   // A non-disabled user pick still passes.
   const out2 = await guardAgentModel({
     ...input,

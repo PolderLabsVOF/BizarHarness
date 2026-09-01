@@ -1,6 +1,6 @@
 # Bizar Harness
 
-Bizar is a guarded-autonomy harness for Claude Code. It packages 16 uniquely named role agents, 65 skills, slash-command workflows, lifecycle and safety hooks, a typed SDK, a nine-tool MCP server, and install/audit/test utilities.
+Bizar is a guarded-autonomy harness for Claude Code. It packages 16 uniquely named role agents, 66 skills, slash-command workflows, lifecycle and safety hooks, a typed SDK, a 14-tool MCP server, and install/audit/test utilities.
 
 ## What it does
 

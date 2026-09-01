@@ -12,7 +12,7 @@ is verified, and stops.
 
 | Subsystem | Canonical surfaces |
 | --- | --- |
-| Instructions | `AGENTS.md`, `.claude/agents/_shared/AGENT_BASELINE.md`, `.claude/agents/_shared/CLAUDE_TOOLS.md` |
+| Instructions | `AGENTS.md`, `config/claude/agents/_shared/AGENT_BASELINE.md`, `config/claude/agents/_shared/CLAUDE_TOOLS.md` |
 | State | `PROGRESS.md`, `feature_list.json`, `DECISIONS.md`, bounded `.bizar/` operational records |
 | Verification | `make check`, `make test`, `make e2e`, `make clean-check` |
 | Scope | WIP=1, explicit exclusions, approval boundaries, stop conditions |

@@ -27,3 +27,5 @@ maintain a Bizar browser subprocess.
 Autonomously browse local/test environments and collect read-only evidence.
 Stop for approval before entering secrets, submitting irreversible forms,
 making purchases, publishing, deploying, or modifying production data.
+
+Follow `AGENT_BASELINE.md`; use live external documentation only when the browser/tool behavior is version-sensitive.

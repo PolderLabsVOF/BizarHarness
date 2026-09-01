@@ -2,9 +2,9 @@
  * Dynamic model-tier selection for Bizar orchestration.
  *
  * Agent roles are model-agnostic. Mike selects a tier per dispatch from task
- * risk/complexity, then chooses the first live model in that tier. If model
- * discovery is unavailable or none of the configured candidates is reported,
- * dispatch omits the model override and inherits the active session model.
+ * risk/complexity, then chooses the first enabled configured model in that
+ * tier. A missing discovery response must not make dispatch omit its model
+ * override: that would inherit an unconfigured provider default.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -44,8 +44,9 @@ function assertDynamicRegistry(registry) {
   }
   const policies = registry.policies || {};
   if (policies.selectionOwner !== 'orchestrator') fail('MODEL_POLICY_INVALID', 'The orchestrator must own model selection.');
-  if (policies.discoveryFailure !== 'inherit-session' || policies.unavailableModel !== 'inherit-session') {
-    fail('MODEL_POLICY_INVALID', 'Discovery and unavailable-model failures must inherit the active session model.');
+  if (!['configured-tier-fallback', 'inherit-session'].includes(policies.discoveryFailure)
+    || !['configured-tier-fallback', 'inherit-session'].includes(policies.unavailableModel)) {
+    fail('MODEL_POLICY_INVALID', 'Discovery and unavailable-model failures must use the configured-tier fallback.');
   }
   if (policies.retryModelAliases !== false || policies.maxDispatchModelAttempts !== 1) {
     fail('MODEL_POLICY_INVALID', 'Model alias retries are forbidden; each dispatch gets one model attempt.');
@@ -71,18 +72,19 @@ export function resolveDispatchModel({
   const chosenTier = tier || registry.roleDefaults?.[agent] || 'default';
   const definition = registry.tiers?.[chosenTier];
   if (!definition) fail('UNKNOWN_TIER', `Unknown model tier ${chosenTier}.`);
-  const candidates = normalizeModelIds(definition.models);
+  const disabled = new Set(normalizeModelIds(registry.disabledProviders).map((prefix) => prefix.toLowerCase()));
+  const candidates = normalizeModelIds(definition.models)
+    .filter((candidate) => ![...disabled].some((prefix) => candidate.toLowerCase().startsWith(prefix)));
+  if (candidates.length === 0) fail('NO_ENABLED_TIER_MODEL', `Tier ${chosenTier} has no enabled candidate models.`);
   const available = availableModelIds == null ? null : new Set(normalizeModelIds(availableModelIds));
-  const model = available ? candidates.find((candidate) => available.has(candidate)) || null : null;
+  const model = available ? candidates.find((candidate) => available.has(candidate)) || candidates[0] : candidates[0];
   return deepFreeze({
     agent: typeof agent === 'string' && agent.trim() ? agent.trim() : null,
     tier: chosenTier,
     model,
-    inheritSession: model === null,
+    inheritSession: false,
     candidates,
-    reason: model === null
-      ? (available === null ? 'model-discovery-unavailable' : 'no-tier-candidate-available')
-      : 'live-tier-candidate',
+    reason: available?.has(model) ? 'live-tier-candidate' : 'configured-tier-fallback',
     effort: definition.effort || null,
     endpoint: registry.endpoint || registry.gateway?.endpoint || null,
   });

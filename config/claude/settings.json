@@ -65,7 +65,7 @@
   "askUserQuestionTimeout": "5m",
   "showThinkingSummaries": true,
   "enableWorkflows": true,
-  "disableAutoCompact": true,
+  "disableAutoCompact": false,
   "autoDreamEnabled": true,
   "env": {
     "BIZAR_HOME": "${HOME}/.config/bizar",

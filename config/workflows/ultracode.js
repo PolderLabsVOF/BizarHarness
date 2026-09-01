@@ -75,10 +75,7 @@ const approved = audit || plan
 phase('Implement')
 const lanes = approved.lanes.slice(0, 8)
 if (approved.lanes.length > lanes.length) log(`Bounded implementation to 8 of ${approved.lanes.length} lanes; ${approved.lanes.length - lanes.length} lanes were not dispatched.`)
-const implementation = await pipeline(
-  lanes,
-  (lane, _original, index) => dispatchAgent(agent, `lane-implementer-${index + 1}`, `Implement this owned lane for the task "${TASK}".\n${barrierRef({ runId: RUN_ID, phase: 'Design', label: 'barrier', summary: `lane ${lane.name}: ${lane.task.slice(0, 120)}` }).promptBlock}\nDo not edit outside the listed scope. Do not revert sibling work. Add regression tests and run the smallest relevant checks. Return changed files, commands, exact results, and blockers. Do not commit, push, publish, or deploy.`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: `implement:${index + 1}:${lane.name}`, phase: 'Implement', isolation: 'worktree' }),
-)
+const implementation = await parallel(lanes.map((lane, index) => () => dispatchAgent(agent, `lane-implementer-${index + 1}`, `Implement this owned lane for the task "${TASK}".\n${barrierRef({ runId: RUN_ID, phase: 'Design', label: 'barrier', summary: `lane ${lane.name}: ${lane.task.slice(0, 120)}` }).promptBlock}\nDo not edit outside the listed scope. Do not revert sibling work. Add regression tests and run the smallest relevant checks. Return changed files, commands, exact results, and blockers. Do not commit, push, publish, or deploy.`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: `implement:${index + 1}:${lane.name}`, phase: 'Implement', isolation: 'worktree' })))
 const completed = implementation.filter(Boolean)
 if (completed.length === 0) return { status: 'blocked', reason: 'No implementation lane completed successfully.', plan: approved }
 // Phase B: persist each implementation artifact.
@@ -90,10 +87,7 @@ for (let i = 0; i < completed.length; i++) {
 }
 
 phase('Verify')
-const reviews = await pipeline(
-  completed,
-  (result, _original, index) => dispatchAgent(agent, `reviewer-${index + 1}`, `Try to refute this implementation result for task "${TASK}". Check correctness, security, scope, test evidence, and integration assumptions. Return only verified findings and required checks.\n${barrierRef({ runId: RUN_ID, phase: 'Implement', label: `implement:${index + 1}:${lanes[index]?.name || ''}`, summary: `review of lane ${lanes[index]?.name || index + 1}` }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: `review:${index + 1}`, phase: 'Verify' }),
-)
+const reviews = await parallel(completed.map((result, index) => () => dispatchAgent(agent, `reviewer-${index + 1}`, `Try to refute this implementation result for task "${TASK}". Check correctness, security, scope, test evidence, and integration assumptions. Return only verified findings and required checks.\n${barrierRef({ runId: RUN_ID, phase: 'Implement', label: `implement:${index + 1}:${lanes[index]?.name || ''}`, summary: `review of lane ${lanes[index]?.name || index + 1}` }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: `review:${index + 1}`, phase: 'Verify' })))
 // Phase B: persist review artifacts.
 const verifiedReviews = reviews.filter(Boolean);
 for (let i = 0; i < verifiedReviews.length; i++) {

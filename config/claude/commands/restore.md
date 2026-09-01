@@ -1,20 +1,17 @@
 ---
-description: Restore Bizar state from a previous /backup snapshot.
+description: Restore Bizar state from a verified backup.
 allowed-tools: Read, Bash
 ---
 
 # /restore — recover Bizar state from a backup
 
-Runs `bizar restore <snapshot-path>`. The snapshot path is the timestamped
-directory `bizar backup` wrote under `~/.config/bizar/backups/<UTC>/`.
+Run `bizar restore <backup-path>`.
 
-Before restoring, Bizar verifies that:
+Before restoring, Bizar:
 
-1. The snapshot is signed by the same machine id that created it.
-2. The schema version of the contained `feature_list.json` and
-   `tasks.sqlite` is compatible with the currently installed `@polderlabs/bizar-sdk`.
-3. The target directories do not contain newer state — newer state is
-   preserved into a parallel `<snapshot>-before-restore/` folder.
+1. Verifies the manifest and every recorded SHA-256 file hash.
+2. Ignores source paths stored in the manifest and restores only to canonical
+   global or current-project destinations.
+3. Applies the selected conflict strategy: merge (default), overwrite, or skip.
 
-Restoration is reversible: nothing in the target directory is deleted
-until the safe-copy step succeeds.
+Preview safely with `bizar restore <path> --dry-run`.

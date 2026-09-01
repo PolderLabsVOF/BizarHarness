@@ -29,6 +29,7 @@ import {
   normalizeModels,
   partitionStalePicks,
   classifyKind,
+  configuredFallbackModels,
   currentSelection,
 } from '../commands/models.mjs';
 
@@ -163,6 +164,53 @@ test('applyModelOverrides: empty pickedIds clears modelOverrides', () => {
   }
 });
 
+test('applyModelOverrides: switches managed context tokens and clears them when metadata is unavailable', () => {
+  const cwd = makeCwd();
+  try {
+    const settingsPath = tmpSettingsPath(cwd);
+    const profiles = {
+      'provider/large': { limits: { contextTokens: 1_000_000 } },
+      'provider/small': { limits: { contextTokens: 200_000 } },
+    };
+    writeFileSync(settingsPath, JSON.stringify({
+      model: 'provider/large',
+      env: { CLAUDE_CODE_MAX_CONTEXT_TOKENS: '1000000' },
+    }));
+
+    applyModelOverrides({ settingsJsonPath: settingsPath, pickedIds: ['provider/small'], profiles });
+    let back = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.equal(back.model, 'provider/small');
+    assert.equal(back.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '200000');
+
+    applyModelOverrides({ settingsJsonPath: settingsPath, pickedIds: ['provider/unknown'], profiles });
+    back = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.equal(back.model, 'provider/unknown');
+    assert.equal(back.env, undefined);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('applyModelOverrides: preserves an explicit operator context override', () => {
+  const cwd = makeCwd();
+  try {
+    const settingsPath = tmpSettingsPath(cwd);
+    const profiles = {
+      'provider/large': { limits: { contextTokens: 1_000_000 } },
+      'provider/small': { limits: { contextTokens: 200_000 } },
+    };
+    writeFileSync(settingsPath, JSON.stringify({
+      model: 'provider/large',
+      env: { CLAUDE_CODE_MAX_CONTEXT_TOKENS: '777777' },
+    }));
+    applyModelOverrides({ settingsJsonPath: settingsPath, pickedIds: ['provider/small'], profiles });
+    const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    assert.equal(back.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '777777');
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test('applyModelOverrides: null path skips the sync entirely', () => {
   const result = applyModelOverrides({ settingsJsonPath: null, pickedIds: ['minimax/MiniMax-M3'], liveIds: ['minimax/MiniMax-M3'] });
   assert.equal(result.wrote, false);
@@ -200,9 +248,17 @@ test('applyModels then applyModelOverrides: round-trip survives both files', () 
       'minimax/MiniMax-M3': 'minimax/MiniMax-M3',
       'codex/gpt-5.6-sol': 'codex/gpt-5.6-sol',
     });
+    assert.equal(settings.model, picks[0]);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
+});
+
+test('configuredFallbackModels filters disabled providers and preserves tier order', () => {
+  assert.deepEqual(configuredFallbackModels({
+    disabledProviders: ['anthropic/'],
+    tiers: { budget: { models: ['anthropic/a', 'provider/cheap'] }, default: { models: ['provider/main'] } },
+  }), ['provider/cheap', 'provider/main']);
 });
 
 // ── classifyKind (live namespace) ────────────────────────────────────────

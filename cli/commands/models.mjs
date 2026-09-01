@@ -6,10 +6,10 @@
  *   bizar models                # interactive: list + multi-select picker
  *   bizar models --list         # non-interactive: list candidate IDs (one per line)
  *   bizar models --set id1,id2  # non-interactive: set the user-selected list directly
- *   bizar models --clear        # clear userSelected, fall back to session-only
+ *   bizar models --clear        # clear userSelected and apply a configured fallback
  *   bizar models --json         # machine-readable output for any subcommand
  *
- * The picked IDs persist under `config/claude/model-router.json#userSelected`.
+ * The picked IDs persist under the global Bizar model router's `userSelected` block.
  * The orchestrator (Mike) dispatches subagents using ONLY these user-selected
  * models. The `bizar_model_list` MCP tool also surfaces only these IDs.
  *
@@ -19,11 +19,10 @@
  */
 import chalk from 'chalk';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import readline from 'node:readline';
 
-import { BIZAR_HOME } from '../provision.mjs';
+import { resolveClaudeConfigDir, resolveGlobalModelRouter, resolveBizarHome } from '../config-paths.mjs';
 
 import {
   rankUserSelectedForRole as rankUserSelectedForRoleMirror,
@@ -43,7 +42,7 @@ export function resolveEndpoint(opts = {}) {
   const fromEnvToken = env.ANTHROPIC_AUTH_TOKEN || null;
 
   let settings = null;
-  const settingsPath = opts.settingsJsonPath || join(homedir(), '.claude', 'settings.json');
+  const settingsPath = opts.settingsJsonPath || join(resolveClaudeConfigDir({ env, cwd: opts.cwd || process.cwd() }), 'settings.json');
   if (existsSync(settingsPath)) {
     try {
       const raw = JSON.parse(readFileSync(settingsPath, 'utf8'));
@@ -102,12 +101,8 @@ export function resolveEndpoint(opts = {}) {
  * @param {string} [cwd] - resolution root for relative `BIZAR_MODEL_ROUTER_CONFIG` overrides.
  * @returns {string}
  */
-export function resolveRouterPath(cwd = process.cwd()) {
-  const fromEnv = process.env.BIZAR_MODEL_ROUTER_CONFIG;
-  if (fromEnv && typeof fromEnv === 'string') {
-    return isAbsolute(fromEnv) ? fromEnv : resolve(cwd, fromEnv);
-  }
-  return join(BIZAR_HOME(), 'config', 'claude', 'model-router.json');
+export function resolveRouterPath(cwd = process.cwd(), env = process.env) {
+  return resolveGlobalModelRouter({ cwd, env });
 }
 
 /**
@@ -117,8 +112,8 @@ export function resolveRouterPath(cwd = process.cwd()) {
  * `getAliasMap` helper — the CLI is the canonical writer so this
  * helper exists so the JS code path can stay self-contained.
  */
-export function loadAliasMap(home = homedir()) {
-  const path = join(home, '.config', 'bizar', 'alias-map.json');
+export function loadAliasMap(home) {
+  const path = home ? join(home, '.config', 'bizar', 'alias-map.json') : join(resolveBizarHome(), 'alias-map.json');
   if (!existsSync(path)) return {};
   try {
     const raw = JSON.parse(readFileSync(path, 'utf8'));
@@ -210,6 +205,19 @@ function flattenModelsDevCatalog(catalog) {
         add(modelId.includes('/') ? modelId : `${key}/${modelId}`, model);
       }
     }
+    // Current Models.dev files use a top-level `models` map, while
+    // `catalog.json` additionally nests model maps under `providers.<id>`.
+    // Handle both envelopes explicitly; the previous walker silently skipped
+    // the top-level map because it expected a second `.models` property.
+    if (key === 'models') {
+      for (const [modelId, model] of Object.entries(value)) add(modelId, model);
+    }
+    if (key === 'providers') {
+      for (const provider of Object.values(value)) {
+        if (!provider || typeof provider !== 'object' || Array.isArray(provider)) continue;
+        for (const [modelId, model] of Object.entries(provider.models || {})) add(modelId, model);
+      }
+    }
   }
   return entries;
 }
@@ -261,6 +269,13 @@ export function toCapabilityProfile(gatewayId, match, matchType, confidence) {
     },
     releaseDate: typeof match.release_date === 'string' ? match.release_date : null,
     lastUpdated: typeof match.last_updated === 'string' ? match.last_updated : null,
+    knowledge: typeof match.knowledge === 'string' ? match.knowledge : null,
+    openWeights: match.open_weights === true,
+    reasoningOptions: Array.isArray(match.reasoning_options) ? match.reasoning_options : [],
+    interleaved: match.interleaved && typeof match.interleaved === 'object' ? match.interleaved : null,
+    weights: Array.isArray(match.weights) ? match.weights : [],
+    benchmarks: Array.isArray(match.benchmarks) ? match.benchmarks : [],
+    cost: match.cost && typeof match.cost === 'object' ? match.cost : null,
     metadata: {
       source: 'models.dev',
       sourceUrl: MODELS_DEV_CATALOG_URL,
@@ -395,6 +410,7 @@ export async function enrichPicksByMetadata({
   candidates,
   pickedIds,
   fetchFn = fetchModelsDevCatalog,
+  providerFetchFn,
   timeoutMs = 3000,
   concurrency = 8,
 } = {}) {
@@ -403,11 +419,16 @@ export async function enrichPicksByMetadata({
   // downstream enrichment path fall back to `_gateway.name`.
   // The wholesale fetch inherits `timeoutMs` so a hung stub does not
   // block the picker-confirmation step indefinitely.
-  const catalog = await Promise.race([
-    fetchFn({}),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('enrichPicksByMetadata: wholesale fetch timeout')), timeoutMs)),
+  const fetchWithTimeout = (fn, label) => Promise.race([
+    fn({}),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`enrichPicksByMetadata: ${label} fetch timeout`)), timeoutMs)),
   ]).catch(() => ({}));
+  const [catalog, providerCatalog] = await Promise.all([
+    fetchWithTimeout(fetchFn, 'base catalog'),
+    typeof providerFetchFn === 'function' ? fetchWithTimeout(providerFetchFn, 'provider catalog') : Promise.resolve({}),
+  ]);
   const catalogMap = flattenModelsDevCatalog(catalog);
+  const providerMap = flattenModelsDevCatalog(providerCatalog);
 
   const out = new Map();
   const ids = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id) : [];
@@ -441,8 +462,13 @@ export async function enrichPicksByMetadata({
           // cannot stall the worker past `timeoutMs`.
           Promise.resolve().then(() => {
             const lower = String(id).toLowerCase();
-            const match = catalogMap.get(lower)
+            const baseMatch = catalogMap.get(lower)
               || catalogMap.get(stripProvider(id).toLowerCase());
+            const providerMatch = providerMap.get(lower)
+              || providerMap.get(stripProvider(id).toLowerCase());
+            const match = baseMatch && providerMatch
+              ? { ...baseMatch, ...providerMatch }
+              : (baseMatch || providerMatch);
             let profile;
             if (match) {
               // Re-use the existing capability-profile shape; the new
@@ -734,8 +760,8 @@ function extractDisabledProviders(router) {
  * @returns {string[]} normalized disabled-provider prefixes
  */
 export function readDisabledProviders({ routerPath, legacyPath } = {}) {
-  const bizarPath = routerPath || join(homedir(), '.config', 'bizar', 'config', 'claude', 'model-router.json');
-  const fallPath = legacyPath || join(homedir(), '.claude', 'model-router.json');
+  const bizarPath = routerPath || resolveGlobalModelRouter();
+  const fallPath = legacyPath || join(resolveClaudeConfigDir(), 'model-router.json');
   if (existsSync(bizarPath)) {
     try {
       const parsed = JSON.parse(readFileSync(bizarPath, 'utf8'));
@@ -927,9 +953,9 @@ export function partitionStalePicks({ liveIds, pickedIds, disabledProviders }) {
  *   settingsPath: string|null,
  * }}
  */
-export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [], disabledProviders }) {
+export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [], disabledProviders, profiles = {} }) {
   const path = settingsJsonPath === undefined
-    ? join(homedir(), '.claude', 'settings.json')
+    ? join(resolveClaudeConfigDir(), 'settings.json')
     : settingsJsonPath;
   if (path === null) {
     return { wrote: false, syncedIds: [], skippedStale: [], skippedDisabled: [], settingsPath: null };
@@ -964,8 +990,36 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
   // Self-map pattern — Claude Code uses modelOverrides to suppress
   // `[claude-code:unrecognized_model]` for any ID that maps to itself.
   settings.modelOverrides = Object.fromEntries(synced.map((id) => [id, id]));
+  const previousModel = typeof settings.model === 'string' ? settings.model : null;
+  const previousContext = profiles?.[previousModel]?.limits?.contextTokens;
+  const nextModel = synced[0] || null;
+  const nextContext = profiles?.[nextModel]?.limits?.contextTokens;
+  const existingContext = settings.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS;
+  const previousWasManaged = Number.isSafeInteger(previousContext)
+    && String(previousContext) === String(existingContext);
+  const canManageContext = existingContext === undefined || previousWasManaged;
+
+  if (nextModel) settings.model = nextModel;
+  else delete settings.model;
+  if (canManageContext && Number.isSafeInteger(nextContext) && nextContext >= 100_000) {
+    settings.env = { ...(settings.env || {}), CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(nextContext) };
+  } else if (previousWasManaged && settings.env) {
+    delete settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS;
+    if (Object.keys(settings.env).length === 0) delete settings.env;
+  }
   writeAtomic(path, JSON.stringify(settings, null, 2) + '\n');
   return { wrote: true, syncedIds: synced, skippedStale: skipped, skippedDisabled, settingsPath: path };
+}
+
+export function configuredFallbackModels(router) {
+  const disabled = extractDisabledProviders(router);
+  const ids = [];
+  for (const tier of Object.values(router?.tiers || {})) {
+    for (const id of Array.isArray(tier?.models) ? tier.models : []) {
+      if (typeof id === 'string' && id.trim() && !ids.includes(id.trim())) ids.push(id.trim());
+    }
+  }
+  return filterCandidatesByDisabledProviders(ids, disabled).kept;
 }
 
 /**
@@ -1047,7 +1101,7 @@ export function deriveModelLabel(modelId, profile) {
  */
 export function applyModelPicker({ settingsJsonPath, pickedIds, profiles = {}, liveIds = [], disabledProviders }) {
   const path = settingsJsonPath === undefined
-    ? join(homedir(), '.claude', 'settings.json')
+    ? join(resolveClaudeConfigDir(), 'settings.json')
     : settingsJsonPath;
   if (path === null) {
     return { wrote: false, options: [], skippedStale: [], skippedDisabled: [], settingsPath: null };
@@ -1909,15 +1963,15 @@ function showHelp() {
     bizar models                    Interactive picker (TTY: arrow keys / space / enter; pipe: line-mode)
     bizar models --list             Print candidate IDs, one per line
     bizar models --set a,b,c        Persist the comma-separated IDs to userSelected
-    bizar models --clear            Remove userSelected; orchestrator falls back to session-only
+    bizar models --clear            Remove userSelected; use the first enabled configured-tier model
     bizar models --refresh         Re-fetch Models.dev metadata for stale profiles; preserve operator overrides
     bizar models explain <role>     Print ranked eligibility for a role (no gateway)
     bizar models --json             Machine-readable output for any subcommand
     bizar models --help             This help
 
-  The orchestrator (@mike) dispatches subagents using ONLY the models in
-  userSelected. If userSelected is empty, every dispatch inherits the
-  active session model.
+  The orchestrator (@mike) prefers userSelected and otherwise uses enabled
+  configured-tier candidates. Every dispatch receives an explicit model;
+  Bizar never inherits an unconfigured provider default.
 
   Post-confirm status screen (interactive only): after the picker saves a
   selection, every confirmed id is reported on its own row with one of:
@@ -2022,7 +2076,7 @@ export async function run(name, args, isHelpRequest, deps = {}) {
       process.stdout.write(JSON.stringify(verdict, null, 2) + '\n');
     } else {
       if (verdict.ranked.length === 0) {
-        console.log(chalk.yellow(`  ! userSelected is empty for role ${roleArg}; orchestrator will fall back to session-only.`));
+        console.log(chalk.yellow(`  ! userSelected is empty for role ${roleArg}; orchestrator will use configured tier fallback.`));
       } else {
         console.log(chalk.green(`  Ranked user-selected candidates for ${roleArg}:`));
         const pad = Math.max(8, ...verdict.ranked.map((entry) => entry.id.length));
@@ -2093,17 +2147,23 @@ export async function run(name, args, isHelpRequest, deps = {}) {
   }
 
   if (wantClear) {
-    const before = currentSelection(loadRouter(routerPath));
+    const loadedBefore = loadRouter(routerPath);
+    const before = currentSelection(loadedBefore);
+    const previousProfiles = loadedBefore?.userSelected?.profiles || {};
     const router = existsSync(routerPath)
       ? JSON.parse(readFileSync(routerPath, 'utf8'))
       : {};
     delete router.userSelected;
     writeAtomic(routerPath, JSON.stringify(router, null, 2) + '\n');
+    const fallback = configuredFallbackModels(router);
+    const sync = applyModelOverrides({ pickedIds: fallback, liveIds: [], profiles: previousProfiles });
+    const picker = applyModelPicker({ pickedIds: [], liveIds: [] });
     if (wantJson) {
-      process.stdout.write(JSON.stringify({ cleared: true, previous: before.models }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ cleared: true, previous: before.models, fallbackModel: fallback[0] || null, sync, picker }, null, 2) + '\n');
     } else {
       console.log(chalk.green('  v userSelected cleared'));
       console.log(chalk.dim(`    previous: ${before.models.length} model(s)`));
+      process.stdout.write(`${chalk.dim(`    active fallback: ${fallback[0] || '(none configured)'}`)}\n`);
     }
     return true;
   }
@@ -2114,13 +2174,14 @@ export async function run(name, args, isHelpRequest, deps = {}) {
       console.error(chalk.red('  x --set requires at least one model id'));
       process.exit(2);
     }
+    const previousProfiles = loadRouter(routerPath)?.userSelected?.profiles || {};
     const block = applyModels({ routerPath, models: ids, source: 'cli-set' });
     // Sync to Claude Code's settings.json — picks survive stale-ID
     // filtering only when an empty liveIds array disables it (no
     // candidates fetched for `--set`). The orchestrator will surface
     // `[claude-code:unrecognized_model]` for any ID the gateway later
     // rejects; the operator can re-run `bizar models` to drop them.
-    const sync = applyModelOverrides({ pickedIds: ids, liveIds: [] });
+    const sync = applyModelOverrides({ pickedIds: ids, liveIds: [], profiles: { ...previousProfiles, ...(block.profiles || {}) } });
     const picker = applyModelPicker({ pickedIds: ids, profiles: block.profiles || {}, liveIds: [] });
     if (wantJson) {
       process.stdout.write(JSON.stringify({ applied: block, sync, picker }, null, 2) + '\n');
@@ -2220,10 +2281,15 @@ export async function run(name, args, isHelpRequest, deps = {}) {
   // timeout (3000ms); per-id failures fall back to the Phase 1
   // `_gateway.name` contract.
   const fetchModelsDevCatalogFn = deps.fetchModelsDevCatalog || fetchModelsDevCatalog;
+  // Test callers that inject the base fetch intentionally stay offline; the
+  // production path fetches both Models.dev datasets concurrently.
+  const fetchProviderCatalogFn = deps.fetchProviderCatalog
+    || (deps.fetchModelsDevCatalog ? undefined : fetchProviderCatalog);
   const enrichment = await enrichPicksByMetadata({
     candidates,
     pickedIds: picked,
     fetchFn: fetchModelsDevCatalogFn,
+    providerFetchFn: fetchProviderCatalogFn,
   });
   const profilesMap = enrichment.profiles;
   const modelsDevStatus = enrichment.modelsDev && Object.keys(enrichment.modelsDev).length > 0
@@ -2231,10 +2297,12 @@ export async function run(name, args, isHelpRequest, deps = {}) {
     : { status: 'unavailable', source: MODELS_DEV_CATALOG_URL, matched: 0, total: picked.length, note: 'wholesale fetch failed; per-id enrichment degraded to _gateway.name fallback' };
 
   if (picked.length === 0) {
+    const previousProfiles = loadRouter(routerPath)?.userSelected?.profiles || {};
     const block = applyModels({ routerPath, models: [], source: 'live-pick' });
     // Clear Claude Code modelOverrides + modelPicker when the picker is
     // emptied so the session no longer claims to recognise removed IDs.
-    applyModelOverrides({ pickedIds: [], liveIds: [] });
+    const fallback = configuredFallbackModels(loadRouter(routerPath));
+    applyModelOverrides({ pickedIds: fallback, liveIds: [], profiles: previousProfiles });
     applyModelPicker({ pickedIds: [], liveIds: [] });
     if (wantJson) {
       process.stdout.write(JSON.stringify({
@@ -2246,7 +2314,7 @@ export async function run(name, args, isHelpRequest, deps = {}) {
         modelsDev: modelsDevStatus,
       }, null, 2) + '\n');
     } else {
-      console.log(chalk.yellow('  ! No models selected - userSelected is now empty; orchestrator will fall back to session-only.'));
+      process.stdout.write(`${chalk.yellow(`  ! No models selected - using configured fallback ${fallback[0] || '(none)'}.`)}\n`);
     }
     return true;
   }
@@ -2264,11 +2332,12 @@ export async function run(name, args, isHelpRequest, deps = {}) {
   // Code still surfaces the unrecognized_model diagnostic.
   const liveIds = candidates.map((c) => c.id);
   const partition = partitionStalePicks({ liveIds, pickedIds: picked });
+  const previousProfiles = loadRouter(routerPath)?.userSelected?.profiles || {};
   const block = applyModels({ routerPath, models: picked, tierHints, profiles, source: 'live-pick' });
   if (partition.staleIds.length > 0) {
     block.staleIds = partition.staleIds;
   }
-  const sync = applyModelOverrides({ pickedIds: picked, liveIds });
+  const sync = applyModelOverrides({ pickedIds: picked, liveIds, profiles: { ...previousProfiles, ...profiles } });
   // Sync the /model picker contents (`modelPicker` setting) so the user's
   // picks drive the picker without relying on gateway discovery.
   const picker = applyModelPicker({ pickedIds: picked, profiles, liveIds });

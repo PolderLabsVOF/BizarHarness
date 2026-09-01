@@ -32,7 +32,7 @@ transport would need.
 - A phase-oriented office-manager workflow.
 - Atomic feature claim transitions.
 - SQLite-backed cost reservations and concurrency controls.
-- A local, service-free runtime with a bounded nine-tool MCP surface.
+- A local, service-free runtime with a bounded MCP surface (nine tools at audit time; 14 in the current release).
 - Existing federation policy, signing, PII, trust, and budget primitives that
   can support a future optional remote adapter.
 

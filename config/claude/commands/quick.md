@@ -11,12 +11,9 @@ Run `$ARGUMENTS` directly in this session. Do NOT delegate to subagents.
 
 ## Mechanism
 
-This command creates a sentinel file `.bizar/.quick-once` in the current
-working directory. The `worker-suggest` UserPromptSubmit hook checks for
-this sentinel and short-circuits the orchestrator routing prompt for the
-NEXT turn only. The sentinel is removed automatically by the
-`session-end` lifecycle hook (or manually by the next non-quick user
-prompt).
+The `worker-suggest` hook recognizes `/quick` directly and skips orchestration
+for this command only. Legacy `.bizar/.quick-once` sentinels are consumed and
+deleted on their first prompt, so they cannot disable routing for a session.
 
 ## What this is for
 

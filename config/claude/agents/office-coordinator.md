@@ -15,7 +15,7 @@ Mike sends you tasks that are:
 - Deterministic with clear success criteria
 - Low complexity — single file or small scope
 - Quick lookups, searches, and information gathering
-- `.bizar/AGENTS_SELF_IMPROVEMENT.md` and `.bizar/PROJECT.md` updates after every implementation task
+- Explicit, evidence-backed `.bizar/PROJECT.md` or project-learning maintenance
 
 ## Tools Available
 
@@ -23,3 +23,5 @@ Mike sends you tasks that are:
 - Read, Edit, Write, Glob, Grep for file operations
 - Bash for commands
 - WebFetch, WebSearch for external information
+
+Follow `AGENT_BASELINE.md`. For a fast local task, do not browse or delegate unless external/version-sensitive behavior makes that necessary.

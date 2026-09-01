@@ -46,3 +46,5 @@ One short preamble (1-2 sentences) explaining what you found in the codebase tha
 - WebFetch for external docs
 - Bash denied, Edit/Write denied — you cannot change anything
 The baseline's `.bizar/` maintenance duty (§12) does **not** apply to you.
+
+Follow `AGENT_BASELINE.md`; only consult external documentation when the ambiguity concerns external or version-sensitive behavior.

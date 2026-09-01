@@ -8,13 +8,16 @@
  * suitable for callers (e.g. `bizar update`) that want to act on the
  * result without re-printing the per-check output.
  *
- * Checks (8 total):
+ * Checks:
  *   claude-cli-reachable:    claude --version exits 0
  *   settings-valid:          ~/.claude/settings.json parses
  *   mcp-server-registered:   settings.json has mcpServers.bizar
- *   hooks-wired:             settings.json has PreToolUse/PostToolUse/etc
- *   agent-files-installed:   agent .md files deployed
- *   skill-files-installed:   SKILL.md files deployed
+ *   hooks-wired:             every shipped lifecycle event is wired
+ *   agent-files-installed:   all shipped agent .md files are deployed
+ *   command-files-installed: all shipped slash commands are deployed
+ *   skill-files-installed:   skills include the default output skill
+ *   rule-files-installed:    all shipped rule files are deployed
+ *   hook-files-installed:    all shipped hook entrypoints are executable
  *   tools-on-path:           at least one of semble/skills/claude
  *   bizar-home:              BIZAR_HOME exists
  *   provider-reachable:       provider gateway responds
@@ -26,13 +29,38 @@
  */
 import chalk from 'chalk';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import {
+  resolveBizarHome,
+  resolveClaudeConfigDir,
+  resolveGlobalModelRouter,
+} from './config-paths.mjs';
+import {
+  REQUIRED_AGENTS,
+  REQUIRED_COMMANDS,
+  REQUIRED_HOOKS,
+} from './commands/validate.mjs';
+import { configuredFallbackModels } from './commands/models.mjs';
 
-const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
-const BIZAR_HOME = process.env.BIZAR_HOME
-  || join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'bizar');
+const REQUIRED_RULES = [
+  'general.md', 'git.md', 'javascript.md', 'python.md',
+  'testing.md', 'thinking.md', 'uncertainty.md',
+];
+const REQUIRED_HOOK_EVENTS = [
+  'UserPromptSubmit', 'SessionStart', 'PreToolUse', 'PermissionRequest',
+  'PostToolUse', 'PostToolUseFailure', 'SubagentStart', 'SubagentStop',
+  'TaskCreated', 'TaskCompleted', 'TeammateIdle', 'PreCompact', 'Stop',
+  'SessionEnd',
+];
+
+function claudeDir() {
+  return resolveClaudeConfigDir();
+}
+
+function bizarHome() {
+  return resolveBizarHome();
+}
 
 // ── individual checks ───────────────────────────────────────────────────────
 
@@ -48,7 +76,7 @@ async function checkClaudeReachable() {
 }
 
 async function checkSettingsValid() {
-  const cfgPath = join(CLAUDE_DIR, 'settings.json');
+  const cfgPath = join(claudeDir(), 'settings.json');
   if (!existsSync(cfgPath)) {
     throw new Error(`not found at ${cfgPath}`);
   }
@@ -61,7 +89,7 @@ async function checkSettingsValid() {
 }
 
 async function checkMcpServerRegistered() {
-  const cfgPath = join(CLAUDE_DIR, 'settings.json');
+  const cfgPath = join(claudeDir(), 'settings.json');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const servers = cfg.mcpServers || {};
   if (!servers.bizar) {
@@ -71,31 +99,35 @@ async function checkMcpServerRegistered() {
 }
 
 async function checkHooksWired() {
-  const cfgPath = join(CLAUDE_DIR, 'settings.json');
+  const cfgPath = join(claudeDir(), 'settings.json');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
   const hooks = cfg.hooks || {};
-  const required = ['PreToolUse', 'PostToolUse', 'SessionStart', 'UserPromptSubmit'];
-  const missing = required.filter((e) => !Array.isArray(hooks[e]) || hooks[e].length === 0);
+  const missing = REQUIRED_HOOK_EVENTS.filter((e) => !Array.isArray(hooks[e]) || hooks[e].length === 0);
   if (missing.length > 0) {
     throw new Error(`missing hook events: ${missing.join(', ')}`);
   }
-  return `hooks wired: ${required.join(', ')}`;
+  return `${REQUIRED_HOOK_EVENTS.length} lifecycle hook events wired`;
 }
 
 async function checkAgentFilesInstalled() {
-  const dir = join(CLAUDE_DIR, 'agents');
+  const dir = join(claudeDir(), 'agents');
   if (!existsSync(dir)) {
     throw new Error(`agents dir missing: ${dir}`);
   }
-  const have = readdirSync(dir).filter((f) => f.endsWith('.md'));
-  if (have.length === 0) {
-    throw new Error('no agent .md files installed');
-  }
-  return `${have.length} agents installed: ${have.slice(0, 4).join(', ')}${have.length > 4 ? '…' : ''}`;
+  const missing = REQUIRED_AGENTS.filter((file) => !existsSync(join(dir, file)));
+  if (missing.length > 0) throw new Error(`missing agents: ${missing.join(', ')} — run \`bizar update\``);
+  return `all ${REQUIRED_AGENTS.length} agents installed`;
+}
+
+async function checkCommandFilesInstalled() {
+  const dir = join(claudeDir(), 'commands');
+  const missing = REQUIRED_COMMANDS.filter((file) => !existsSync(join(dir, file)));
+  if (missing.length > 0) throw new Error(`missing commands: ${missing.join(', ')} — run \`bizar update\``);
+  return `all ${REQUIRED_COMMANDS.length} slash commands installed`;
 }
 
 async function checkSkillFilesInstalled() {
-  const dir = join(CLAUDE_DIR, 'skills');
+  const dir = join(claudeDir(), 'skills');
   if (!existsSync(dir)) {
     throw new Error(`skills dir missing: ${dir}`);
   }
@@ -103,10 +135,26 @@ async function checkSkillFilesInstalled() {
     const fp = join(dir, d, 'SKILL.md');
     return existsSync(fp);
   });
-  if (skills.length === 0) {
-    throw new Error('no SKILL.md files found');
+  if (!skills.includes('i-have-adhd')) throw new Error('default i-have-adhd skill missing — run `bizar update`');
+  return `${skills.length} skills installed, including i-have-adhd`;
+}
+
+async function checkRuleFilesInstalled() {
+  const dir = join(claudeDir(), 'rules');
+  const missing = REQUIRED_RULES.filter((file) => !existsSync(join(dir, file)));
+  if (missing.length > 0) throw new Error(`missing rules: ${missing.join(', ')} — run \`bizar update\``);
+  return `all ${REQUIRED_RULES.length} rules installed`;
+}
+
+async function checkHookFilesInstalled() {
+  const dir = join(claudeDir(), 'hooks');
+  const missing = REQUIRED_HOOKS.filter((file) => !existsSync(join(dir, file)));
+  if (missing.length > 0) throw new Error(`missing hooks: ${missing.join(', ')} — run \`bizar update\``);
+  if (process.platform !== 'win32') {
+    const nonExecutable = REQUIRED_HOOKS.filter((file) => (statSync(join(dir, file)).mode & 0o100) === 0);
+    if (nonExecutable.length > 0) throw new Error(`hooks not executable: ${nonExecutable.join(', ')}`);
   }
-  return `${skills.length} skills installed`;
+  return `all ${REQUIRED_HOOKS.length} hook entrypoints installed`;
 }
 
 /**
@@ -125,16 +173,28 @@ async function checkToolsAvailable() {
 }
 
 async function checkBizarHome() {
-  if (!existsSync(BIZAR_HOME)) {
-    throw new Error(`BIZAR_HOME missing: ${BIZAR_HOME}`);
+  const dir = bizarHome();
+  if (!existsSync(dir)) {
+    throw new Error(`BIZAR_HOME missing: ${dir}`);
   }
-  return `BIZAR_HOME present at ${BIZAR_HOME}`;
+  return `BIZAR_HOME present at ${dir}`;
 }
 
 async function checkProviderReachable() {
   const url = process.env.ANTHROPIC_BASE_URL || process.env.BIZAR_MODEL_ROUTER_URL;
   if (!url) {
-    return 'provider gateway not configured (using session default)';
+    const routerPath = resolveGlobalModelRouter();
+    let router;
+    try {
+      router = JSON.parse(readFileSync(routerPath, 'utf8'));
+    } catch {
+      throw new Error(`no provider URL and no readable global model router at ${routerPath}`);
+    }
+    const configured = configuredFallbackModels(router);
+    if (configured.length === 0) {
+      throw new Error('no enabled configured model; implicit provider defaults are prohibited');
+    }
+    return `no gateway URL; explicit configured fallback is ${configured[0]}`;
   }
   let res;
   try {
@@ -156,7 +216,10 @@ const CHECKS = [
   { name: 'mcp-server-registered',     run: checkMcpServerRegistered },
   { name: 'hooks-wired',               run: checkHooksWired },
   { name: 'agent-files-installed',     run: checkAgentFilesInstalled },
+  { name: 'command-files-installed',   run: checkCommandFilesInstalled },
   { name: 'skill-files-installed',     run: checkSkillFilesInstalled },
+  { name: 'rule-files-installed',      run: checkRuleFilesInstalled },
+  { name: 'hook-files-installed',      run: checkHookFilesInstalled },
   { name: 'tools-on-path',             run: checkToolsAvailable },
   { name: 'bizar-home',                run: checkBizarHome },
   { name: 'provider-reachable',        run: checkProviderReachable },

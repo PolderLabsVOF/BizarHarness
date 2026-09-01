@@ -6,7 +6,7 @@
  * (and the user, in `.bizar/sessions/`) can pick up where we left off.
  *
  * Reads `transcript_path` (JSONL), extracts:
- *   - last user prompt (what was being worked on)
+ *   - a one-way request fingerprint (never raw prompt text)
  *   - files written/edited (from tool_use blocks)
  *   - bash commands run
  *   - error patterns (ENOENT / EACCES / permission / TypeError / unhandledrejection)
@@ -31,10 +31,10 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 
 const SESSIONS_DIR = '.bizar/sessions';
 const SESSION_STATE = '.bizar/session-state.json';
-const HOOK_LOG_DIR = '.config/bizar/hook-logs';
 const MAX_TRANSCRIPT_LINES = 200; // ~50KB cap
 const MAX_FILES_TRACKED = 20;
 const MAX_BLOCKERS = 5;
@@ -76,12 +76,6 @@ function readTranscript(transcriptPath) {
     }
   }
   return events;
-}
-
-const FILLER_PROMPTS = /^\s*(continue|go on|keep going|yes|ok|okay|sure|do it|proceed|yeah|yep)\s*[.!]?\s*$/i;
-
-function isFiller(s) {
-  return typeof s === 'string' && FILLER_PROMPTS.test(s);
 }
 
 function scanForErrors(text) {
@@ -168,16 +162,12 @@ function extract(events) {
     }
   }
 
-  // Pick the most substantive user prompt: longest non-filler, else last.
-  let best = '';
-  for (const p of userPrompts) {
-    if (isFiller(p)) continue;
-    if (p.length > best.length) best = p;
-  }
-  if (!best && userPrompts.length > 0) best = userPrompts[userPrompts.length - 1];
+  const requestFingerprint = userPrompts.length > 0
+    ? createHash('sha256').update(userPrompts.join('\n')).digest('hex').slice(0, 16)
+    : null;
 
   return {
-    lastUserPrompt: clip(best, 240),
+    requestFingerprint,
     filesTouched: [...filesTouched].slice(0, MAX_FILES_TRACKED),
     bashCommands: bashCommands.slice(-10),
     errors: errors.slice(0, MAX_BLOCKERS),
@@ -185,12 +175,6 @@ function extract(events) {
     firstTs,
     lastTs,
   };
-}
-
-function clip(s, n) {
-  if (!s) return '';
-  const oneLine = String(s).replace(/\s+/g, ' ').trim();
-  return oneLine.length <= n ? oneLine : oneLine.slice(0, n - 1) + '…';
 }
 
 function detectActiveFeature(cwd) {
@@ -209,10 +193,9 @@ function detectActiveFeature(cwd) {
 
 function inferNextStep(summary, activeFeature) {
   if (summary.errors.length > 0) return `Resolve ${summary.errors[0]} from the prior session.`;
-  if (!activeFeature && !summary.lastUserPrompt) {
+  if (!activeFeature) {
     return 'Pick next feature from feature_list.json not_started.';
   }
-  if (summary.lastUserPrompt) return `Resume: ${clip(summary.lastUserPrompt, 100)}`;
   return `Continue with ${activeFeature}.`;
 }
 
@@ -223,7 +206,7 @@ function writeSessionNote(cwd, sessionId, reason, summary) {
   const projectName = cwd.split('/').pop() || 'unknown';
   const dir = join(cwd, SESSIONS_DIR);
   try {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
   } catch {
     return null;
   }
@@ -239,6 +222,7 @@ function writeSessionNote(cwd, sessionId, reason, summary) {
     `reason: ${reason}`,
     `cwd: ${cwd}`,
     activeFeature ? `activeFeature: ${activeFeature}` : 'activeFeature: null',
+    `requestFingerprint: ${summary.requestFingerprint || 'null'}`,
     `toolsUsed: ${JSON.stringify(summary.toolsUsed)}`,
     summary.filesTouched.length > 0
       ? `filesTouched: [${summary.filesTouched.map((f) => `"${f.replace(/"/g, '\\"')}"`).join(', ')}]`
@@ -257,12 +241,6 @@ function writeSessionNote(cwd, sessionId, reason, summary) {
     `Session ended with reason: \`${reason}\`.`,
     '',
     `Working directory: \`${cwd}\``,
-    '',
-    '## Last user prompt',
-    '',
-    summary.lastUserPrompt
-      ? `> ${summary.lastUserPrompt.replace(/\n/g, ' ')}`
-      : '_No user prompts captured in transcript._',
     '',
     '## Files touched',
     '',
@@ -286,7 +264,7 @@ function writeSessionNote(cwd, sessionId, reason, summary) {
   ].join('\n');
 
   try {
-    writeFileSync(notePath, frontmatter + body + '\n', 'utf8');
+    writeFileSync(notePath, frontmatter + body + '\n', { encoding: 'utf8', mode: 0o600 });
     return notePath;
   } catch {
     return null;
@@ -296,7 +274,7 @@ function writeSessionNote(cwd, sessionId, reason, summary) {
 function writeSessionState(cwd, sessionId, reason, summary, nextStep) {
   const path = join(cwd, SESSION_STATE);
   try {
-    mkdirSync(join(cwd, '.bizar'), { recursive: true });
+    mkdirSync(join(cwd, '.bizar'), { recursive: true, mode: 0o700 });
   } catch {
     /* best-effort */
   }
@@ -306,12 +284,13 @@ function writeSessionState(cwd, sessionId, reason, summary, nextStep) {
     reason,
     activeFeature: detectActiveFeature(cwd),
     nextStep,
+    requestFingerprint: summary.requestFingerprint,
     filesTouched: summary.filesTouched,
     blockers: summary.errors,
     toolsUsed: summary.toolsUsed,
   };
   try {
-    writeFileSync(path, JSON.stringify(state, null, 2), 'utf8');
+    writeFileSync(path, JSON.stringify(state, null, 2), { encoding: 'utf8', mode: 0o600 });
     return true;
   } catch {
     return false;
@@ -320,8 +299,12 @@ function writeSessionState(cwd, sessionId, reason, summary, nextStep) {
 
 function logLifecycle(sessionId, reason, cwd) {
   try {
-    const dir = join(cwd || process.cwd(), HOOK_LOG_DIR);
-    mkdirSync(dir, { recursive: true });
+    const configured = String(process.env.BIZAR_HOME || '').trim();
+    const base = configured
+      ? (configured.startsWith('/') ? configured : join(cwd || process.cwd(), configured))
+      : join(process.env.XDG_CONFIG_HOME || join(os.homedir(), '.config'), 'bizar');
+    const dir = join(base, 'hook-logs');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
     const today = new Date().toISOString().slice(0, 10);
     const logFile = join(dir, `session-end-${today}.jsonl`);
     appendFileSync(
@@ -332,6 +315,7 @@ function logLifecycle(sessionId, reason, cwd) {
         reason,
         cwd,
       }) + '\n',
+      { mode: 0o600 },
     );
   } catch {
     /* best-effort */

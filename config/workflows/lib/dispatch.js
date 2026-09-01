@@ -366,13 +366,23 @@ function evaluateProfileMirror(entry, requirements) {
 /*                        Dispatch context loading                            */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-function defaultConfigPaths() {
-  const home = homedir();
+function defaultConfigPaths({ cwd = process.cwd(), env = process.env } = {}) {
+  const configuredHome = typeof env.BIZAR_HOME === 'string' ? env.BIZAR_HOME.trim() : '';
+  const xdg = typeof env.XDG_CONFIG_HOME === 'string' ? env.XDG_CONFIG_HOME.trim() : '';
+  const userHome = typeof env.HOME === 'string' && env.HOME.trim() ? env.HOME.trim() : homedir();
+  const home = configuredHome
+    ? (isAbsolute(configuredHome) ? configuredHome : resolve(cwd, configuredHome))
+    : join(xdg ? (isAbsolute(xdg) ? xdg : resolve(cwd, xdg)) : join(userHome, '.config'), 'bizar');
+  const configuredRouter = typeof env.BIZAR_MODEL_ROUTER_CONFIG === 'string'
+    ? env.BIZAR_MODEL_ROUTER_CONFIG.trim()
+    : '';
   return {
-    modelRouter: resolve(process.cwd(), 'config', 'claude', 'model-router.json'),
-    health: resolve(home, '.config', 'bizar', 'health.json'),
-    budget: resolve(home, '.config', 'bizar', 'budget.json'),
-    userSelected: resolve(home, '.config', 'bizar', 'userSelected.json'),
+    modelRouter: configuredRouter
+      ? (isAbsolute(configuredRouter) ? configuredRouter : resolve(cwd, configuredRouter))
+      : join(home, 'config', 'claude', 'model-router.json'),
+    health: join(home, 'health.json'),
+    budget: join(home, 'budget.json'),
+    userSelected: join(home, 'userSelected.json'),
   };
 }
 
@@ -385,26 +395,54 @@ function readJson(path) {
   }
 }
 
+function isDisabledModelId(id, disabledProviders) {
+  if (typeof id !== 'string') return false;
+  const normalizedId = id.trim().toLowerCase();
+  return disabledProviders.some((prefix) => normalizedId.startsWith(prefix));
+}
+
 function loadModelProfiles(routerPath) {
   const router = readJson(routerPath);
   if (!router || typeof router !== 'object') return { selectedProfiles: [], staticProfiles: [] };
   const userSelected = router.userSelected;
   const selectedProfiles = [];
+  const staticProfiles = [];
+  const seen = new Set();
+  const disabledProviders = Array.isArray(router.disabledProviders)
+    ? router.disabledProviders
+      .filter((prefix) => typeof prefix === 'string' && prefix.trim())
+      .map((prefix) => prefix.trim().toLowerCase())
+    : [];
+  const addProfile = (id, tier, profile) => {
+    if (typeof id !== 'string' || !id.trim()) return;
+    const trimmed = id.trim();
+    if (seen.has(trimmed) || isDisabledModelId(trimmed, disabledProviders)) return;
+    seen.add(trimmed);
+    selectedProfiles.push({ id: trimmed, tier: typeof tier === 'string' ? tier : undefined, profile });
+  };
   if (userSelected && Array.isArray(userSelected.models)) {
     const tierHints = userSelected.tierHints || {};
     const profiles = userSelected.profiles || {};
     for (const id of userSelected.models) {
       if (typeof id !== 'string' || !id.trim()) continue;
       const trimmed = id.trim();
-      const hint = tierHints[trimmed];
-      selectedProfiles.push({
-        id: trimmed,
-        tier: typeof hint === 'string' ? hint : undefined,
-        profile: profiles[trimmed],
-      });
+      addProfile(trimmed, tierHints[trimmed], profiles[trimmed]);
     }
   }
-  return { selectedProfiles, staticProfiles: [] };
+  // A user pick is an override, not a prerequisite. When no pick exists,
+  // configured tier candidates are the safe dispatch pool; omitting `model`
+  // would hand selection to Claude Code's provider default instead.
+  for (const [tier, definition] of Object.entries(router.tiers || {})) {
+    for (const id of Array.isArray(definition?.models) ? definition.models : []) {
+      if (typeof id === 'string' && id.trim() && !isDisabledModelId(id, disabledProviders)) {
+        staticProfiles.push({ id: id.trim(), tier });
+      }
+    }
+  }
+  if (selectedProfiles.length === 0) {
+    for (const profile of staticProfiles) addProfile(profile.id, profile.tier, profile.profile);
+  }
+  return { selectedProfiles, staticProfiles };
 }
 
 function loadActiveSessionModel() {
@@ -416,8 +454,7 @@ function loadActiveSessionModel() {
  * Returns `{ selectedProfiles, staticProfiles, activeSessionModel, budget, health }`.
  */
 export function loadDispatchContext({ cwd = process.cwd(), env = process.env } = {}) {
-  const paths = defaultConfigPaths();
-  if (!isAbsolute(paths.modelRouter)) paths.modelRouter = resolve(cwd, 'config', 'claude', 'model-router.json');
+  const paths = defaultConfigPaths({ cwd, env });
   const { selectedProfiles, staticProfiles } = loadModelProfiles(paths.modelRouter);
   const budget = readJson(paths.budget) ?? { remainingUsd: undefined, maxUsdPerCall: undefined };
   const healthRaw = readJson(paths.health) ?? {};
@@ -772,6 +809,14 @@ export function augmentPayload(opts, decision, agentName) {
   };
 }
 
+export class ModelRoutingError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ModelRoutingError';
+    this.code = 'NO_CONFIGURED_DISPATCH_MODEL';
+  }
+}
+
 /**
  * The single dispatch entry point every workflow script MUST call.
  *
@@ -807,6 +852,11 @@ export async function dispatchAgent(agentFn, agentName, prompt, opts = {}, conte
     throw new TypeError('dispatchAgent requires a non-empty agentName');
   }
   const decision = computeDecision(agentName, prompt, opts, context);
+  if (!decision.modelId) {
+    throw new ModelRoutingError(
+      'No enabled configured model is available for this Agent dispatch. Configure a model tier or user selection with `bizar models`; refusing to inherit an unconfigured provider default.',
+    );
+  }
   const augmented = augmentPayload(opts, decision, agentName);
 
   // F-191 / IMP-018 audit trail — persist the decision before invoking
@@ -1281,4 +1331,3 @@ export function barrierRef(args) {
   ].join('\n');
   return { promptBlock, path, truncated: truncated || promptBlock.length > MAX_BARRIER_BYTES, bytes: Buffer.byteLength(promptBlock, 'utf8') };
 }
-

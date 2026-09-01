@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 import { createE2EHarness } from './_fixtures/dispatch-context.mjs';
 
@@ -164,12 +165,20 @@ async function runCapturedWorkflow(file, args, harness) {
   };
   const fakePhase = () => {};
   const fakeLog = () => {};
+  const fakeWriteArtifact = () => ({ ok: true });
+  const fakeBarrierRef = ({ runId, phase, label }) => ({
+    promptBlock: `[artifact run=${runId} phase=${phase} label=${label}]`,
+  });
 
   const fn = new Function(
     'args', 'agent', 'pipeline', 'parallel', 'phase', 'log', 'dispatchWrapped',
+    'randomUUID', 'writeArtifact', 'barrierRef',
     `return (async () => { ${body.trim()} })();`,
   );
-  return fn(args, fakeAgent, fakePipeline, fakeParallel, fakePhase, fakeLog, makeWrappedDispatch(harness));
+  return fn(
+    args, fakeAgent, fakePipeline, fakeParallel, fakePhase, fakeLog,
+    makeWrappedDispatch(harness), randomUUID, fakeWriteArtifact, fakeBarrierRef,
+  );
 }
 
 describe('workflow-selection — IMP-022 workflow E2E matrix', () => {

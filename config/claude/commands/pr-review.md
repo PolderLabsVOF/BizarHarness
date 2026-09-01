@@ -1,6 +1,6 @@
 ---
 description: PR review mode. Launch @greg (research) and @linda (audit) in parallel, then post the combined review as a PR comment.
-allowed-tools: Read, Grep, Glob, Bash, WebFetch
+allowed-tools: Agent, Read, Grep, Glob, Bash, WebFetch
 ---
 
 # /pr-review — PR Review

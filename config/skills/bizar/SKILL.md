@@ -39,8 +39,9 @@ When approval is required, present the exact command/action, scope, evidence, an
 - `bizar cost` — reserve/commit/release budget.
 - `bizar claim` — feature ownership and state transitions.
 - `bizar team` / `bizar subagent` — Claude Code-native coordination wrappers.
-- MCP tools — plans, loops, graph queries, instincts, and decisions.
-- `config/claude/hooks/` — guardrails, routing, lifecycle context, and learning extraction.
+- MCP tools — plans, loops, graph queries, bounded learning evidence, and decisions.
+- `bizar learn` — explicit global preferences and project debugging lessons.
+- `config/claude/hooks/` — guardrails, routing, lifecycle context, and bounded telemetry.
 
 ## Completion
 

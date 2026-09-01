@@ -34,21 +34,20 @@
 
 import chalk from 'chalk';
 import { existsSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { resolveClaudeConfigDir, resolveGlobalModelRouter } from '../config-paths.mjs';
+import { configuredFallbackModels } from './models.mjs';
 
-const HOME = homedir();
-const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR?.trim() || join(HOME, '.claude');
+const CLAUDE_DIR = resolveClaudeConfigDir();
 const SETTINGS_PATH = join(CLAUDE_DIR, 'settings.json');
 // 10.22.0 / Phase 4 spirit-of-constraint: the install model id comes
 // from the operator's `userSelected.models[0]`, not a hardcoded literal.
 // Dual-path read matches `cli/commands/models.mjs#readDisabledProviders`:
 // the Bizar path wins when present; the Claude Code mirror is fallback.
-const BIZAR_ROUTER_PATH = process.env.BIZAR_MODEL_ROUTER_CONFIG?.trim()
-  || join(HOME, '.config', 'bizar', 'config', 'claude', 'model-router.json');
-const LEGACY_ROUTER_PATH = join(HOME, '.claude', 'model-router.json');
+const BIZAR_ROUTER_PATH = resolveGlobalModelRouter();
+const LEGACY_ROUTER_PATH = join(CLAUDE_DIR, 'model-router.json');
 
-function readUserSelectedModels() {
+function readConfiguredModels() {
   for (const path of [BIZAR_ROUTER_PATH, LEGACY_ROUTER_PATH]) {
     if (!existsSync(path)) continue;
     try {
@@ -57,6 +56,8 @@ function readUserSelectedModels() {
         ? parsed.userSelected.models.filter((id) => typeof id === 'string' && id.trim())
         : [];
       if (list.length > 0) return list;
+      const fallback = configuredFallbackModels(parsed);
+      if (fallback.length > 0) return fallback;
       // Bizar path exists with an explicit empty `userSelected.models` —
       // honour that intent (do NOT fall through to the legacy mirror).
       if (path === BIZAR_ROUTER_PATH && parsed && typeof parsed === 'object'
@@ -82,9 +83,15 @@ const STATIC_FAVORED = {
 
 function buildFavored() {
   const out = { ...STATIC_FAVORED };
-  const picks = readUserSelectedModels();
+  const picks = readConfiguredModels();
   if (picks[0]) out.model = picks[0];
   return out;
+}
+
+export async function run(name, args, isHelpRequest) {
+  if (name !== 'upgrade-defaults') return false;
+  await runUpgradeDefaults(isHelpRequest ? ['--help'] : args);
+  return true;
 }
 
 function isAtLeastAsPermissive(existing, desired) {

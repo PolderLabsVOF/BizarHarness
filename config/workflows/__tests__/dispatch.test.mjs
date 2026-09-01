@@ -23,10 +23,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const workflowsDir = resolve(here, '..');
@@ -230,19 +230,15 @@ test('dispatchAgent: dryRun=true returns decision without invoking agentFn', asy
   assert.equal(result.payload.model, 'provider/strong');
 });
 
-test('dispatchAgent: empty selectedProfiles + no session -> model=undefined, but routingDecisionId is set', async () => {
+test('dispatchAgent: empty configured pool fails closed instead of inheriting a provider default', async () => {
   const emptyContext = { selectedProfiles: [], staticProfiles: [], activeSessionModel: undefined, budget: {}, health: {} };
   let capturedOpts = null;
   const agentFn = async (prompt, opts) => { capturedOpts = opts; return { ok: true }; };
-  await dispatch.dispatchAgent(
-    agentFn,
-    'mike',
-    'review',
-    { role: 'security', risk: 'high' },
-    emptyContext,
+  await assert.rejects(
+    dispatch.dispatchAgent(agentFn, 'mike', 'review', { role: 'security', risk: 'high' }, emptyContext),
+    { code: 'NO_CONFIGURED_DISPATCH_MODEL' },
   );
-  assert.equal(capturedOpts.model, undefined);
-  assert.ok(UUID_RE.test(capturedOpts.routingDecisionId));
+  assert.equal(capturedOpts, null);
 });
 
 test('dispatchAgent: two sequential calls produce distinct routingDecisionId values', async () => {
@@ -414,8 +410,58 @@ test('dispatch: env override BIZAR_ACTIVE_SESSION_MODEL surfaces in loadDispatch
   }
 });
 
-test('dispatch: loadDispatchContext tolerates a missing model-router.json', () => {
-  const ctx = dispatch.loadDispatchContext({ cwd: workflowsDir, env: {} });
-  assert.deepEqual(ctx.selectedProfiles, []);
-  assert.deepEqual(ctx.staticProfiles, []);
+test('dispatch: loadDispatchContext uses enabled configured tier candidates and filters disabled providers', () => {
+  const ctx = dispatch.loadDispatchContext({
+    cwd: workflowsDir,
+    env: { BIZAR_MODEL_ROUTER_CONFIG: resolve(repoRoot, 'config', 'claude', 'model-router.json') },
+  });
+  assert.ok(ctx.selectedProfiles.length > 0);
+  assert.ok(ctx.staticProfiles.length > 0);
+  assert.ok(ctx.selectedProfiles.every((candidate) => !candidate.id.startsWith('anthropic/')));
+});
+
+test('dispatch: loadDispatchContext reads the same global router from unrelated cwd values', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'bizar-global-router-'));
+  try {
+    const routerDir = join(fixture, 'config', 'claude');
+    mkdirSync(routerDir, { recursive: true });
+    writeFileSync(join(routerDir, 'model-router.json'), JSON.stringify({
+      disabledProviders: [],
+      userSelected: { models: ['provider/global-pick'], tierHints: { 'provider/global-pick': 'default' } },
+      tiers: {},
+    }));
+    const ctx = dispatch.loadDispatchContext({
+      cwd: join(fixture, 'unrelated-project'),
+      env: { BIZAR_HOME: fixture },
+    });
+    assert.equal(ctx.selectedProfiles[0]?.id, 'provider/global-pick');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('dispatch: explicit user picks take precedence over configured tier fallbacks', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'bizar-explicit-router-'));
+  try {
+    const router = join(fixture, 'router.json');
+    writeFileSync(router, JSON.stringify({
+      disabledProviders: [],
+      userSelected: { models: ['provider/explicit-budget'], tierHints: { 'provider/explicit-budget': 'budget' } },
+      tiers: { premium: { models: ['provider/configured-premium'] } },
+    }));
+    const ctx = dispatch.loadDispatchContext({ cwd: fixture, env: { BIZAR_MODEL_ROUTER_CONFIG: router } });
+    assert.deepEqual(ctx.selectedProfiles.map((entry) => entry.id), ['provider/explicit-budget']);
+    assert.ok(ctx.staticProfiles.some((entry) => entry.id === 'provider/configured-premium'));
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
+});
+
+test('dispatch: copied workflow helper is self-contained outside the package tree', async () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'bizar-copied-workflow-'));
+  try {
+    const copied = join(fixture, 'workflows', 'lib', 'dispatch.mjs');
+    mkdirSync(dirname(copied), { recursive: true });
+    writeFileSync(copied, readFileSync(dispatchPath, 'utf8'));
+    const loaded = await import(`${pathToFileURL(copied).href}?copy=${Date.now()}`);
+    assert.equal(typeof loaded.dispatchAgent, 'function');
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
 });

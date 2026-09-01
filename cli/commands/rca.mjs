@@ -91,6 +91,9 @@ export async function runRca(args = []) {
 export async function run(name, args, isHelpRequest) {
   if (name !== 'rca') return false;
   if (isHelpRequest) showRcaHelp();
-  else await runRca(args);
+  else {
+    const result = await runRca(args);
+    if (!result.ok) process.exitCode = 1;
+  }
   return true;
 }

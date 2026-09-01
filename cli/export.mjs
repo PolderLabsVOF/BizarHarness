@@ -11,7 +11,7 @@ export async function runExport(target) {
   const validTargets = ['claude', 'cursor'];
   if (target && !validTargets.includes(target)) {
     console.log(chalk.red(`  Unknown target "${target}". Valid: ${validTargets.join(', ')}`));
-    return;
+    return false;
   }
 
   const targets = target ? [target] : validTargets;
@@ -22,8 +22,10 @@ export async function runExport(target) {
       await exportTo(t);
     } catch (error) {
       console.log(chalk.red(`  Export failed: ${error.message}`));
+      return false;
     }
   }
+  return true;
 }
 
 async function exportTo(target) {

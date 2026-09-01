@@ -19,16 +19,17 @@ import {
   lstatSync,
   readlinkSync,
 } from 'node:fs';
-import { join, resolve, dirname, basename } from 'node:path';
+import { join, resolve, dirname, basename, relative, sep, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import { resolveBizarHome } from '../config-paths.mjs';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BACKUP_PATHS = [
-  { src: '~/.config/bizar/', label: 'config', required: false },
-];
+function globalBackupPaths(bizarHome) {
+  return [{ src: bizarHome, label: 'config', required: false }];
+}
 
 // Project-level paths (resolved relative to projectRoot at call time)
 const PROJECT_BACKUP_PATHS = [
@@ -47,6 +48,33 @@ function expandPath(p) {
 /** Resolve a potentially-~ path to an absolute path. */
 function resolvePath(p) {
   return resolve(expandPath(p));
+}
+
+function isWithin(root, target) {
+  const rel = relative(resolve(root), resolve(target));
+  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
+}
+
+function safeLabel(label) {
+  if (label == null || label === '') return null;
+  const value = String(label).trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value) || value === '.' || value === '..') {
+    throw new TypeError('Backup label must contain only letters, numbers, dot, underscore, or hyphen');
+  }
+  return value;
+}
+
+function hashTree(root) {
+  const hashes = {};
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile()) hashes[relative(root, full)] = fileHash(full);
+    }
+  }
+  walk(root);
+  return hashes;
 }
 
 /** Recursive directory size in bytes. */
@@ -187,20 +215,22 @@ function stamp(date = new Date()) {
  * @param {string} [opts.projectRoot] — if set, also backs up project-level paths
  * @returns {Promise<{ ok: boolean, path: string, manifest: object, sizeBytes: number, durationMs: number }>}
  */
-export async function createBackup({ outDir = '~/.local/share/bizar/backups', label = null, projectRoot = null } = {}) {
+export async function createBackup({ outDir = '~/.local/share/bizar/backups', label = null, projectRoot = null, bizarHome = resolveBizarHome() } = {}) {
   const startedAt = Date.now();
   outDir = expandPath(outDir);
   mkdirSync(outDir, { recursive: true });
 
   const ts = stamp();
+  label = safeLabel(label);
   const name = label ? `bizar-${ts}-${label}` : `bizar-${ts}`;
   const backupPath = join(outDir, name);
+  if (!isWithin(outDir, backupPath)) throw new Error('Refusing to create a backup outside the backup root');
   mkdirSync(backupPath, { recursive: true });
 
   const backed = [];
   const skipped = [];
 
-  for (const item of BACKUP_PATHS) {
+  for (const item of globalBackupPaths(bizarHome)) {
     const src = expandPath(item.src);
     const dst = join(backupPath, item.label);
     if (existsSync(src)) {
@@ -229,6 +259,7 @@ export async function createBackup({ outDir = '~/.local/share/bizar/backups', la
   }
 
   const manifest = {
+    schema: 'bizar.backup.v2',
     version: getBizarVersion(),
     createdAt: new Date().toISOString(),
     name,
@@ -239,7 +270,10 @@ export async function createBackup({ outDir = '~/.local/share/bizar/backups', la
     bizarVersion: getBizarVersion(),
     platform: process.platform,
     nodeVersion: process.version,
+    hashes: {},
   };
+
+  manifest.hashes = hashTree(backupPath);
 
   writeFileSync(join(backupPath, 'manifest.json'), JSON.stringify(manifest, null, 2), {
     encoding: 'utf8',
@@ -315,6 +349,7 @@ export async function restoreBackup({
   dryRun = false,
   conflictStrategy = 'merge',
   projectRoot = null,
+  bizarHome = resolveBizarHome(),
 }) {
   backupPath = resolve(backupPath);
   const manifestPath = join(backupPath, 'manifest.json');
@@ -330,6 +365,13 @@ export async function restoreBackup({
     return { ok: false, restored: [], skipped: [], errors: ['manifest.json is missing or corrupt'] };
   }
 
+  if (manifest.schema === 'bizar.backup.v2') {
+    const integrity = await verifyBackup({ backupPath });
+    if (!integrity.ok) {
+      return { ok: false, restored: [], skipped: [], errors: integrity.issues.map((issue) => `Integrity check failed: ${issue}`) };
+    }
+  }
+
   const restored = [];
   const skipped = [];
   const errors = [];
@@ -337,28 +379,33 @@ export async function restoreBackup({
   for (const entry of manifest.paths || []) {
     // Support both old format (string[]) and new format ({label, src}[])
     const label = typeof entry === 'string' ? entry : entry.label;
-    const originalSrc = typeof entry === 'string' ? null : entry.src;
+    if (typeof label !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(label)) {
+      errors.push('Unsafe label in manifest');
+      continue;
+    }
 
     const src = join(backupPath, label);
-    if (!existsSync(src)) {
+    if (!isWithin(backupPath, src) || !existsSync(src)) {
       errors.push(`Backup entry missing: ${label}`);
       continue;
     }
 
     // Determine destination
     let dst;
-    if (PROJECT_BACKUP_PATHS.some((p) => p.label === label) && projectRoot) {
-      // Project-level path — restore relative to projectRoot using original source path
-      const srcPath = originalSrc || label;
-      dst = join(resolve(projectRoot), srcPath);
+    const projectEntry = PROJECT_BACKUP_PATHS.find((p) => p.label === label);
+    if (projectEntry) {
+      if (!projectRoot) {
+        skipped.push(`${label} (project root not supplied)`);
+        continue;
+      }
+      dst = join(resolve(projectRoot), projectEntry.src);
     } else {
-      // Global path — restore to original location
-      const original = BACKUP_PATHS.find((p) => p.label === label);
+      const original = globalBackupPaths(bizarHome).find((p) => p.label === label);
       if (!original) {
         errors.push(`Unknown label in manifest: ${label}`);
         continue;
       }
-      dst = expandPath(originalSrc || original.src);
+      dst = expandPath(original.src);
     }
 
     const targetExists = existsSync(dst);
@@ -439,8 +486,12 @@ function overlayDir(srcDir, dstDir) {
  * @param {string} opts.backupPath
  * @returns {Promise<{ ok: boolean, error?: string }>}
  */
-export async function deleteBackup({ backupPath }) {
+export async function deleteBackup({ backupPath, backupRoot = '~/.local/share/bizar/backups' }) {
   backupPath = resolve(backupPath);
+  backupRoot = resolve(expandPath(backupRoot));
+  if (!isWithin(backupRoot, backupPath) || dirname(backupPath) !== backupRoot || !basename(backupPath).startsWith('bizar-')) {
+    return { ok: false, error: 'Refusing to delete a path outside the backup root' };
+  }
   if (!existsSync(backupPath)) {
     return { ok: false, error: 'Backup not found' };
   }
@@ -485,8 +536,12 @@ export async function verifyBackup({ backupPath }) {
   const labels = (manifest.paths || []).map((p) => (typeof p === 'string' ? p : p.label));
 
   for (const label of labels) {
+    if (typeof label !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(label)) {
+      issues.push('Unsafe label in manifest');
+      continue;
+    }
     const entryPath = join(backupPath, label);
-    if (!existsSync(entryPath)) {
+    if (!isWithin(backupPath, entryPath) || !existsSync(entryPath)) {
       issues.push(`Expected backup entry is missing: ${label}`);
     }
   }
@@ -497,6 +552,18 @@ export async function verifyBackup({ backupPath }) {
   );
   if (unexpected.length > 0) {
     issues.push(`Unexpected files in backup: ${unexpected.join(', ')}`);
+  }
+
+  if (manifest.hashes && typeof manifest.hashes === 'object') {
+    const actual = hashTree(backupPath);
+    delete actual['manifest.json'];
+    const actualFiles = Object.keys(actual).sort();
+    for (const file of actualFiles.filter((file) => !Object.hasOwn(manifest.hashes, file))) {
+      issues.push(`Unexpected integrity file: ${file}`);
+    }
+    for (const [file, expected] of Object.entries(manifest.hashes)) {
+      if (actual[file] !== expected) issues.push(`Integrity mismatch: ${file}`);
+    }
   }
 
   return { ok: issues.length === 0, issues };

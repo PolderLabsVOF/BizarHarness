@@ -39,7 +39,8 @@ try {
   const events = [
     'PreToolUse', 'PermissionRequest', 'PostToolUse', 'PostToolUseFailure',
     'UserPromptSubmit', 'SessionStart', 'SessionEnd', 'PreCompact',
-    'SubagentStart', 'SubagentStop', 'Stop',
+    'SubagentStart', 'SubagentStop', 'TaskCreated', 'TaskCompleted',
+    'TeammateIdle', 'Stop',
   ];
   const missing = events.filter((event) => !Array.isArray(settings.hooks?.[event]));
   check('settings and lifecycle hooks', missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : `${events.length} events wired`);
@@ -139,18 +140,33 @@ check('skill mirror', JSON.stringify(canonicalSkills) === JSON.stringify(mirrore
 
 const requiredHooks = [
   'agent-grounding.mjs',
+  'agent-model-guard.mjs',
   'advisor-context.mjs',
+  'bizar-hook-wrapper.sh',
   'control-inbox.mjs',
   'content-style-guard.mjs',
   'git-workflow-guard.mjs',
   'keyword-router.mjs',
+  'path-ownership-guard.mjs',
   'permission-request.mjs',
   'persistent-mode.mjs',
   'post-tool-use-failure.mjs',
+  'posttooluse-editwrite.mjs',
   'precompact-priorities.sh',
+  'pretooluse-bash.mjs',
+  'pretooluse-editwrite.mjs',
+  'sessionend-recall.mjs',
+  'sessionstart-model-sync.mjs',
+  'sessionstart-prime.mjs',
   'simplify-guard.mjs',
+  'team-lifecycle.mjs',
   'telemetry.mjs',
+  'thinking-route.mjs',
   'verify-deliverables.mjs',
+  'worker-suggest.mjs',
+  'worktree-archive.mjs',
+  'worktree-bootstrap.mjs',
+  'completion-artifact.mjs',
 ];
 const missingHooks = requiredHooks.filter((name) => !existsSync(join(ROOT, 'config', 'claude', 'hooks', name)));
 check('ported workflow hooks', missingHooks.length === 0, missingHooks.length ? `missing ${missingHooks.join(', ')}` : `${requiredHooks.length} hooks present`);
@@ -160,6 +176,8 @@ const requiredTools = [
   'loop_list', 'loop_status', 'loop_start', 'loop_stop',
   'graph_query', 'graph_path',
   'list_instincts', 'list_decisions',
+  'bizar_task', 'bizar_workflow', 'bizar_control', 'bizar_audit',
+  'bizar_model_list',
 ];
 const { BIZAR_TOOLS } = await import('../packages/sdk/dist/mcp/server.js');
 const toolNames = new Set(BIZAR_TOOLS.map((tool) => tool.name));

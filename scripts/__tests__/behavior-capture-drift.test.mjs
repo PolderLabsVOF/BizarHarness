@@ -66,13 +66,13 @@ test('CLI learning-behavior.mjs exposes only structural-fingerprint API', () => 
   assert.match(src, /0o700/);
 });
 
-test('worker-suggest.mjs reads three feeds and never references a prompt field', () => {
+test('worker-suggest.mjs reads only bounded explicit learning and never persists a prompt field', () => {
   const src = readFileSync(
     join(REPO_ROOT, 'config', 'claude', 'hooks', 'worker-suggest.mjs'),
     'utf8',
   );
   assert.match(src, /buildLearningContext/);
-  assert.match(src, /learning-behavior\.mjs/);
+  assert.match(src, /commands['"], 'learn\.mjs/);
   // Worker-suggest must never persist prompt text. Drift guard for any
   // regression that starts reading or echoing a prompt-shaped field.
   assert.doesNotMatch(src, /promptText/);

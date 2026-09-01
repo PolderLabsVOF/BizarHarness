@@ -241,8 +241,9 @@ export function loadModelRegistry(src: RegistrySource = {}): ModelRegistry {
   if (!isRecord(raw)) registryError("CONFIG_INVALID", "Model router must be an object.");
   if (!isRecord(raw.tiers) || Object.keys(raw.tiers).length === 0) registryError("CONFIG_INVALID", "Model router must define tiers.");
   if (!isRecord(raw.policies) || raw.policies.selectionOwner !== "orchestrator") registryError("MODEL_POLICY_INVALID", "The orchestrator must own model selection.");
-  if (raw.policies.discoveryFailure !== "inherit-session" || raw.policies.unavailableModel !== "inherit-session") {
-    registryError("MODEL_POLICY_INVALID", "Discovery failures and unavailable models must inherit the session.");
+  const fallbackPolicies = new Set(["inherit-session", "configured-tier-fallback"]);
+  if (!fallbackPolicies.has(String(raw.policies.discoveryFailure)) || !fallbackPolicies.has(String(raw.policies.unavailableModel))) {
+    registryError("MODEL_POLICY_INVALID", "Discovery and unavailable-model failures must use an explicit configured policy.");
   }
   if (raw.policies.retryModelAliases !== false || raw.policies.maxDispatchModelAttempts !== 1) {
     registryError("MODEL_POLICY_INVALID", "Model alias retries are forbidden.");
@@ -365,9 +366,9 @@ export function defaultTierHintForId(modelId: string): BizarTier {
  *      the live set; no intersection falls through to (2).
  *   2. Otherwise (or when the user-selected pick has no eligible live
  *      candidate), use the first live entry from `registry.tiers[tier]`.
- *   3. When no live candidate exists, `modelId` is `null` and
- *      `inheritSession` is `true` — the orchestrator keeps the active
- *      session model.
+ *   3. When no live candidate exists, use the configured tier fallback when
+ *      policy requires it. Legacy `inherit-session` registries may return
+ *      `null`; the shipped Bizar policy never does.
  *
  * Failover (F-185 / IMP-019): callers needing health-aware failover
  * should chain `pickFailover` (from `./failover.js`) against this
@@ -388,7 +389,9 @@ export function resolveTierModel(tier: BizarTier, registry: ModelRegistry, avail
       return { ...entry, modelId: pick.id, fallback: [], endpoint: registry.endpoint, inheritSession: false };
     }
   }
-  const selected = available ? entry.modelIds.find((id) => available.has(id)) || null : null;
+  const live = available ? entry.modelIds.find((id) => available.has(id)) || null : null;
+  const policy = available === null ? registry.policies.discoveryFailure : registry.policies.unavailableModel;
+  const selected = live || (policy === "configured-tier-fallback" ? entry.modelIds[0] || null : null);
   return { ...entry, modelId: selected, fallback: [], endpoint: registry.endpoint, inheritSession: selected === null };
 }
 
@@ -398,7 +401,8 @@ export function resolveTierModel(tier: BizarTier, registry: ModelRegistry, avail
  * Rationale values:
  *   - `"userSelected-ranked"`  — picked from the operator's userSelected pool.
  *   - `"first live tier candidate"` — fell through to the tier default (live).
- *   - `"inherit active session model"` — no live candidate; orchestrator inherits.
+ *   - `"configured tier fallback"` — no live candidate; explicit configured model retained.
+ *   - `"inherit active session model"` — legacy opt-in policy only.
  */
 export function resolveAgentModel(agent: string, registry: ModelRegistry, availableModelIds?: readonly string[], tier?: BizarTier): ResolvedAgentModel {
   const chosenTier = tier || registry.roleDefaults.get(agent) || "default";
@@ -407,7 +411,9 @@ export function resolveAgentModel(agent: string, registry: ModelRegistry, availa
     ? "inherit active session model"
     : registry.userSelected && registry.userSelected.models.includes(resolved.modelId)
       ? "userSelected-ranked"
-      : "first live tier candidate";
+      : availableModelIds !== undefined && !availableModelIds.includes(resolved.modelId)
+        ? "configured tier fallback"
+        : "first live tier candidate";
   return { agent, tier: chosenTier, modelId: resolved.modelId, inheritSession: resolved.inheritSession, rationale, endpoint: registry.endpoint };
 }
 
@@ -624,7 +630,11 @@ export function createRunAssignmentSnapshot({ runId, agentNames, availableModelI
   const agents = [...new Set((agentNames || []).filter((name) => typeof name === "string" && name.trim()).map((name) => name.trim()))];
   const decisions = Object.fromEntries(agents.map((agent) => {
     const resolved = resolveAgentModel(agent, registry, availableModelIds);
-    return [agent, { tier: resolved.tier, model: resolved.modelId, inheritSession: resolved.inheritSession, reason: resolved.inheritSession ? (availableModelIds === undefined ? "model-discovery-unavailable" : "no-tier-candidate-available") : "live-tier-candidate" }];
+    const live = resolved.modelId && availableModelIds?.includes(resolved.modelId);
+    const reason = resolved.inheritSession
+      ? (availableModelIds === undefined ? "model-discovery-unavailable" : "no-tier-candidate-available")
+      : live || availableModelIds === undefined ? "live-tier-candidate" : "configured-tier-fallback";
+    return [agent, { tier: resolved.tier, model: resolved.modelId, inheritSession: resolved.inheritSession, reason }];
   }));
   const payload = { runId: runId.trim(), routerVersion: registry.version, gatewayEndpoint: registry.endpoint, availabilityProbe: typeof registry.gateway.availabilityProbe === "string" ? registry.gateway.availabilityProbe : null, discoveryAttempted: availableModelIds !== undefined, decisions, createdAt };
   const fingerprint = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
