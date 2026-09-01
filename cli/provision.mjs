@@ -1000,7 +1000,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   // malformed router has no enabled candidate; dispatch will fail closed.
   if (installModel) {
     merged.model = installModel;
-    merged.modelOverrides = { [installModel]: installModel };
+    merged.modelOverrides = bizarSettings.modelOverrides;
   }
 
   // Auto-compaction is part of the Bizar reliability contract. Remove legacy

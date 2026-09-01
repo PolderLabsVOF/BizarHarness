@@ -109,6 +109,15 @@ test('configured model metadata supplies Claude Code context-window enforcement'
   assert.equal(configuredModelContextTokens(router, 'provider/missing'), undefined);
 });
 
+test('recognized Claude override keys retain configured gateway values', async () => {
+  const { buildClaudeModelOverrides } = await import('./commands/models.mjs');
+  const ids = ['cx/gpt-5.6-luna', 'minimax/MiniMax-M3'];
+  const mapped = buildClaudeModelOverrides(ids);
+  assert.deepEqual(Object.values(mapped), ids);
+  assert.ok(Object.keys(mapped).every((id) => id.startsWith('claude-')));
+  assert.equal(mapped['cx/gpt-5.6-luna'], undefined);
+});
+
 test('model router ownership recognizes Bizar schemas and preserves foreign schemas', async () => {
   const { isBizarManagedModelRouter } = await import('./provision.mjs');
   assert.equal(isBizarManagedModelRouter({ $schema: 'https://bizar.dev/schema/model-router.v1.json' }), true);
@@ -192,12 +201,18 @@ describe('syncConfigExtras() — rules sync (v6.0.1)', () => {
 test('generated Claude settings contain guarded autonomy and current runtime paths', () => {
   const home = mkdtempSync(join(tmpdir(), 'bizar-settings-'));
   const claudeDir = join(home, '.claude');
+  const bizarHome = join(home, '.config', 'bizar');
+  const routerPath = join(bizarHome, 'config', 'claude', 'model-router.json');
   // F-169 + F-180: install the wrapper shim into the test claudeDir so
   // `resolveHookCommand` emits the wrapper-path command (its executable
   // form). `syncConfigExtras` does this on real installs.
   mkdirSync(join(claudeDir, 'hooks'), { recursive: true });
   copyFileSync(WRAPPER_SRC, join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh'));
   chmodSync(join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh'), 0o755);
+  mkdirSync(dirname(routerPath), { recursive: true });
+  writeFileSync(routerPath, JSON.stringify({
+    userSelected: { models: ['cx/gpt-5.6-luna', 'minimax/MiniMax-M3'] },
+  }));
   try {
     const script = `
       import { writeClaudeSettings } from './cli/provision.mjs';
@@ -210,7 +225,7 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
         ...process.env,
         HOME: home,
         CLAUDE_CONFIG_DIR: claudeDir,
-        BIZAR_HOME: join(home, '.config', 'bizar'),
+        BIZAR_HOME: bizarHome,
       },
       encoding: 'utf8',
     });
@@ -224,7 +239,12 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.hooks.TaskCompleted[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} task-completed`);
     assert.equal(settings.hooks.TeammateIdle[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} teammate-idle`);
     assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
-    assert.equal(settings.env.BIZAR_HOME, join(home, '.config', 'bizar'));
+    assert.equal(settings.env.BIZAR_HOME, bizarHome);
+    assert.equal(settings.model, 'cx/gpt-5.6-luna');
+    assert.deepEqual(Object.values(settings.modelOverrides), [
+      'cx/gpt-5.6-luna', 'minimax/MiniMax-M3',
+    ]);
+    assert.equal(settings.modelOverrides['cx/gpt-5.6-luna'], undefined);
     assert.equal(settings.disableAutoCompact, false);
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));
     // F-176: full permissions by default — deny/ask ship empty; external

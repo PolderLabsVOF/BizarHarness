@@ -58,6 +58,19 @@ The 10.23.3 mapping correction is implemented across provisioning, CLI model
 sync, and SessionStart repair. Focused evidence passes: model sync 11/11,
 SessionStart 10/10, provision 21/21, TypeScript, and diff hygiene.
 
+Clean-install verification found a second legacy assignment at the end of
+`writeClaudeSettings` that overwrote the new mapping with the old self-map.
+That duplicate write is being removed and pinned in force-install coverage.
+
+The duplicate force-merge assignment is removed and direct force-provision
+coverage now asserts the active custom model is present only as a recognized-
+key override value. Provision coverage passes 22/22; 10.23.4 is the final
+release candidate.
+
+Full 10.23.4 evidence is green: repository structure, architecture, 42 SDK
+files / 513 tests, 1,032 retained Node tests, E2E 13/13, clean-check,
+TypeScript, and diff hygiene all pass.
+
 Full 10.23.3 evidence is green: repository structure, architecture, 42 SDK
 files / 513 tests, 1,031 retained Node tests, E2E 13/13, clean-check,
 TypeScript, and diff hygiene all pass.

@@ -1,5 +1,12 @@
 # Changelog
 
+## [10.23.4] - 2026-09-01
+
+### Fixed
+
+- Preserve the supported recognized-key model override map through the final
+  force-provision merge instead of overwriting it with a legacy self-map.
+
 ## [10.23.3] - 2026-09-01
 
 ### Fixed
