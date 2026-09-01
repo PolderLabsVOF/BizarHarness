@@ -3,7 +3,7 @@
  *
  * Regression tests for the 10.19.2 gateway-namespace alignment:
  *   - `partitionStalePicks` separates live picks from stale picks.
- *   - `applyModelOverrides` writes the self-map pattern, refuses to
+ *   - `applyModelOverrides` writes recognized-key gateway mappings, refuses to
  *     overwrite a corrupt settings.json, and skips when `null`.
  *   - `applyModels → applyModelOverrides` wiring survives a real
  *     filesystem round-trip (read-back of both files).
@@ -29,6 +29,7 @@ import {
   normalizeModels,
   partitionStalePicks,
   classifyKind,
+  buildClaudeModelOverrides,
   configuredFallbackModels,
   currentSelection,
 } from '../commands/models.mjs';
@@ -106,7 +107,7 @@ test('partitionStalePicks: tolerates non-array inputs', () => {
 
 // ── applyModelOverrides ───────────────────────────────────────────────────
 
-test('applyModelOverrides: writes self-map for live picks only', () => {
+test('applyModelOverrides: writes recognized-key mappings for live picks only', () => {
   const cwd = makeCwd();
   try {
     const settingsPath = tmpSettingsPath(cwd);
@@ -121,16 +122,15 @@ test('applyModelOverrides: writes self-map for live picks only', () => {
     assert.deepEqual(result.skippedStale, ['a/1']);
     const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
     assert.equal(back.env.ANTHROPIC_AUTH_TOKEN, 'tok'); // preserved
-    assert.deepEqual(back.modelOverrides, {
-      'minimax/MiniMax-M3': 'minimax/MiniMax-M3',
-      'codex/gpt-5.6-sol': 'codex/gpt-5.6-sol',
-    });
+    assert.deepEqual(back.modelOverrides, buildClaudeModelOverrides([
+      'minimax/MiniMax-M3', 'codex/gpt-5.6-sol',
+    ]));
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
 });
 
-test('applyModelOverrides: empty liveIds writes self-map for every pick (no false stale)', () => {
+test('applyModelOverrides: empty liveIds maps every pick (no false stale)', () => {
   const cwd = makeCwd();
   try {
     const settingsPath = tmpSettingsPath(cwd);
@@ -143,7 +143,7 @@ test('applyModelOverrides: empty liveIds writes self-map for every pick (no fals
     assert.deepEqual(result.syncedIds, ['minimax/MiniMax-M3']);
     assert.deepEqual(result.skippedStale, []);
     const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
-    assert.equal(back.modelOverrides['minimax/MiniMax-M3'], 'minimax/MiniMax-M3');
+    assert.ok(Object.values(back.modelOverrides).includes('minimax/MiniMax-M3'));
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -244,10 +244,7 @@ test('applyModels then applyModelOverrides: round-trip survives both files', () 
     const router = JSON.parse(readFileSync(routerPath, 'utf8'));
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
     assert.deepEqual(router.userSelected.models, picks);
-    assert.deepEqual(settings.modelOverrides, {
-      'minimax/MiniMax-M3': 'minimax/MiniMax-M3',
-      'codex/gpt-5.6-sol': 'codex/gpt-5.6-sol',
-    });
+    assert.deepEqual(settings.modelOverrides, buildClaudeModelOverrides(picks));
     assert.equal(settings.model, picks[0]);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
@@ -337,8 +334,9 @@ test('bizar models --set syncs picks to a temp settings.json', async () => {
       );
       assert.equal(code, 0, `expected 0, got ${code}; stderr=${stderr}`);
       const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
-      assert.equal(back.modelOverrides['minimax/MiniMax-M3'], 'minimax/MiniMax-M3');
-      assert.equal(back.modelOverrides['codex/gpt-5.6-sol'], 'codex/gpt-5.6-sol');
+      assert.deepEqual(back.modelOverrides, buildClaudeModelOverrides([
+        'minimax/MiniMax-M3', 'codex/gpt-5.6-sol',
+      ]));
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -537,9 +535,8 @@ test('bizar models --set populates modelPicker.options in settings.json', async 
       });
       // Other settings.json fields are preserved.
       assert.equal(back.env.ANTHROPIC_AUTH_TOKEN, 'tok');
-      // modelOverrides still carries the self-map for unrecognized_model
-      // diagnostics.
-      assert.equal(back.modelOverrides['minimax/MiniMax-M3'], 'minimax/MiniMax-M3');
+      // modelOverrides carries a recognized-key mapping for diagnostic suppression.
+      assert.ok(Object.values(back.modelOverrides).includes('minimax/MiniMax-M3'));
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -973,9 +970,9 @@ await run('models', ['--json'], false, deps);
 // ── 10.22.0 / Phase 4: disabled-providers filter contract ──────────────
 
 test('applyModelOverrides: skippedDisabled is reported and disabled ids never sync', () => {
-  // The self-map pattern writes {<id>:<id>}. Operators with
+  // The recognized-key mapping writes {<claude-id>:<gateway-id>}. Operators with
   // `disabledProviders: ["anthropic"]` must NEVER see an
-  // `anthropic/*` self-map entry in their settings.json — the
+  // an `anthropic/*` override value in settings.json — the
   // skippedDisabled array carries the dropped ids back so the CLI
   // can surface them in the interactive summary.
   const cwd = makeCwd();
@@ -991,12 +988,10 @@ test('applyModelOverrides: skippedDisabled is reported and disabled ids never sy
     });
     assert.deepEqual(result.syncedIds, ['claude-minimax/MiniMax-M3']);
     assert.deepEqual(result.skippedDisabled, ['anthropic/claude-3-5-sonnet']);
-    // The settings.json must contain ONLY the surviving self-map.
+    // The settings.json must contain ONLY the surviving gateway value.
     const after = JSON.parse(readFileSync(settingsJsonPath, 'utf8'));
-    assert.deepEqual(after.modelOverrides, {
-      'claude-minimax/MiniMax-M3': 'claude-minimax/MiniMax-M3',
-    });
-    assert.equal(after.modelOverrides['anthropic/claude-3-5-sonnet'], undefined);
+    assert.deepEqual(after.modelOverrides, buildClaudeModelOverrides(['claude-minimax/MiniMax-M3']));
+    assert.ok(!Object.values(after.modelOverrides).includes('anthropic/claude-3-5-sonnet'));
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

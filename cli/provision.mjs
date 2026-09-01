@@ -32,6 +32,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveBizarHome } from './config-paths.mjs';
+import { buildClaudeModelOverrides, configuredEnabledModels } from './commands/models.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -944,11 +945,13 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const legacyRouterPath = join(CLAUDE_DIR, 'model-router.json');
   let installModel;
   let installContextTokens;
+  let installModels = [];
   for (const p of [bizarRouterPath, legacyRouterPath]) {
     if (!existsSync(p)) continue;
     const parsed = readJsonSafe(p, null);
     if (!parsed || typeof parsed !== 'object') continue;
     installModel = configuredInstallModel(parsed);
+    installModels = configuredEnabledModels(parsed);
     installContextTokens = installModel ? configuredModelContextTokens(parsed, installModel) : undefined;
     if (installModel) break;
     // The Bizar path is authoritative even when it has no enabled candidates.
@@ -956,7 +959,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   }
   if (installModel) {
     bizarSettings.model = installModel;
-    bizarSettings.modelOverrides = { [installModel]: installModel };
+    bizarSettings.modelOverrides = buildClaudeModelOverrides(installModels);
     const configuredContext = pickEnv('CLAUDE_CODE_MAX_CONTEXT_TOKENS') || installContextTokens;
     if (configuredContext) bizarSettings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(configuredContext);
   } else {

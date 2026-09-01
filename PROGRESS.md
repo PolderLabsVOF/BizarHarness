@@ -47,6 +47,21 @@ Final 10.23.2 release evidence is green: repository structure, architecture,
 42 SDK files / 513 tests, 1,031 retained Node tests, E2E 13/13, clean-check,
 TypeScript, and diff hygiene all pass.
 
+The final Claude print-mode smoke revealed that unknown-key self-maps in
+`modelOverrides` are ignored by Claude Code 2.1.252. Current official docs
+require recognized Anthropic model IDs as keys and gateway aliases as values.
+A live preserved-settings experiment proved that shape returns `BIZAR_OK` with
+zero stderr bytes. Provisioning and model selection are being updated to emit
+that supported mapping for every configured candidate.
+
+The 10.23.3 mapping correction is implemented across provisioning, CLI model
+sync, and SessionStart repair. Focused evidence passes: model sync 11/11,
+SessionStart 10/10, provision 21/21, TypeScript, and diff hygiene.
+
+Full 10.23.3 evidence is green: repository structure, architecture, 42 SDK
+files / 513 tests, 1,031 retained Node tests, E2E 13/13, clean-check,
+TypeScript, and diff hygiene all pass.
+
 Final staged review found one remaining release blocker: model selection updated
 Claude's active model but could retain Bizar's context-window value from the
 previous model. The model/settings sync is being made atomic and regression-

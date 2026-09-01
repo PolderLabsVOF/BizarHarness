@@ -128,11 +128,11 @@ test('model-sync: reapplies modelPicker + modelOverrides + resets dead claude- m
     assert.equal(after.modelPicker.options[1].label, 'MiniMax M3');
     assert.equal(after.modelPicker.options[2].label, 'qwen3.8 max preview');
 
-    // modelOverrides self-map for each live pick
+    // Recognized Claude keys map to every live gateway pick.
     assert.deepEqual(after.modelOverrides, {
-      'codex/gpt-5.6-sol': 'codex/gpt-5.6-sol',
-      'minimax/MiniMax-M3': 'minimax/MiniMax-M3',
-      'qct/qwen3.8-max-preview': 'qct/qwen3.8-max-preview',
+      'claude-fable-5': 'codex/gpt-5.6-sol',
+      'claude-opus-5': 'minimax/MiniMax-M3',
+      'claude-sonnet-5': 'qct/qwen3.8-max-preview',
     });
   } finally {
     rmSync(stage.dir, { recursive: true, force: true });
@@ -293,9 +293,9 @@ test('model-sync: disabledProviders strips banned ids before picker re-apply', (
     const after = JSON.parse(readFileSync(stage.settingsPath, 'utf8'));
     // Only the non-disabled id survives in the picker.
     assert.deepEqual(after.modelPicker.options.map((o) => o.model), ['minimax/MiniMax-M3']);
-    // The self-map pattern also skips the disabled ids.
+    // The recognized-key mapping also skips disabled ids.
     assert.deepEqual(after.modelOverrides, {
-      'minimax/MiniMax-M3': 'minimax/MiniMax-M3',
+      'claude-fable-5': 'minimax/MiniMax-M3',
     });
   } finally {
     rmSync(stage.dir, { recursive: true, force: true });

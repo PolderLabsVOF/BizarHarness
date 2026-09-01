@@ -923,16 +923,16 @@ export function partitionStalePicks({ liveIds, pickedIds, disabledProviders }) {
 
 /**
  * Sync `userSelected.models` into Claude Code's settings.json under
- * `modelOverrides` using the self-map pattern (`<id>` → `<id>`). This
+ * `modelOverrides` using recognized Claude IDs as keys and gateway IDs as
+ * values. This
  * suppresses `[claude-code:unrecognized_model]` diagnostics on every turn
  * for any picked ID the gateway serves. Stale IDs (not returned by the
  * gateway) are excluded so the diagnostic still surfaces them.
  *
  * Behavior:
  *   - Reads `settings.json` if present; preserves every other field.
- *   - Writes `modelOverrides` as a sparse object: only picked IDs that
- *     are also in `liveIds`. Self-map pattern keeps dispatch behavior
- *     identical (Claude Code dispatches the literal ID).
+ *   - Writes `modelOverrides` as a sparse object for picked IDs that are
+ *     also in `liveIds`; Claude Code still dispatches each literal value.
  *   - Atomic replace via temp-file + rename (matches `applyModels`).
  *   - When `settingsJsonPath` is provided (tests), uses that instead of
  *     `~/.claude/settings.json`.
@@ -962,13 +962,13 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
   }
   const live = new Set(Array.isArray(liveIds) ? liveIds : []);
   const incoming = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id.trim()) : [];
-  // 10.22.0 / Phase 4: strip disabled-provider ids BEFORE the self-map
-  // so Claude Code never sees an `anthropic/*` self-map entry. The
+  // 10.22.0 / Phase 4: strip disabled-provider ids BEFORE the mapping
+  // so Claude Code never sees an `anthropic/*` override value. The
   // skipped ids are reported back so the operator can see what was
   // dropped (without crashing on the disabled list).
   const disabled = Array.isArray(disabledProviders) ? disabledProviders : readDisabledProviders();
   const { kept: picks, stripped: skippedDisabled } = filterCandidatesByDisabledProviders(incoming, disabled);
-  // Self-map only IDs the live gateway serves. Stale IDs intentionally stay
+  // Map only IDs the live gateway serves. Stale IDs intentionally stay
   // out so the `[claude-code:unrecognized_model]` diagnostic still fires
   // for them — the operator should re-run `bizar models` to drop them.
   const synced = live.size === 0
@@ -987,9 +987,10 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
       return { wrote: false, syncedIds: [], skippedStale: skipped, skippedDisabled, settingsPath: path };
     }
   }
-  // Self-map pattern — Claude Code uses modelOverrides to suppress
-  // `[claude-code:unrecognized_model]` for any ID that maps to itself.
-  settings.modelOverrides = Object.fromEntries(synced.map((id) => [id, id]));
+  // Claude Code ignores unknown override keys. Recognized Anthropic model IDs
+  // must be keys; configured gateway aliases are values. This also suppresses
+  // print-mode `[claude-code:unrecognized_model]` diagnostics for Agent SDK calls.
+  settings.modelOverrides = buildClaudeModelOverrides(synced);
   const previousModel = typeof settings.model === 'string' ? settings.model : null;
   const previousContext = profiles?.[previousModel]?.limits?.contextTokens;
   const nextModel = synced[0] || null;
@@ -1026,6 +1027,33 @@ export function configuredEnabledModels(router) {
   const disabled = extractDisabledProviders(router);
   const selected = currentSelection(router, { disabledProviders: disabled }).models;
   return selected.length > 0 ? selected : configuredFallbackModels(router);
+}
+
+export const CLAUDE_MODEL_OVERRIDE_KEYS = Object.freeze([
+  'claude-fable-5',
+  'claude-opus-5',
+  'claude-sonnet-5',
+  'claude-haiku-4-5-20251001',
+  'claude-opus-4-8',
+  'claude-opus-4-7',
+  'claude-opus-4-6',
+  'claude-sonnet-4-6',
+  'claude-opus-4-5-20251101',
+  'claude-sonnet-4-5-20250929',
+  'claude-opus-4-1-20250805',
+  'claude-opus-4-20250514',
+  'claude-sonnet-4-20250514',
+  'claude-3-7-sonnet-20250219',
+  'claude-3-5-haiku-20241022',
+  'claude-3-5-sonnet-20241022',
+]);
+
+export function buildClaudeModelOverrides(modelIds) {
+  const unique = [...new Set((Array.isArray(modelIds) ? modelIds : [])
+    .filter((id) => typeof id === 'string' && id.trim())
+    .map((id) => id.trim()))];
+  return Object.fromEntries(unique.slice(0, CLAUDE_MODEL_OVERRIDE_KEYS.length)
+    .map((id, index) => [CLAUDE_MODEL_OVERRIDE_KEYS[index], id]));
 }
 
 /**

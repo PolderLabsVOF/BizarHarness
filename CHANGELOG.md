@@ -1,5 +1,13 @@
 # Changelog
 
+## [10.23.3] - 2026-09-01
+
+### Fixed
+
+- Generate Claude Code `modelOverrides` with recognized Claude model IDs as
+  keys and configured gateway IDs as values, including SessionStart repair, so
+  print-mode and Agent SDK requests no longer emit unrecognized-model warnings.
+
 ## [10.23.2] - 2026-09-01
 
 ### Fixed
