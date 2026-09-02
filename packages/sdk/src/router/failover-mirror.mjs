@@ -175,13 +175,17 @@ export function rankUserSelectedForRole(registry, role, requirements = {}) {
     });
   ranked.sort((a, b) => {
     if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+    if (a.originalIndex !== b.originalIndex) return a.originalIndex - b.originalIndex;
     if (a.capabilityScore !== b.capabilityScore) return b.capabilityScore - a.capabilityScore;
-    if (a.hasProfile !== b.hasProfile) return a.hasProfile ? -1 : 1;
-    return a.originalIndex - b.originalIndex;
+    return a.hasProfile !== b.hasProfile ? (a.hasProfile ? -1 : 1) : 0;
   });
-  const eligible = ranked.filter((entry) => entry.eligible);
-  // role is consumed only for future per-role filtering / logging hooks.
-  void role;
+  // Tier-aware filtering (parity with the CLI's
+  // resolveDispatchModel#hinted): narrow `eligible` to entries whose
+  // tier hint matches the requested tier; fall back to the full eligible
+  // ranking when no tier-matched candidate exists so a stale tierHints
+  // map never strands a dispatch with no candidates at all.
+  const tierMatched = role ? ranked.filter((entry) => entry.eligible && entry.tier === role) : ranked.filter((entry) => entry.eligible);
+  const eligible = tierMatched.length > 0 ? tierMatched : ranked.filter((entry) => entry.eligible);
   return { ranked, eligible };
 }
 

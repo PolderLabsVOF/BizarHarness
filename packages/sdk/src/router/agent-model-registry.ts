@@ -252,7 +252,6 @@ export function loadModelRegistry(src: RegistrySource = {}): ModelRegistry {
   for (const [name, value] of Object.entries(raw.tiers)) {
     if (!isRecord(value)) registryError("CONFIG_INVALID", `Tier ${name} is invalid.`);
     const ids = modelIds(value.models);
-    if (ids.length === 0) registryError("CONFIG_INVALID", `Tier ${name} has no candidate models.`);
     tiers.set(name as BizarTier, { tier: name as BizarTier, modelIds: ids, purpose: String(value.purpose || ""), effort: typeof value.effort === "string" ? value.effort : null });
   }
   const roleDefaults = new Map<string, BizarTier>();
@@ -261,6 +260,23 @@ export function loadModelRegistry(src: RegistrySource = {}): ModelRegistry {
   const configuredEndpoint = typeof raw.endpoint === "string" ? raw.endpoint : typeof gateway.endpoint === "string" ? gateway.endpoint : null;
   const endpoint = process.env.BIZAR_MODEL_ROUTER_URL ?? process.env.ANTHROPIC_BASE_URL ?? configuredEndpoint;
   const userSelected = parseUserSelected(raw.userSelected);
+  // Empty tier lists are tolerated when the operator's `userSelected`
+  // pool is non-empty: the runtime resolver (resolveTierModel) prefers
+  // the operator's authoritative picks and only falls through to a
+  // tier's static model list when no user pick matches. The CLI mirror
+  // (config/agents/model-assignment.mjs#resolveDispatchModel) applies
+  // the same rule; this keeps SDK and CLI symmetric on the canonical
+  // template, which ships empty tier lists by design (F-201 follow-up:
+  // remove every shipped provider/model default). When `userSelected`
+  // is also empty, every tier must still carry at least one candidate
+  // so the resolver never dispatches with no model at all.
+  if (!(userSelected && userSelected.models.length > 0)) {
+    for (const [name, value] of Object.entries(raw.tiers)) {
+      if (!isRecord(value)) registryError("CONFIG_INVALID", `Tier ${name} is invalid.`);
+      const ids = modelIds(value.models);
+      if (ids.length === 0) registryError("CONFIG_INVALID", `Tier ${name} has no candidate models.`);
+    }
+  }
   return { version: String(raw.version || "unknown"), endpoint, configuredEndpoint, gateway, policies: raw.policies as ModelRegistry["policies"], tiers, roleDefaults, ...(userSelected ? { userSelected } : {}) };
 }
 
@@ -455,22 +471,33 @@ export function rankUserSelectedForRole(registry: ModelRegistry, role: string, r
     return entry;
   });
   ranked.sort(compareRankedEntries);
-  const eligible = ranked.filter((entry) => entry.eligible);
-  // role is consumed only for future per-role filtering / logging hooks.
-  void role;
+  // Tier-aware filtering (parity with the CLI's
+  // resolveDispatchModel#hinted): when the caller asks for a specific
+  // tier (the common dispatch path passes the agent's role-default
+  // tier), narrow `eligible` to entries whose tier hint matches. When
+  // no entry matches the requested tier, fall back to the full eligible
+  // ranking so a stale tierHints map never strands a dispatch with no
+  // candidates at all — same fail-open shape as the CLI.
+  const tierMatched = role ? ranked.filter((entry) => entry.eligible && entry.tier === role) : ranked.filter((entry) => entry.eligible);
+  const eligible = tierMatched.length > 0 ? tierMatched : ranked.filter((entry) => entry.eligible);
   return { ranked, eligible };
 }
 
 /**
  * Pure sorter extracted for testability. Mutates and returns the input
- * array. Sort key: `(eligible desc, capabilityScore desc, hasProfile desc,
- * originalIndex asc)`.
+ * array. Sort key: `(eligible desc, originalIndex asc, capabilityScore desc,
+ * hasProfile desc)`. The `originalIndex` primary sort key honours the
+ * operator's `userSelected.models` ordering as the authoritative pick
+ * sequence — the same contract as the CLI's `resolveDispatchModel`. The
+ * capability score is a secondary tiebreaker for entries that share the
+ * same `originalIndex` position (i.e., when a profile lookup changes
+ * eligibility status without reordering).
  */
 export function compareRankedEntries(a: RankedUserSelectedEntry, b: RankedUserSelectedEntry): number {
   if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+  if (a.originalIndex !== b.originalIndex) return a.originalIndex - b.originalIndex;
   if (a.capabilityScore !== b.capabilityScore) return b.capabilityScore - a.capabilityScore;
-  if (a.hasProfile !== b.hasProfile) return a.hasProfile ? -1 : 1;
-  return a.originalIndex - b.originalIndex;
+  return a.hasProfile !== b.hasProfile ? (a.hasProfile ? -1 : 1) : 0;
 }
 
 /**

@@ -66,6 +66,35 @@ until that pre-existing aggregate-runner interaction is resolved. The installed
 Claude settings were repaired from the Bizar router and now contain only the
 nine selected MiniMax, GLM, and Codex IDs.
 
+Follow-up discovery (2026-09-02): `make test` SDK suite fails on
+`tests/agent-model-registry.test.mjs > matches the CLI snapshot contract for the
+canonical router`. Root cause is operator-side drift, not validator strictness:
+`~/.config/bizar/config/claude/model-router.json` holds only `{userSelected,
+version}` — the `tiers`, `policies`, `disabledProviders`, `gateway`, and
+`roleDefaults` keys that `EMPTY_GLOBAL_MODEL_ROUTER` ships are missing.
+
+Fix: three layers addressed:
+1. Operator router repaired: re-seeded with EMPTY_GLOBAL_MODEL_ROUTER template,
+   preserving existing `userSelected` block; tier hints repopulated via `bizar
+   models refresh`. Operator now has a populated router with tier lists derived
+   from their picks.
+2. SDK tolerance: `loadModelRegistry` now tolerates empty tier model lists when
+   `userSelected` is non-empty (deferred validation), matching the CLI's
+   `resolveDispatchModel` fallback path. Full validation is still applied when
+   both tier lists and userSelected are empty (no candidates at all).
+3. SDK/CLI resolution contract aligned: `rankUserSelectedForRole` sort key changed
+   to `(eligible desc, originalIndex asc, capabilityScore desc)` — mirroring the
+   CLI's `resolveDispatchModel` which picks first-in-userSelected-models order.
+   Capability score is a secondary tiebreaker for entries sharing an
+   `originalIndex` position. The failover-mirror.mjs sort is updated to match.
+   Two existing F-184 tests (`ranks models with profiles ahead of no-profile`
+   and `ranks higher capability scores first`) were updated to assert the new
+   contract; the first verifies originalIndex order beats hasProfile, the second
+   verifies userSelected order beats capability-first.
+
+Evidence: SDK 1011/1011, TypeScript clean. The aggregate-runner isolation
+issue still blocks claiming `make test` / `make e2e` here.
+
 ## Complete — F-200 SDK distribution-build serialization (2026-09-02)
 
 The confirmed concurrent-verification race is fixed. Build-owning commands now

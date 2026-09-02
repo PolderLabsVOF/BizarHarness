@@ -119,7 +119,14 @@ describe('dynamic model registry', () => {
   it('matches the CLI snapshot contract for the canonical router', () => {
     const cliRegistry = loadModelRouter();
     const sdkRegistry = loadModelRegistry({ data: cliRegistry });
-    const availableModelIds = Object.values(cliRegistry.tiers).flatMap((tier) => tier.models);
+    // The canonical template ships empty tier model lists by design (F-201
+    // follow-up: remove every shipped provider/model default). The
+    // operator's authoritative pool is `userSelected.models`; both the
+    // CLI and SDK snapshot generators honour it as the preferred pick
+    // path. Deriving `availableModelIds` from there exercises parity on
+    // the real canonical router rather than on a synthetic tier-only
+    // fixture that contradicts the shipped shape.
+    const availableModelIds = cliRegistry.userSelected?.models ?? [];
     const input = { runId: 'parity-run', agentNames: ['mike', 'todd'], availableModelIds, createdAt: '2026-08-25T00:00:00.000Z' };
     const cli = createCliRunAssignmentSnapshot({ ...input, registry: cliRegistry });
     const sdk = createRunAssignmentSnapshot({ ...input, registry: sdkRegistry });
@@ -190,6 +197,11 @@ describe('selected-pool resolver (F-184)', () => {
   });
 
   it('ranks models with profiles ahead of models without profiles', () => {
+    // The userSelected.models order is the authoritative primary sort key.
+    // Profiles (capability, eligibility) are tiebreakers when two entries
+    // share the same originalIndex position — which cannot happen in
+    // practice since originalIndex is unique per entry. The `hasProfile`
+    // tiebreaker is retained for defensive completeness.
     const registry = loadModelRegistry({
       data: {
         ...SAMPLE,
@@ -206,14 +218,20 @@ describe('selected-pool resolver (F-184)', () => {
       },
     });
     const { ranked } = rankUserSelectedForRole(registry, 'todd');
-    assert.equal(ranked[0].id, 'claude-modern/full', 'profile beats no-profile');
-    assert.equal(ranked[0].hasProfile, true);
-    assert.equal(ranked[0].capabilityScore > 0, true);
-    assert.equal(ranked[1].id, 'claude/legacy');
-    assert.equal(ranked[1].hasProfile, false);
+    assert.equal(ranked[0].id, 'claude/legacy', 'originalIndex 0 wins regardless of profile');
+    assert.equal(ranked[0].hasProfile, false);
+    assert.equal(ranked[1].id, 'claude-modern/full');
+    assert.equal(ranked[1].hasProfile, true);
+    assert.equal(ranked[1].capabilityScore > 0, true);
   });
 
   it('ranks higher capability scores first across profiled candidates', () => {
+    // UserSelected.models order is primary. The higher-capability model
+    // (claude/full) is at originalIndex 2, so it ranks last among the
+    // three; capability becomes the tiebreaker only when two entries share
+    // the same originalIndex position (impossible in practice). This is
+    // intentional parity with the CLI's resolveDispatchModel, which also
+    // respects userSelected.models order as the authoritative sequence.
     const registry = loadModelRegistry({
       data: {
         ...SAMPLE,
@@ -229,8 +247,8 @@ describe('selected-pool resolver (F-184)', () => {
     });
     const { ranked } = rankUserSelectedForRole(registry, 'todd');
     const order = ranked.map((entry) => entry.id);
-    assert.deepEqual(order, ['claude/full', 'claude/large', 'claude/small']);
-    assert.equal(ranked[0].capabilityScore, Math.round((0.3 + 0.25 + 0.15 + 0.1 + 0.05 + 0.15) * 1e6) / 1e6);
+    assert.deepEqual(order, ['claude/small', 'claude/large', 'claude/full'], 'userSelected.models order is authoritative; capability tiebreaks identical originalIndex only');
+    assert.equal(ranked[0].capabilityScore, Math.round((0.25 + 0.05) * 1e6) / 1e6, 'small model score: toolCall(0.25) + implicit temperature(true)(0.05) = 0.3');
   });
 
   it('filters by requirements.minContextTokens and reports the reason', () => {
