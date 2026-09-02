@@ -3,12 +3,16 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { Readable } from 'node:stream';
 import { describe, test } from 'node:test';
 import {
+  CODING_TOOLS,
   detectProviderConfiguration,
   isValidProviderUrl,
+  parseToolSelectionKey,
   providerSettingsPath,
   runInteractiveSetup,
+  runToolSelection,
 } from './interactive-setup.mjs';
 
 function terminal() {
@@ -170,5 +174,137 @@ describe('interactive installer provider setup', () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe('parseToolSelectionKey()', () => {
+  test('maps Enter and LF to confirm', () => {
+    assert.deepEqual(parseToolSelectionKey('\r'), { type: 'confirm' });
+    assert.deepEqual(parseToolSelectionKey('\n'), { type: 'confirm' });
+  });
+
+  test('maps Space to toggle', () => {
+    assert.deepEqual(parseToolSelectionKey(' '), { type: 'toggle' });
+  });
+
+  test('maps j/k and arrow keys to +/- cursor moves', () => {
+    assert.deepEqual(parseToolSelectionKey('j'), { type: 'move', delta: +1 });
+    assert.deepEqual(parseToolSelectionKey('k'), { type: 'move', delta: -1 });
+    assert.deepEqual(parseToolSelectionKey('[B'), { type: 'move', delta: +1 });
+    assert.deepEqual(parseToolSelectionKey('[A'), { type: 'move', delta: -1 });
+  });
+
+  test('rejects unrelated keys with null', () => {
+    assert.equal(parseToolSelectionKey('a'), null);
+    assert.equal(parseToolSelectionKey('z'), null);
+    assert.equal(parseToolSelectionKey('?'), null);
+  });
+});
+
+describe('CODING_TOOLS catalog', () => {
+  test('exposes the two supported tools with stable ids', () => {
+    const ids = CODING_TOOLS.map((t) => t.id);
+    assert.deepEqual(ids, ['claude', 'codex']);
+  });
+
+  test('every entry has a non-empty label and description', () => {
+    for (const t of CODING_TOOLS) {
+      assert.ok(typeof t.label === 'string' && t.label.length > 0, `label missing for ${t.id}`);
+      assert.ok(typeof t.description === 'string' && t.description.length > 0, `description missing for ${t.id}`);
+    }
+  });
+});
+
+describe('runToolSelection()', () => {
+  function captureOutput() {
+    const chunks = [];
+    return {
+      chunks,
+      output: {
+        isTTY: true,
+        write(c) { chunks.push(String(c)); return true; },
+      },
+    };
+  }
+
+  /**
+   * Build a Readable that emits the given keys as individual `data` events
+   * one tick after subscription. We use `Readable.from` with a small async
+   * generator so timing is deterministic across Node versions (PassThrough
+   * occasionally swallows data when the consumer attaches `data` listeners
+   * synchronously after the producer calls `write()`).
+   */
+  function scriptedInput(keys) {
+    return Readable.from((async function* () {
+      for (const k of keys) {
+        await new Promise((r) => setImmediate(r));
+        yield k;
+      }
+    })());
+  }
+
+  test('returns defaults (claude only) when not enabled', async () => {
+    const result = await runToolSelection({ enabled: false, isTTY: true });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.tools, ['claude']);
+    assert.equal(result.interactive, false);
+  });
+
+  test('returns defaults when input is not a TTY', async () => {
+    const input = scriptedInput([]);
+    const result = await runToolSelection({ enabled: true, input, output: captureOutput().output, isTTY: false });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.tools, ['claude']);
+    assert.equal(result.interactive, false);
+  });
+
+  test('Enter with no toggling confirms both default tools', async () => {
+    const input = scriptedInput(['\r']);
+    const { output } = captureOutput();
+    const result = await runToolSelection({ enabled: true, input, output, isTTY: true });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.tools, ['claude', 'codex']);
+    assert.equal(result.interactive, true);
+  });
+
+  test('Space toggles the focused row off; Enter confirms the remaining picks', async () => {
+    const input = scriptedInput([' ', '\r']);
+    const { output } = captureOutput();
+    const result = await runToolSelection({ enabled: true, input, output, isTTY: true });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.tools, ['codex']);
+  });
+
+  test('Toggling every row off still yields at least Claude (defensive default)', async () => {
+    const input = scriptedInput([' ', 'j', ' ', '\r']);
+    const { output } = captureOutput();
+    const result = await runToolSelection({ enabled: true, input, output, isTTY: true });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.tools, ['claude']);
+  });
+
+  test('Arrow keys move the cursor (smoke)', async () => {
+    const input = scriptedInput(['[B', ' ', '\r']); // down to Codex, toggle off, confirm
+    const { output } = captureOutput();
+    const result = await runToolSelection({ enabled: true, input, output, isTTY: true });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.tools, ['claude']);
+  });
+
+  test('Unrelated keys are ignored; Enter still confirms the defaults', async () => {
+    const input = scriptedInput(['a', '?', 'z', '\r']);
+    const { output } = captureOutput();
+    const result = await runToolSelection({ enabled: true, input, output, isTTY: true });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.tools, ['claude', 'codex']);
+  });
+
+  test('EOF on the input stream accepts defaults and is not a hard error', async () => {
+    const input = scriptedInput([]);
+    const { output } = captureOutput();
+    const result = await runToolSelection({ enabled: true, input, output, isTTY: true });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.tools, ['claude']);
+    assert.equal(result.cancelled, true);
   });
 });
