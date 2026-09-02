@@ -2,6 +2,25 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — F-202 OpenAI Codex CLI support (2026-09-02)
+
+Expand Bizar Harness beyond Claude Code by adding OpenAI Codex CLI as a
+second supported coding tool. The installer must ask the operator which
+tools to install (Claude Code, Codex CLI, or both), default to Claude Code
+for backward compatibility, and mirror Bizar's agents, skills, commands,
+and hooks into the Codex-compatible locations (`~/.codex/` for Codex
+config/hooks, `~/.agents/skills/` for Codex skills, `~/.codex/prompts/`
+for slash-command-style prompts). Codex needs no `OPENAI_API_KEY` from
+the installer; on completion, print `codex login` instructions so the
+operator can authenticate with their existing ChatGPT subscription or
+fresh API key.
+
+First committed piece: `cli/install/interactive-setup.mjs` ships
+`runToolSelection()`, a raw-mode multi-select checkbox prompt with arrow
+keys, space toggle, enter confirm, EOF fallback to the documented default,
+and a non-TTY path that returns `['claude']` so existing CI / pipes keep
+working. 22/22 targeted tests pass.
+
 ## In Progress — F-201 adaptive orchestration and model isolation (2026-09-02)
 
 Remove the hard native-workflow tool gate that deadlocked ordinary project

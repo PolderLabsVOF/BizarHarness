@@ -1432,7 +1432,7 @@
       "verification": "targeted route, model-isolation, model-sync, and native-workflow tests; make check; make test; make e2e",
       "state": "in_progress",
       "wip_holder": "@mike",
-      "wip": 1,
+      "wip": 0,
       "category": "routing",
       "layer": "harness",
       "owner": "@mike",
@@ -1449,7 +1449,41 @@
         "feature_list.json"
       ],
       "created": "2026-09-02",
-      "evidence": "In progress."
+      "evidence": "In progress.\n\n2026-09-02 wip transferred to F-202 (Codex CLI support) while F-201 waits on the aggregate test-runner blocker."
+    },
+    {
+      "id": "F-202",
+      "title": "OpenAI Codex CLI as a second supported coding tool",
+      "description": "Expand Bizar Harness beyond Claude Code by adding OpenAI Codex CLI as a second supported coding tool. The installer must ask the operator which tools to install (Claude Code, Codex CLI, or both), default to Claude Code for backward compatibility, and mirror Bizar agents, skills, commands, and hooks into the Codex-compatible locations. Codex needs no OPENAI_API_KEY from the installer; on completion, print codex login instructions so the operator can authenticate with their existing ChatGPT subscription or fresh API key.",
+      "behavior": "make setup installs Claude Code only by default. make setup CODEX=1 adds Codex. make setup-all installs both. install.sh accepts --tools=claude,codex and --all-tools. cli/commands/install.mjs forwards the selection to runInstaller; cli/install/index.mjs calls runToolSelection when interactive and not pre-selected. cli/provision.mjs installs and configures each selected tool; cli/provision-codex.mjs mirrors Bizar assets into ~/.codex (config.toml, hooks.json, prompts/) and ~/.agents/skills. cli/bin.mjs prints tool-aware post-install hints. cli/install/paths.mjs and scripts/check-deps.mjs know Codex paths and install commands for win/mac/linux/NixOS. Existing non-interactive callers keep Claude-only behavior.",
+      "verification": "targeted runToolSelection tests; tool-plumbing tests for cli/install/index.mjs and cli/commands/install.mjs; provision-codex mirror tests; cli/bin.mjs hint tests; scripts/check-deps.mjs per-platform tests; make check; make test",
+      "state": "in_progress",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "installer",
+      "layer": "cli",
+      "owner": "@mike",
+      "scope": [
+        "cli/install/interactive-setup.mjs",
+        "cli/install/interactive-setup.test.mjs",
+        "cli/install/index.mjs",
+        "cli/install/paths.mjs",
+        "cli/provision.mjs",
+        "cli/provision-codex.mjs",
+        "cli/provision-codex.test.mjs",
+        "cli/commands/install.mjs",
+        "cli/bin.mjs",
+        "scripts/check-deps.mjs",
+        "scripts/check-deps.test.mjs",
+        "Makefile",
+        "install.sh",
+        "init.sh",
+        "config/codex/README.md",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "created": "2026-09-02",
+      "evidence": "In progress. 2026-09-02 cli/install/interactive-setup.mjs ships runToolSelection() (raw-mode multi-select checkbox prompt with arrow keys, space toggle, enter confirm, EOF fallback, non-TTY default [\"claude\"]). 22/22 targeted tests pass; first atomic commit d81c497 on feat/codex-cli-support."
     }
   ],
   "vcr": {
