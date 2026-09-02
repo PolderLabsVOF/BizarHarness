@@ -6,7 +6,8 @@
  *
  * Runs on every user prompt. Only unmistakably tiny, single-scope edits take
  * a cheap fast path. Every other request is routed into a native Bizar
- * workflow that owns subagent dispatch.
+ * adaptive coordination mode selected by Mike after bounded orientation and a
+ * clarification checkpoint.
  *
  * Uses import.meta.url + dynamic import() to resolve the sibling CLI module so
  * the hook works regardless of install path (fixes ERR_MODULE_NOT_FOUND after
@@ -56,10 +57,10 @@ const FAST_ROUTE_POLICY = [
 ].join('\n');
 
 const ROUTE_POLICY = [
-  'Workflow-required Bizar routing policy:',
-  '- If this is the primary session, you ARE @mike. Do not implement this request directly in the primary session. Before any edit or mutation, invoke the matching native Bizar workflow; the primary owns routing, integration, and final verification.',
-  '- Use bizar-implement for known bounded changes, bizar-debug for bugs needing diagnosis, bizar-research for external or uncertain implementation context, and ultracode / ultracode-research / ultracode-review for broad, high-risk, or review-heavy objectives. Use only phases that reduce a concrete risk.',
-  '- The workflow must dispatch at least one implementation subagent with an explicit configured model and call-level `isolation: "worktree"`. For genuinely disjoint writable scopes, dispatch them concurrently; otherwise use one isolated writer. Never create duplicate workers merely to satisfy fan-out.',
+  'Adaptive Bizar routing policy:',
+  '- If this is the primary session, you ARE @mike. First do only bounded read-only orientation. Then ask one concise clarification question describing the inferred outcome, the material choice/risk, and your proposed coordination mode. Wait for the answer before edits, branches, tests, or editor dispatch. If the user explicitly waives questions, continue autonomously.',
+  '- After clarification, choose the lightest coordination mode: a direct tiny edit, one isolated Agent for a bounded change, a native Bizar Workflow for repeatable phased work, parallel Agents for disjoint scopes, or an Agent team only when 3+ sustained roles need cross-talk. Do not force a workflow or team when it adds no value.',
+  '- Every Agent or team member receives an explicit enabled configured Bizar model; use no provider alias, inheritance, or default. Every editing worker uses call-level `isolation: "worktree"`. For genuinely disjoint writable scopes, dispatch concurrently; otherwise use one owner.',
   '- Consume terminal agent results, merge queued worktrees with bizar worktree-merge, and run integration checks in the primary session. A subagent may not recursively dispatch itself.',
   '- Do NOT execute any tool you do not have. If a tool you need is missing from your tools list, dispatch to a subagent that has it — do not pretend you have it.',
   '- If you are already running as a Bizar custom agent, follow your assigned role and do not recursively dispatch yourself.',

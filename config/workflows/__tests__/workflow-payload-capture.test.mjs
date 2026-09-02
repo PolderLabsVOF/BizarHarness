@@ -258,11 +258,7 @@ for (const script of SCRIPTS) {
     await runCapturedWorkflow(script.file, script.args, captured, ctx);
 
     const highRisk = captured.filter((entry) => entry.risk === 'high');
-    if (script.name === 'bizar-implement') {
-      assert.equal(highRisk.length, 0, 'bounded implementation must not add artificial high-risk review lanes');
-    } else {
-      assert.ok(highRisk.length >= 1, `${script.name}: fixture must declare at least one high-risk lane`);
-    }
+    assert.ok(highRisk.length >= 1, `${script.name}: fixture must declare at least one high-risk lane`);
     for (const entry of highRisk) {
       assert.notEqual(
         entry.payload.model, undefined,
@@ -313,7 +309,7 @@ test('workflow-payload-capture: every editing lane is worktree isolated', async 
   }
 });
 
-test('workflow-payload-capture: shaped workflows retain high-risk review while bounded implementation stays lean', async () => {
+test('workflow-payload-capture: every workflow retains an explicitly routed high-risk review lane', async () => {
   // IMP-014 acceptance gate requires high-risk lanes to always pick a
   // concrete model. Each workflow must declare at least 2 high-risk
   // lanes (e.g., auditor + reviewer/verifier) so the invariant is
@@ -323,7 +319,6 @@ test('workflow-payload-capture: shaped workflows retain high-risk review while b
     const ctx = makeFixtureContext();
     await runCapturedWorkflow(script.file, script.args, captured, ctx);
     const highRiskCount = captured.filter((entry) => entry.risk === 'high').length;
-    if (script.name === 'bizar-implement') assert.equal(highRiskCount, 0);
-    else assert.ok(highRiskCount >= 1, `${script.name}: must capture at least 1 high-risk dispatch`);
+    assert.ok(highRiskCount >= 1, `${script.name}: must capture at least 1 high-risk dispatch`);
   }
 });

@@ -1,5 +1,25 @@
 # Changelog
 
+## [10.23.9] - 2026-09-02
+
+### Fixed
+
+- Replace the hard workflow-entry tool gate with adaptive coordination: Mike
+  orients, asks one clarification checkpoint, then selects the lightest safe
+  direct, isolated-agent, workflow, parallel-agent, or Agent-team mode.
+- Keep every dispatch on an explicit configured Bizar model and repair a stale
+  parent model from the operator's selected pool at session start.
+- Stop model-selection tests from writing synthetic models into operator Claude
+  settings.
+
+### Changed
+
+- Make bounded implementation workflows show Scope, Plan, Implement, and
+  Review phases with independent scoped research and review workers.
+- Remove all shipped fallback model IDs. Fresh installs require discovered or
+  selected models; Anthropic remains an explicit provider opt-out that an
+  operator can remove from `disabledProviders`.
+
 ## [10.23.8] - 2026-09-02
 
 ### Fixed

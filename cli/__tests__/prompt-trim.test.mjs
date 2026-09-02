@@ -44,12 +44,13 @@ describe('prompt-trim v10.20.0', () => {
     assert.ok(lines <= 300, `office-manager.md is ${lines} lines, must be <= 300`);
   });
 
-  test('office-manager has the native Workflow tool and requires it outside tiny edits', () => {
+  test('office-manager can choose Workflow, Agent, or Agent-team coordination after clarification', () => {
     const source = readFileSync(OFFICE_MANAGER, 'utf8');
     const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
     assert.match(frontmatter, /^tools:.*\bWorkflow\b/m);
-    assert.match(source, /invoke a workflow\s+before editing/);
-    assert.match(source, /at least one editing worker/);
+    assert.match(frontmatter, /^tools:.*\bAskUserQuestion\b/m);
+    assert.match(source, /clarification checkpoint/);
+    assert.match(source, /Agent team/);
     assert.match(source, /isolation: "worktree"/);
   });
 

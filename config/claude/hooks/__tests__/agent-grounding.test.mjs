@@ -19,25 +19,25 @@ function runHook(name, input) {
   return JSON.parse(result.stdout);
 }
 
-test('every non-empty primary prompt receives workflow-required Bizar routing', () => {
+test('every non-empty primary prompt receives adaptive Bizar routing', () => {
   const result = runHook('worker-suggest.mjs', {
     hook_event_name: 'UserPromptSubmit',
     prompt: 'Add a button to the navbar.',
   });
   const context = result.hookSpecificOutput.additionalContext;
-  assert.match(context, /Workflow-required Bizar routing/i);
-  assert.match(context, /native Bizar workflow/);
+  assert.match(context, /Adaptive Bizar routing/i);
+  assert.match(context, /clarification question/);
   assert.match(context, /@mike/);
   assert.match(context, /you ARE @mike/i);
 });
 
-test('specialized suggestions supplement rather than replace workflow routing', () => {
+test('specialized suggestions supplement rather than replace adaptive routing', () => {
   const result = runHook('worker-suggest.mjs', {
     hook_event_name: 'UserPromptSubmit',
     prompt: 'Find the missing tests for authentication.',
   });
   const context = result.hookSpecificOutput.additionalContext;
-  assert.match(context, /Workflow-required Bizar routing/i);
+  assert.match(context, /Adaptive Bizar routing/i);
   assert.match(context, /Bizar workers suggest/i);
 });
 

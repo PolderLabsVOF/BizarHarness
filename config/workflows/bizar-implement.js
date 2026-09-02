@@ -3,7 +3,10 @@ export const meta = {
   description: 'Implement one bounded change in one worktree, or run explicitly supplied disjoint lanes concurrently',
   whenToUse: 'Use when implementation scope is understood and external research or root-cause discovery is unnecessary.',
   phases: [
-    { title: 'Implement', detail: 'Run one isolated writer, or explicit disjoint writers concurrently' },
+    { title: 'Scope', detail: 'Independently confirm the local implementation boundary and risks' },
+    { title: 'Plan', detail: 'Turn the bounded objective into owned edit lanes and checks' },
+    { title: 'Implement', detail: 'Run isolated writers for the approved lanes' },
+    { title: 'Review', detail: 'Independently verify each implementation result before integration' },
   ],
 }
 
@@ -52,9 +55,20 @@ const TOPIC = typeof args === 'string'
     : JSON.stringify(args || {})
 const SCOPE = (args && Array.isArray(args.scope)) ? args.scope : []
 const suppliedLanes = (args && Array.isArray(args.lanes)) ? args.lanes : []
+const fallbackLanes = [{ name: 'bounded-change', scope: SCOPE, task: TOPIC }]
+
+phase('Scope')
+const scopeEvidence = await parallel([
+  () => dispatchAgent(agent, 'scope-researcher', `Confirm the smallest repository-local implementation boundary for "${TOPIC}". Identify existing code, tests, configuration, and reusable utilities. Do not edit.`, { role: 'research-analyst', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'scope-repository', phase: 'Scope' }),
+  () => dispatchAgent(agent, 'scope-critic', `Independently challenge the assumed scope for "${TOPIC}". Identify hidden integration points, ownership conflicts, and the minimum regression evidence needed. Do not edit.`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: 'scope-risk', phase: 'Scope' }),
+])
+const scopeSummary = scopeEvidence.map((entry) => JSON.stringify(entry ?? '')).join('\n').slice(0, 4000)
+
+phase('Plan')
+const plan = await dispatchAgent(agent, 'bounded-planner', `Produce a minimal reversible plan for "${TOPIC}". Return disjoint edit lanes with a single owner for shared files, plus the smallest proving tests. Do not edit.\n${barrierRef({ phase: 'Scope', label: 'scope-evidence', summary: scopeSummary, payload: scopeEvidence }).promptBlock}`, { role: 'architect', risk: 'medium', capabilities: ['structured-output', 'reasoning', 'architecture'], label: 'plan', phase: 'Plan' })
 const lanes = (suppliedLanes.length > 0
   ? suppliedLanes
-  : [{ name: 'bounded-change', scope: SCOPE, task: TOPIC }]
+  : (Array.isArray(plan?.lanes) && plan.lanes.length > 0 ? plan.lanes : fallbackLanes)
 ).slice(0, 6)
 
 phase('Implement')
@@ -70,14 +84,23 @@ const implementations = lanes.length === 1
   : await parallel(lanes.map((lane, index) => () => runLane(lane, index)))
 const completed = implementations.filter(Boolean)
 
-if (completed.length === 0) {
-  return { status: 'blocked', reason: 'No implementation lane completed successfully.', lanes }
-}
+if (completed.length === 0) return { status: 'blocked', reason: 'No implementation lane completed successfully.', scopeEvidence, plan, lanes }
+
+phase('Review')
+const reviews = await parallel(completed.map((implementation, index) => () => dispatchAgent(
+  agent,
+  `implementation-reviewer-${index + 1}`,
+  `Review implementation lane "${lanes[index]?.name || index + 1}" for "${TOPIC}". Verify scope, correctness, regression evidence, and integration assumptions. Report only actionable defects and required checks; do not edit.\n${barrierRef({ phase: 'Implement', label: `implement:${index + 1}:${lanes[index]?.name || 'bounded-change'}`, summary: typeof implementation === 'string' ? implementation.slice(0, 400) : 'implementation artifact', payload: implementation }).promptBlock}`,
+  { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: `review:${index + 1}:${lanes[index]?.name || 'bounded-change'}`, phase: 'Review' },
+)))
 
 return {
   status: 'ready-for-integration',
   topic: TOPIC,
+  scopeEvidence,
+  plan,
   lanes,
   implementations: completed,
+  reviews: reviews.filter(Boolean),
   next: 'Merge queued worktrees and run integration verification in the primary session.',
 }

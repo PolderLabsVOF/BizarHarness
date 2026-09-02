@@ -255,7 +255,7 @@ test('sessionstart-prime: external/version-sensitive docs bullet is in briefing 
   );
   assert.match(
     src,
-    /Only an unmistakably tiny single-target copy\/style\/format edit is direct; every other change enters the matching native workflow/,
-    'expected workflow-first boundary in sessionstart-prime.mjs',
+    /bounded read-only orientation, ask one clarification checkpoint, then choose a single isolated worker, native workflow, parallel workers, or an Agent team/,
+    'expected adaptive coordination boundary in sessionstart-prime.mjs',
   );
 });

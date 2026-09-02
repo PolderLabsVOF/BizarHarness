@@ -1423,6 +1423,33 @@
       "passed": "2026-09-02",
       "commit": "current-change",
       "evidence": "A stale-safe checkout-local SDK-dist lock serializes build-and-consume lifecycles. Targeted lock coverage passes; the former concurrent make test + make e2e failure mode passes with SDK 513/513, retained Node/harness 1086/1086, and E2E 13/13. Clean-state 5/5, TypeScript, architecture, removed-surface, and repository-structure gates pass."
+    },
+    {
+      "id": "F-201",
+      "title": "Adaptive orchestration, model isolation, and visible workflow phases",
+      "description": "Replace the workflow-only entry gate with adaptive orchestration, prevent synthetic model tests from mutating operator settings, and make bounded implementation visibly use routed multi-agent phases.",
+      "behavior": "Mike performs bounded orientation then a clarification checkpoint before choosing a tiny direct edit, isolated Agent, native workflow, parallel agents, or an Agent team. Every dispatched worker receives an explicit enabled Bizar model and editors use worktrees. Only Bizar-selected IDs are synchronized into Claude settings, and bounded implementation shows scope, plan, implement, and review workers.",
+      "verification": "targeted route, model-isolation, model-sync, and native-workflow tests; make check; make test; make e2e",
+      "state": "in_progress",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "routing",
+      "layer": "harness",
+      "owner": "@mike",
+      "scope": [
+        "config/claude/hooks/workflow-route-guard.mjs",
+        "config/claude/hooks/__tests__/workflow-route-guard.test.mjs",
+        "config/claude/agents/office-manager.md",
+        "config/claude/hooks/worker-suggest.mjs",
+        "config/claude/hooks/sessionstart-prime.mjs",
+        "cli/__tests__/models-persists-under-bizar-home.test.mjs",
+        "config/workflows/bizar-implement.js",
+        "config/workflows/__tests__/bizar-default.test.mjs",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "created": "2026-09-02",
+      "evidence": "In progress."
     }
   ],
   "vcr": {

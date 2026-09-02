@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Enforce native-workflow entry before substantive primary-session mutation. */
+/** Preserve a mutation barrier while Mike selects an adaptive coordination mode. */
 'use strict';
 
 import {
@@ -13,6 +13,9 @@ import { parseGitCommands } from './git-command-parser.mjs';
 const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   'diff', 'log', 'ls-files', 'rev-parse', 'show', 'status',
 ]);
+const READ_ONLY_BRANCH_OPTIONS = new Set([
+  '--all', '--list', '--remotes', '--show-current', '--verbose', '-a', '-r', '-v', '-vv',
+]);
 const WORKFLOW_SUCCESS = new Set(['completed', 'dry', 'ready-for-integration', 'succeeded', 'success']);
 const WORKFLOW_FAILURE = new Set(['blocked', 'budget-exhausted', 'cancelled', 'canceled', 'error', 'failed', 'failure']);
 
@@ -22,10 +25,17 @@ export function isReadOnlyShellInspection(command) {
 
   return source.split(/\s*&&\s*/).every((segment) => {
     const trimmed = segment.trim();
-    if (/^echo(?:\s|$)/.test(trimmed)) return true;
+    // These commands can inspect a newly opened project but cannot mutate it.
+    // Permit them before workflow launch so the primary can choose the right
+    // native workflow instead of deadlocking on its standard orientation step.
+    if (/^(?:echo|ls)(?:\s|$)/.test(trimmed) || trimmed === 'pwd') return true;
     if (!/^git(?:\s|$)/.test(trimmed) || /(?:^|\s)--(?:output|ext-diff)(?:=|\s|$)/.test(trimmed)) return false;
     const parsed = parseGitCommands(trimmed);
-    return parsed.length === 1 && READ_ONLY_GIT_SUBCOMMANDS.has(parsed[0].subcommand);
+    if (parsed.length !== 1) return false;
+    const [git] = parsed;
+    if (READ_ONLY_GIT_SUBCOMMANDS.has(git.subcommand)) return true;
+    return git.subcommand === 'branch'
+      && git.args.every((argument) => READ_ONLY_BRANCH_OPTIONS.has(argument));
   });
 }
 
@@ -77,17 +87,10 @@ process.stdin.on('end', () => {
       return;
     }
 
-    const readOnlyBash = toolName === 'Bash' && isReadOnlyShellInspection(input.tool_input?.command);
-    if (!readOnlyBash && /^(?:Edit|Write|MultiEdit|Bash|Agent)$/.test(toolName)) {
-      process.stdout.write(`${JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'deny',
-          permissionDecisionReason: `Bizar workflow routing guard: ${toolName} is unavailable in the primary session until the required native Workflow runs successfully. Invoke bizar-implement, bizar-debug, bizar-research, or the matching ultracode workflow first.`,
-        },
-      })}\n`);
-      return;
-    }
+    // Coordination is an orchestrator decision, not a hard-coded tool gate.
+    // Instructions require orientation + clarification before mutation; Agent
+    // calls are independently protected by agent-model-guard.mjs. Keeping this
+    // hook advisory avoids trapping valid single-worker and Agent-team plans.
   } catch (error) {
     process.stderr.write(`[bizar.workflow-route] ${error?.message || String(error)}\n`);
   }

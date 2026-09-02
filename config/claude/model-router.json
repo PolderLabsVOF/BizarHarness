@@ -3,7 +3,7 @@
   "version": "13.0.0",
   "endpoint": null,
   "disabledProviders": ["anthropic"],
-  "comment": "Mike selects the cheapest sufficient enabled configured model per dispatch. Explicit user-selected models take precedence; configured dynamic tiers are the fallback pool. The orchestrator always supplies an Agent model and fails closed when no enabled configured candidate exists, so Claude Code cannot select an unconfigured provider default. The gateway endpoint is intentionally null in the shipped config — operators MUST configure it via the `ANTHROPIC_BASE_URL` or `BIZAR_MODEL_ROUTER_URL` environment variable. Bizar is provider-agnostic and ships no default provider. `disabledProviders` (top-level, optional) is a case-insensitive-at-write, case-sensitive-at-filter list of provider prefixes whose model ids are stripped from every read site (CLI sync, picker, settings.json sync, SessionStart hook, Agent model guard). Defaults to `[]`; ships with `[\"anthropic\"]` so a fresh install never dispatches `anthropic/*` ids even if a gateway reports them.",
+  "comment": "Mike selects the cheapest sufficient enabled operator-configured model per dispatch. Explicit user-selected models take precedence; empty shipped tiers ensure a fresh install never silently chooses a vendor or model. The orchestrator always supplies an Agent model and fails closed when no enabled configured candidate exists, so Claude Code cannot select an unconfigured provider default. The gateway endpoint is intentionally null in the shipped config — operators MUST configure it via the `ANTHROPIC_BASE_URL` or `BIZAR_MODEL_ROUTER_URL` environment variable. Bizar is provider-agnostic and ships no default model. `disabledProviders` (top-level, optional) is a case-insensitive-at-write, case-sensitive-at-filter list of provider prefixes whose model ids are stripped from every read site (CLI sync, picker, settings.json sync, SessionStart hook, Agent model guard). Anthropic is opted out by default; operators may remove that entry or opt out of additional providers.",
   "userSelected": {
     "models": [],
     "lastUpdated": null,
@@ -20,53 +20,32 @@
   },
   "tiers": {
     "premium": {
-      "models": [
-        "qct/qwen3.8-max-preview",
-        "codex/gpt-5.6-sol",
-        "codex/gpt-5.6-luna"
-      ],
+      "models": [],
       "purpose": "Architecture, high-risk planning, adversarial verification, and last-resort debugging where mistakes are expensive.",
       "effort": "high"
     },
     "high": {
-      "models": [
-        "codex/gpt-5.6-sol",
-        "qct/qwen3.8-max-preview"
-      ],
+      "models": [],
       "purpose": "Complex implementation, security review, and cross-cutting reasoning.",
       "effort": "high"
     },
     "mid-design": {
-      "models": [
-        "codex/gpt-5.6-luna",
-        "minimax/MiniMax-M3"
-      ],
+      "models": [],
       "purpose": "UI/UX design and product-quality implementation where visual judgment matters.",
       "effort": "medium"
     },
     "default": {
-      "models": [
-        "minimax/MiniMax-M3",
-        "minimax/MiniMax-M2.7"
-      ],
+      "models": [],
       "purpose": "Broad research, git operations, and ordinary engineering work.",
       "effort": "medium"
     },
     "mid": {
-      "models": [
-        "minimax/MiniMax-M2.7",
-        "minimax/MiniMax-M2.7-highspeed",
-        "qct/deepseek-v4-pro",
-        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
-      ],
+      "models": [],
       "purpose": "Bounded technical analysis, code search, and moderate implementation.",
       "effort": "medium"
     },
     "budget": {
-      "models": [
-        "glm/glm-5.3-flash",
-        "minimax/MiniMax-M2.7-highspeed"
-      ],
+      "models": [],
       "purpose": "Routine deterministic edits, targeted clarification, and scripted verification.",
       "effort": "low"
     }

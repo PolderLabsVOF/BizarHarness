@@ -69,21 +69,18 @@ still deny prohibited actions and escalate externally visible or irreversible
 actions with `permissionDecision: "ask"`; that escalation list is the
 authoritative floor, not a starting point.
 
-Native dynamic workflows under `config/workflows/` and `~/.claude/workflows/`
-are the required dispatch mechanism for every primary request except an
-unmistakably tiny single-target copy/style/format edit with no behavior or test
-change. Mike may execute that narrow exception directly. All other work enters
-the matching research / implement / debug / review workflow and uses at least
-one explicitly modeled editing subagent with call-level worktree isolation.
-Do not add unnecessary phases or duplicate workers. For work that needs 3+
-long-lived workers with bounded cross-talk,
-Mike invokes a workflow that fans out as a native agent team; the team is
+Mike selects the coordination mode after bounded read-only orientation and one
+user clarification checkpoint: direct work only for an unmistakably tiny
+single-target copy/style/format edit; one isolated Agent for a clear bounded
+change; a native workflow for repeatable phased work; parallel Agents for
+disjoint scopes; and an Agent team for 3+ sustained roles that genuinely need
+cross-talk. Do not add unnecessary phases or duplicate workers. The team is
 host-side state under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, and per
-Anthropic's docs `team_name` is deprecated and ignored. When two or more
-subtasks have non-overlapping writable scopes and no data dependency, the
-orchestrator MUST dispatch them concurrently through `parallel([...])`, each
-with call-level `isolation: "worktree"`. Sequential dispatch is reserved for
-dependent phases and integration; never create artificial parallel work.
+Anthropic's docs `team_name` is deprecated and ignored. Every editing dispatch
+uses an explicit configured model and call-level `isolation: "worktree"`.
+When two or more subtasks have non-overlapping writable scopes and no data
+dependency, dispatch them concurrently; serialize only dependencies and
+integration.
 
 Agent roles are model-agnostic. Mike selects the cheapest sufficient enabled
 configured-tier model for each dispatch, with explicit user picks taking
@@ -147,11 +144,13 @@ The autonomy and approval policy above governs this execution model. The project
 Every non-empty primary request enters Bizar through `office-manager` (`@mike`).
 The installer sets Claude Code's global `agent` setting to Mike's frontmatter
 name (`mike`),
-and a session-scoped routing guard requires a successful native Workflow before
-substantive primary-session mutation. Read-only inspection remains available.
-Mike directly executes only the tiny edit exception above. Every other request
-must invoke a native Bizar workflow before mutation; the workflow dispatches
-worktree-isolated subagents while Mike owns integration and final verification.
+and the routing hook supplies the adaptive coordination policy. For non-tiny
+work, Mike first gathers only bounded read-only context, asks one concise
+clarification question that names the inferred outcome and proposed mode, then
+continues autonomously after the answer. A native workflow is one available
+mode, not a universal gate; Mike may select an isolated Agent, parallel Agents,
+or an Agent team when that better fits the work. Mike owns integration and
+final verification.
 A Bizar custom agent already executing its assigned role does not recursively
 dispatch itself.
 
@@ -163,8 +162,8 @@ relevant page. Guess-and-try integration work is prohibited. When official
 documentation is unavailable or ambiguous, inspect authoritative source code
 and report the evidence gap.
 
-For workflow-routed requests, `office-manager` uses only the phases that reduce
-a known risk; only the tiny edit exception skips this pipeline:
+For a workflow or team, `office-manager` uses only phases and members that
+reduce a known risk:
 
 1. Research: `greg` (`research-analyst.md`) plus an implementation-context specialist.
 2. Plan: `planner` drafts; `qa-reviewer` challenges assumptions and test shape.

@@ -62,7 +62,7 @@ function additionalContext(stdout) {
   return obj && obj.hookSpecificOutput && obj.hookSpecificOutput.additionalContext ? obj.hookSpecificOutput.additionalContext : '';
 }
 
-test('model-sync: reapplies modelPicker + modelOverrides + resets dead claude- model', () => {
+test('model-sync: reapplies modelPicker + modelOverrides + resets any unconfigured parent model', () => {
   const stage = makeStage();
   try {
     writeFileSync(stage.routerPath, JSON.stringify({
@@ -82,7 +82,7 @@ test('model-sync: reapplies modelPicker + modelOverrides + resets dead claude- m
     }));
     // Pre-stage settings.json with the broken post-`/model` state.
     writeFileSync(stage.settingsPath, JSON.stringify({
-      model: 'claude-minimax/MiniMax-M3[1m]',
+      model: 'alpha/1',
       modelOverrides: { 'claude-minimax/MiniMax-M3': 'claude-minimax/MiniMax-M3' },
       env: { BIZAR_HOME: '/tmp/test-bizar' },
       mcpServers: { foo: { command: 'foo', args: [] } },
@@ -110,7 +110,7 @@ test('model-sync: reapplies modelPicker + modelOverrides + resets dead claude- m
     // were preserved verbatim.
     assert.ok(existsSync(stage.settingsPath), 'settings.json should still exist');
     const after = JSON.parse(readFileSync(stage.settingsPath, 'utf8'));
-    assert.equal(after.model, 'codex/gpt-5.6-sol', 'dead claude-* alias should be reset to first user pick');
+    assert.equal(after.model, 'codex/gpt-5.6-sol', 'an unconfigured parent model should be reset to the first user pick');
     assert.equal(after.env.BIZAR_HOME, '/tmp/test-bizar', 'env preserved');
     assert.equal(after.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
     assert.deepEqual(after.mcpServers, { foo: { command: 'foo', args: [] } }, 'mcpServers preserved');

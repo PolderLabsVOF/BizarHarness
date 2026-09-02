@@ -2,6 +2,48 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — F-201 adaptive orchestration and model isolation (2026-09-02)
+
+Remove the hard native-workflow tool gate that deadlocked ordinary project
+orientation. Mike must first gather bounded read-only context, ask one concise
+clarification checkpoint, then choose the lightest fitting coordination mode:
+direct tiny edit, isolated Agent, native workflow, parallel agents, or an Agent
+team. Preserve explicit configured Bizar models and worktree isolation for every
+editor. Prevent CLI model tests from leaking synthetic settings into the
+operator's real Claude configuration and reset any unconfigured parent model to
+the first Bizar-selected ID. Expand bounded implementation into visible scope,
+plan, implement, and review phases with multiple routed workers.
+
+Follow-up: remove every shipped provider/model default from the model router so
+a fresh install requires the operator's discovered or explicitly selected
+models, rather than silently preferring Bizar's example catalogue. Keep only
+provider-neutral tier metadata and the existing fail-closed no-candidate path.
+
+Completed follow-up implementation: `config/claude/model-router.json` now has
+empty tier model lists, empty provider opt-outs, and no implicit selection.
+`models-mirror-shipped.test.mjs` proves that every shipped tier remains empty.
+The focused test passes 4/4, as do `make check` and diff hygiene. This remains
+part of F-201 until the aggregate test-runner blocker is resolved.
+
+Clarification: retain the shipped Anthropic provider opt-out while keeping all
+model IDs dynamic. The provider policy must continue to filter Anthropic from
+every picker, synchronization path, and Agent guard; operators who want it can
+remove that single router entry after installation.
+
+Release preparation: publish the adaptive orchestration, dynamic model-router,
+and regression fixes as 10.23.9 after package, SDK, version constant, and
+changelog synchronization. Publish the SDK before the root package.
+
+Focused evidence is green: adaptive route guard 6/6; workflow phase/payload
+coverage 32/32; model isolation plus prompt guidance 15/15; model-sync 10/10;
+worker guidance 27/27; TypeScript, mirror, architecture, removed-surface, and
+repository-structure gates pass. The aggregate `make test` and `make e2e`
+runner currently fails under Node 24's test-process isolation while their
+synchronously spawned hook tests pass individually; do not commit or publish
+until that pre-existing aggregate-runner interaction is resolved. The installed
+Claude settings were repaired from the Bizar router and now contain only the
+nine selected MiniMax, GLM, and Codex IDs.
+
 ## Complete — F-200 SDK distribution-build serialization (2026-09-02)
 
 The confirmed concurrent-verification race is fixed. Build-owning commands now

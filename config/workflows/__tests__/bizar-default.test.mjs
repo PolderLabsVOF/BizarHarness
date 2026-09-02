@@ -9,7 +9,7 @@ const workflowsDir = resolve(here, '..');
 
 const SCRIPTS = [
   { name: 'bizar-research', file: 'bizar-research.js', args: { topic: 'stub-topic' } },
-  { name: 'bizar-implement', file: 'bizar-implement.js', args: { topic: 'stub-topic', scope: ['a', 'b'] }, minPhases: 1 },
+  { name: 'bizar-implement', file: 'bizar-implement.js', args: { topic: 'stub-topic', scope: ['a', 'b'] }, minPhases: 4 },
   { name: 'bizar-debug', file: 'bizar-debug.js', args: { bug_id: 'BUG-1' } },
   { name: 'ultracode', file: 'ultracode.js', args: { task: 'stub-task' } },
   { name: 'ultracode-research', file: 'ultracode-research.js', args: { question: 'stub-question' } },
@@ -268,7 +268,7 @@ test('bizar-research: pipeline + parallel fan-out with sequential verify', async
   assert.ok(pipelineCalls.length >= 1, 'bizar-research.js must use pipeline()');
 });
 
-test('bizar-implement: one bounded writer by default (no planning or review ceremony)', async () => {
+test('bizar-implement: visible scope, plan, implementation, and review phases', async () => {
   const source = loadSource('bizar-implement.js');
   assert.ok(!/\bpipeline\s*\(/.test(source.replace(/pipeline\(/g, '')),
     'bizar-implement.js must not contain pipeline(');
@@ -276,15 +276,19 @@ test('bizar-implement: one bounded writer by default (no planning or review cere
   const { result, calls } = await runWorkflow('bizar-implement.js', { topic: 'stub-topic', scope: ['a', 'b'] });
   assert.equal(result.status, 'ready-for-integration');
   assert.equal(result.topic, 'stub-topic');
-  assert.equal(result.lanes.length, 1);
-  assert.equal(result.implementations.length, 1);
+  assert.ok(result.lanes.length >= 1);
+  assert.equal(result.implementations.length, result.lanes.length);
+  assert.equal(result.reviews.length, result.implementations.length);
 
   const agentCalls = calls.filter((c) => c.primitive === 'agent');
-  assert.equal(agentCalls.length, 1, 'bounded workflow must use exactly one writer');
-  assert.equal(agentCalls[0].model, 'provider/mid');
-  assert.equal(agentCalls[0].isolation, 'worktree');
+  assert.ok(agentCalls.length >= 5, 'scope, plan, writer, and review must use separate workers');
+  const writers = agentCalls.filter((call) => String(call.label || '').startsWith('implement:'));
+  assert.equal(writers.length, result.implementations.length);
+  assert.ok(writers.every((call) => call.model === 'provider/mid' && call.isolation === 'worktree'));
   const parallelCalls = calls.filter((c) => c.primitive === 'parallel');
-  assert.equal(parallelCalls.length, 0, 'one bounded lane must not pay parallel fan-out overhead');
+  assert.ok(parallelCalls.some((call) => call.count === 2), 'independent scope checks must run concurrently');
+  const phases = calls.filter((c) => c.primitive === 'phase').map((c) => c.name);
+  assert.deepEqual(phases, ['Scope', 'Plan', 'Implement', 'Review']);
   const pipelineCalls = calls.filter((c) => c.primitive === 'pipeline');
   assert.equal(pipelineCalls.length, 0, 'bizar-implement.js must not invoke pipeline() at runtime');
 });

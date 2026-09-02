@@ -43,13 +43,22 @@ function makeSandbox() {
   const bizarHome = mkdtempSync(join(tmpdir(), 'bizar-models-home-'));
   const cwd1 = mkdtempSync(join(tmpdir(), 'bizar-models-cwd1-'));
   const cwd2 = mkdtempSync(join(tmpdir(), 'bizar-models-cwd2-'));
-  return { bizarHome, cwd1, cwd2 };
+  const claudeConfigDir = mkdtempSync(join(tmpdir(), 'bizar-models-claude-'));
+  return { bizarHome, cwd1, cwd2, claudeConfigDir };
 }
 
 function cleanupSandbox(sandbox) {
-  for (const dir of [sandbox.cwd1, sandbox.cwd2, sandbox.bizarHome]) {
+  for (const dir of [sandbox.cwd1, sandbox.cwd2, sandbox.bizarHome, sandbox.claudeConfigDir]) {
     try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
   }
+}
+
+function sandboxEnv(sandbox, extra = {}) {
+  return {
+    BIZAR_HOME: sandbox.bizarHome,
+    CLAUDE_CONFIG_DIR: sandbox.claudeConfigDir,
+    ...extra,
+  };
 }
 
 function runBizar(args, { cwd, env } = {}) {
@@ -78,7 +87,7 @@ test('bizar models --set persists the router file under BIZAR_HOME, not cwd', as
 
     const { code, stdout, stderr } = await runBizar(['models', '--set=a/1,b/2', '--json'], {
       cwd: sandbox.cwd1,
-      env: { BIZAR_HOME: sandbox.bizarHome },
+      env: sandboxEnv(sandbox),
     });
 
     assert.equal(code, 0, `expected 0, got ${code}; stderr=${stderr}; stdout=${stdout}`);
@@ -102,6 +111,9 @@ test('bizar models --set persists the router file under BIZAR_HOME, not cwd', as
     const parsed = JSON.parse(readFileSync(expectedRouterPath, 'utf8'));
     assert.deepEqual(parsed.userSelected.models, ['a/1', 'b/2']);
     assert.equal(parsed.userSelected.source, 'cli-set');
+
+    const settings = JSON.parse(readFileSync(join(sandbox.claudeConfigDir, 'settings.json'), 'utf8'));
+    assert.equal(settings.model, 'a/1', 'model sync must stay inside the test Claude config');
   } finally {
     cleanupSandbox(sandbox);
   }
@@ -115,7 +127,7 @@ test('re-running bizar models from a different cwd preserves the same global BIZ
     // First run from cwd1.
     const first = await runBizar(['models', '--set=a/1', '--json'], {
       cwd: sandbox.cwd1,
-      env: { BIZAR_HOME: sandbox.bizarHome },
+      env: sandboxEnv(sandbox),
     });
     assert.equal(first.code, 0, `first run exited ${first.code}; stderr=${first.stderr}`);
     assert.equal(existsSync(expectedRouterPath), true);
@@ -123,7 +135,7 @@ test('re-running bizar models from a different cwd preserves the same global BIZ
     // Second run from cwd2 — completely different cwd.
     const second = await runBizar(['models', '--set=a/1,b/2', '--json'], {
       cwd: sandbox.cwd2,
-      env: { BIZAR_HOME: sandbox.bizarHome },
+      env: sandboxEnv(sandbox),
     });
     assert.equal(second.code, 0, `second run exited ${second.code}; stderr=${second.stderr}`);
 
@@ -156,10 +168,9 @@ test('BIZAR_MODEL_ROUTER_CONFIG absolute override still wins over the BIZAR_HOME
 
     const { code, stdout, stderr } = await runBizar(['models', '--set=alpha/1', '--json'], {
       cwd: sandbox.cwd1,
-      env: {
-        BIZAR_HOME: sandbox.bizarHome,
+      env: sandboxEnv(sandbox, {
         BIZAR_MODEL_ROUTER_CONFIG: tmpRouter,
-      },
+      }),
     });
 
     assert.equal(code, 0, `expected 0, got ${code}; stderr=${stderr}; stdout=${stdout}`);

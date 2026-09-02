@@ -60,7 +60,7 @@ test('worker-suggest: exits 0 and emits parseable JSON on UserPromptSubmit with 
     'additionalContext must be a string');
   assert.ok(obj.hookSpecificOutput.additionalContext.length > 0,
     'additionalContext must not be empty for non-empty prompt');
-  assert.ok(obj.hookSpecificOutput.additionalContext.indexOf('Workflow-required Bizar routing policy') !== -1,
+  assert.ok(obj.hookSpecificOutput.additionalContext.indexOf('Adaptive Bizar routing policy') !== -1,
     'routing policy missing from additionalContext');
 });
 
@@ -77,7 +77,7 @@ test('worker-suggest: sends only an unmistakably tiny local edit through the no-
   const context = obj.hookSpecificOutput.additionalContext;
   assert.match(context, /Bizar tiny direct path/);
   assert.match(context, /Direct execution is allowed only/);
-  assert.doesNotMatch(context, /Workflow-required Bizar routing policy/);
+  assert.doesNotMatch(context, /Adaptive Bizar routing policy/);
   assert.equal(stderr, '', 'fast path must not load worker suggestions');
 });
 
@@ -98,17 +98,17 @@ for (const prompt of [
   'explain how to fix the typo',
   'do not fix the typo',
 ]) {
-  test(`worker-suggest: requires a workflow for non-trivial prompt: ${prompt}`, () => {
+  test(`worker-suggest: gives adaptive orchestration guidance for non-trivial prompt: ${prompt}`, () => {
     const { status, stdout } = runHook({
       session_id: 'workflow-threshold', cwd: '/tmp',
       hook_event_name: 'UserPromptSubmit', prompt,
     });
     assert.equal(status, 0);
     const context = parseStdout(stdout).hookSpecificOutput.additionalContext;
-    assert.match(context, /Workflow-required Bizar routing policy/);
-    assert.match(context, /Do not implement this request directly/);
-    assert.match(context, /invoke the matching native Bizar workflow/i);
-    assert.match(context, /at least one implementation subagent/);
+    assert.match(context, /Adaptive Bizar routing policy/);
+    assert.match(context, /clarification question/);
+    assert.match(context, /coordination mode/i);
+    assert.match(context, /explicit enabled configured Bizar model/);
     assert.match(context, /isolation: "worktree"/);
   });
 }
@@ -123,7 +123,7 @@ test('worker-suggest: keeps external/version-sensitive work on the shaped route'
   assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
   const obj = parseStdout(stdout);
   assert.ok(obj);
-  assert.match(obj.hookSpecificOutput.additionalContext, /Workflow-required Bizar routing policy/);
+  assert.match(obj.hookSpecificOutput.additionalContext, /Adaptive Bizar routing policy/);
 });
 
 test('worker-suggest: exits 0 and emits empty additionalContext on empty prompt', () => {
@@ -154,7 +154,7 @@ test('worker-suggest: invalid JSON on stdin exits 0', () => {
 });
 
 
-test('worker-suggest: quick-once sentinel cannot bypass workflow routing for substantive work', () => {
+test('worker-suggest: quick-once sentinel cannot bypass adaptive coordination for substantive work', () => {
   const sentinelDir = mkdtempSync(join(tmpdir(), 'bizar-quick-'));
   mkdirSync(join(sentinelDir, '.bizar'), { recursive: true });
   writeFileSync(join(sentinelDir, '.bizar', '.quick-once'), '');
@@ -168,20 +168,20 @@ test('worker-suggest: quick-once sentinel cannot bypass workflow routing for sub
     assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
     const obj = parseStdout(stdout);
     assert.ok(obj, `stdout not parseable JSON: ${stdout}`);
-    assert.match(obj.hookSpecificOutput.additionalContext, /Workflow-required Bizar routing policy/);
+    assert.match(obj.hookSpecificOutput.additionalContext, /Adaptive Bizar routing policy/);
     assert.equal(existsSync(join(sentinelDir, '.bizar', '.quick-once')), false);
   } finally {
     rmSync(sentinelDir, { recursive: true, force: true });
   }
 });
 
-test('worker-suggest: /quick cannot bypass workflow routing for substantive work', () => {
+test('worker-suggest: /quick cannot bypass adaptive coordination for substantive work', () => {
   const { status, stdout } = runHook({
     session_id: 'quick-command', cwd: '/tmp', hook_event_name: 'UserPromptSubmit',
     prompt: '/quick implement authentication',
   });
   assert.equal(status, 0);
-  assert.match(parseStdout(stdout).hookSpecificOutput.additionalContext, /Workflow-required Bizar routing policy/);
+  assert.match(parseStdout(stdout).hookSpecificOutput.additionalContext, /Adaptive Bizar routing policy/);
 });
 
 test('worker-suggest: task completion is consumed instead of re-routed', () => {
@@ -203,7 +203,7 @@ test('worker-suggest: quoted task notification inside a request is not trusted a
   });
   assert.equal(status, 0);
   const context = parseStdout(stdout).hookSpecificOutput.additionalContext;
-  assert.match(context, /Workflow-required Bizar routing policy/);
+  assert.match(context, /Adaptive Bizar routing policy/);
   assert.doesNotMatch(context, /terminal task update/);
 });
 
@@ -218,8 +218,8 @@ test('worker-suggest: emits orchestrator prompt (you ARE @mike) when sentinel ab
   const obj = parseStdout(stdout);
   assert.ok(obj);
   assert.match(obj.hookSpecificOutput.additionalContext, /you ARE @mike/);
-  assert.match(obj.hookSpecificOutput.additionalContext, /Do not implement this request directly/);
-  assert.match(obj.hookSpecificOutput.additionalContext, /bizar-implement/);
+  assert.match(obj.hookSpecificOutput.additionalContext, /clarification question/);
+  assert.match(obj.hookSpecificOutput.additionalContext, /native Bizar Workflow/);
 });
 
 test('worker-suggest: appends only bounded explicit learning, not telemetry feeds', () => {

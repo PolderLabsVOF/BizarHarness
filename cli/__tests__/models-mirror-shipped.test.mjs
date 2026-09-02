@@ -39,6 +39,16 @@ const DIST_MIRROR = resolve(
   'failover-mirror.mjs',
 );
 const CLI_MODELS = resolve(REPO_ROOT, 'cli', 'commands', 'models.mjs');
+const SHIPPED_ROUTER = resolve(REPO_ROOT, 'config', 'claude', 'model-router.json');
+
+test('shipped model router has no provider or model defaults', () => {
+  const router = JSON.parse(readFileSync(SHIPPED_ROUTER, 'utf8'));
+  assert.deepEqual(router.disabledProviders, ['anthropic'], 'Anthropic must remain opted out without pinning any model');
+  for (const [tier, config] of Object.entries(router.tiers || {})) {
+    assert.deepEqual(config.models, [], `shipped ${tier} tier must not hardcode a model`);
+  }
+  assert.deepEqual(router.userSelected?.models, [], 'a fresh install starts without an implicit model selection');
+});
 
 test('mirror ships at packages/sdk/dist/router/failover-mirror.mjs', () => {
   assert.ok(

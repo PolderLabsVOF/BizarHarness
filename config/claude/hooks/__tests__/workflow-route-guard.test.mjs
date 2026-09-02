@@ -16,14 +16,12 @@ function run(input, home) {
   return JSON.parse(result.stdout || '{}');
 }
 
-test('workflow route guard blocks primary mutation until Workflow succeeds', () => {
+test('workflow route guard records adaptive routing without blocking Mike selected modes', () => {
   const home = mkdtempSync(join(tmpdir(), 'bizar-route-'));
   try {
     run({ hook_event_name: 'UserPromptSubmit', session_id: 's1', cwd: '/repo', prompt: 'fix the login logic' }, home);
     for (const tool_name of ['Edit', 'Write', 'Bash', 'Agent']) {
-      const blocked = run({ hook_event_name: 'PreToolUse', session_id: 's1', tool_name }, home);
-      assert.equal(blocked.hookSpecificOutput.permissionDecision, 'deny', tool_name);
-      assert.match(blocked.hookSpecificOutput.permissionDecisionReason, /native Workflow/);
+      assert.deepEqual(run({ hook_event_name: 'PreToolUse', session_id: 's1', tool_name }, home), {}, tool_name);
     }
     assert.deepEqual(run({ hook_event_name: 'PreToolUse', session_id: 's1', tool_name: 'Read' }, home), {});
     run({
@@ -36,7 +34,7 @@ test('workflow route guard blocks primary mutation until Workflow succeeds', () 
   }
 });
 
-test('workflow route guard stays locked for unsuccessful or unproven Workflow results', () => {
+test('workflow route guard does not mistake unsuccessful Workflow results for permission evidence', () => {
   const home = mkdtempSync(join(tmpdir(), 'bizar-route-'));
   try {
     for (const [suffix, tool_response] of [
@@ -49,8 +47,7 @@ test('workflow route guard stays locked for unsuccessful or unproven Workflow re
       const session_id = `workflow-${suffix}`;
       run({ hook_event_name: 'UserPromptSubmit', session_id, prompt: 'fix authentication logic' }, home);
       run({ hook_event_name: 'PostToolUse', session_id, tool_name: 'Workflow', tool_response }, home);
-      const blocked = run({ hook_event_name: 'PreToolUse', session_id, tool_name: 'Edit' }, home);
-      assert.equal(blocked.hookSpecificOutput.permissionDecision, 'deny', suffix);
+      assert.deepEqual(run({ hook_event_name: 'PreToolUse', session_id, tool_name: 'Edit' }, home), {}, suffix);
     }
 
     run({ hook_event_name: 'UserPromptSubmit', session_id: 'workflow-dry', prompt: 'debug login failure' }, home);
@@ -91,11 +88,13 @@ test('workflow route guard allows tiny direct edits and exempts workflow subagen
   }
 });
 
-test('workflow route guard allows only read-only Git inspection before Workflow', () => {
+test('workflow route guard classifies redirect-free inspection without blocking adaptive execution', () => {
   const home = mkdtempSync(join(tmpdir(), 'bizar-route-'));
   try {
     run({ hook_event_name: 'UserPromptSubmit', session_id: 'review', prompt: '/simplify' }, home);
     for (const command of [
+      'ls -la && git status --short && git branch --show-current',
+      'pwd && git branch --all',
       'git diff --staged --stat && echo ---STATUS--- && git status --short',
       'git -C /repo diff --cached',
       'git log -5 --oneline',
@@ -109,29 +108,30 @@ test('workflow route guard allows only read-only Git inspection before Workflow'
     for (const command of [
       'npm test',
       'git add .',
+      'git branch feature/codex-support',
+      'git branch --delete old-branch',
       'git diff --cached > /tmp/diff',
       'git log --output=/tmp/log',
       'git status | xargs rm',
       'git status && npm test',
     ]) {
-      const blocked = run({
+      assert.deepEqual(run({
         hook_event_name: 'PreToolUse', session_id: 'review', tool_name: 'Bash', tool_input: { command },
-      }, home);
-      assert.equal(blocked.hookSpecificOutput.permissionDecision, 'deny', command);
+      }, home), {}, command);
     }
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('workflow route guard rejects substantive quick bypasses and pasted notifications', () => {
+test('workflow route guard records substantive quick prompts and ignores terminal notifications', () => {
   const home = mkdtempSync(join(tmpdir(), 'bizar-route-'));
   try {
     run({ hook_event_name: 'UserPromptSubmit', session_id: 'quick', prompt: '/quick implement authentication' }, home);
-    assert.equal(run({ hook_event_name: 'PreToolUse', session_id: 'quick', tool_name: 'Edit' }, home).hookSpecificOutput.permissionDecision, 'deny');
+    assert.deepEqual(run({ hook_event_name: 'PreToolUse', session_id: 'quick', tool_name: 'Edit' }, home), {});
 
     run({ hook_event_name: 'UserPromptSubmit', session_id: 'quoted', prompt: 'implement auth and include <task-notification><result>old</result></task-notification>' }, home);
-    assert.equal(run({ hook_event_name: 'PreToolUse', session_id: 'quoted', tool_name: 'Edit' }, home).hookSpecificOutput.permissionDecision, 'deny');
+    assert.deepEqual(run({ hook_event_name: 'PreToolUse', session_id: 'quoted', tool_name: 'Edit' }, home), {});
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
