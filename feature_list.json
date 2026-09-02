@@ -1280,11 +1280,33 @@
       ],
       "created": "2026-09-01",
       "evidence": "Audit reproduced installed 10.23.5 starting default Claude because global settings omitted the Mike agent. Fixed global/default and bizar-run agent selection, Workflow capability, strict tiny classification, session-scoped pre-workflow mutation enforcement, SessionStart drift, debug worktree isolation, and the bounded one-worker implementation path. Final live tracing also removed a /simplify deadlock by allowing narrowly whitelisted read-only Git inspection before Workflow while continuing to deny redirects, pipelines, tests, and mutations. Staged review further hardened unlock semantics: only explicit successful Workflow terminal statuses clear the marker; blocked, failed, cancelled, budget-exhausted, errored, nested-failure, and status-less responses stay locked. Fresh evidence: focused routing/provision/workflow tests 120/120; SDK 513/513; retained Node/harness 1066/1066; E2E 13/13; clean-check 5/5; TypeScript, architecture, structure, and removed-surface gates pass. Installed working-tree build live smoke: pre-Workflow Edit denied, post-Workflow Edit allowed; Claude Code 2.1.257 reports @mike with Workflow available."
+    },
+    {
+      "id": "F-196",
+      "title": "Models.dev metadata during model selection",
+      "description": "Fetch and merge current Models.dev model and provider metadata before the interactive picker renders, reuse the result after confirmation, and improve matching without delaying non-interactive list/set paths.",
+      "behavior": "Interactive model rows show real capabilities and limits when Models.dev has a safe match; catalog fetches run concurrently and only once; gateway-only aliases remain selectable; persistence remains global.",
+      "verification": "node --test cli/__tests__/models-picker.test.mjs cli/__tests__/models-refresh.test.mjs cli/__tests__/models-namespace-sync.test.mjs; make check; make e2e",
+      "state": "passing",
+      "passed": "2026-09-02",
+      "commit": null,
+      "category": "models",
+      "layer": "cli",
+      "owner": "@mike",
+      "scope": [
+        "cli/commands/models.mjs",
+        "cli/__tests__/models-picker.test.mjs",
+        "cli/__tests__/models-refresh.test.mjs",
+        "feature_list.json",
+        "PROGRESS.md"
+      ],
+      "created": "2026-09-01",
+      "evidence": "Fixed pre-picker concurrent one-shot Models.dev enrichment, cleared timeout handles, collision-safe canonical/provider matching, renderer-safe fallbacks, and cached-profile preservation. Live 143-candidate verification completed in about 1.1s with correct canonical context values (GPT-5.6 Luna 1,050,000; MiniMax-M3 1,048,576; GLM-5 204,800) and gateway fallback for every miss. Focused model tests 95/95, SDK tests 513/513, retained Node/harness tests, E2E 13/13, clean-check 5/5, TypeScript, architecture, structure, and removed-surface gates pass."
     }
   ],
   "vcr": {
-    "passing": 75,
-    "activated": 75,
+    "passing": 76,
+    "activated": 76,
     "ratio": 1
   }
 }

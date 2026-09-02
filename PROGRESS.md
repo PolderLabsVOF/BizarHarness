@@ -2,6 +2,28 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-196 Models.dev selection metadata (2026-09-02)
+
+The live `bizar models` command discovered 143 gateway candidates, but its
+picker opened before either Models.dev dataset was fetched, so every row
+rendered `metadata unavailable`; enrichment happened only after confirmation.
+The picker now fetches the provider-agnostic and provider catalogs concurrently
+before rendering and reuses that single result after confirmation. Timeout
+handles are cleared immediately, empty/non-interactive paths remain fetch-free,
+wrapper namespaces use collision-safe unique canonical matching, provider
+serving data is overlaid only for an exact provider identity, gateway fallbacks
+use the complete renderer-safe profile shape, and cached profiles survive
+transient misses and `--set`.
+
+Live verification against 143 gateway candidates completed in about 1.1 seconds
+with no delayed process exit; canonical checks returned 1,050,000 context tokens
+for `cx/gpt-5.6-luna`, 1,048,576 for `minimax/MiniMax-M3`, and 204,800 for
+`glm/glm-5`, while every catalog miss retained a gateway fallback. Focused model
+tests pass 95/95, SDK tests pass 513/513, the retained Node/harness suite passes,
+E2E passes 13/13, clean-check passes 5/5, and TypeScript, architecture,
+structure, and removed-surface gates pass. Existing untracked operator files
+remain untouched.
+
 ## Complete — 10.23.6 workflow-routing release (2026-09-01)
 
 The user authorized push and publication of commit `c7734b1`. Registry, tag,
