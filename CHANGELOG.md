@@ -1,5 +1,43 @@
 # Changelog
 
+## [10.23.10] - 2026-09-02
+
+### Fixed
+
+- **Global-router resolution** — the model router is operator-owned and
+  user-global only. Runtime lookup, the installer, picker/provider
+  filtering, settings generation, and SessionStart synchronization
+  resolve exclusively through `BIZAR_MODEL_ROUTER_CONFIG` or
+  `$BIZAR_HOME/config/claude/model-router.json`. The shipped
+  `config/claude/model-router.json` is removed; no `~/.claude` mirror
+  participates. The installer creates a model-neutral global router
+  only when absent and never overwrites an existing operator router,
+  even under `--force`.
+- **Transport-compatibility correction (F-201)** — Claude Code's native
+  Agent tool rejects raw gateway IDs in its enum-limited `model`
+  field. Workflow dispatch now omits `model` and carries the
+  Bizar-selected ID as `additionalContext.bizarConfiguredModel`. The
+  Agent guard reads the global Claude parent model from
+  `$CLAUDE_CONFIG_DIR/settings.json` and only permits inherited
+  dispatches when that parent equals the configured Bizar pick AND
+  the pick is in `userSelected`; otherwise the guard fails closed.
+
+### Regression coverage
+
+- `agent-model-guard` — 18/18 (5 new F-201 cases: allow-inherit on
+  matching triple; deny when `additionalContext.bizarConfiguredModel`
+  is missing; deny on `configured != parent`; deny on non-user-pick;
+  fail closed when `settings.json` cannot be read).
+- `workflow dispatch` — 27/27 (3 new `augmentPayload` cases proving
+  `model` is omitted and `additionalContext.bizarConfiguredModel` is
+  set, merges caller-provided `additionalContext`, and renders `null`
+  cleanly when `decision.modelId` is null).
+- `models-*` focused suites — 11/11.
+- `provision` + `agent-model-registry` — 28/28.
+- `make check`, `make verify-repo-structure`, `make check-arch`, and
+  `make verify-removed-surfaces` pass. The aggregate Node 24 runner
+  isolation issue still prevents claiming `make test` / `make e2e`.
+
 ## [10.23.9] - 2026-09-02
 
 ### Fixed
