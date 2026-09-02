@@ -21,6 +21,13 @@
   `$CLAUDE_CONFIG_DIR/settings.json` and only permits inherited
   dispatches when that parent equals the configured Bizar pick AND
   the pick is in `userSelected`; otherwise the guard fails closed.
+- **SDK/CLI resolution contract alignment** — `loadModelRegistry` now
+  tolerates empty tier model lists when `userSelected` is non-empty,
+  matching the CLI's `resolveDispatchModel` fallback path. The SDK's
+  `rankUserSelectedForRole` sort key now uses `originalIndex` as the
+  primary key, making `userSelected.models` order the authoritative
+  dispatch sequence — parity with the CLI. The failover-mirror sort is
+  updated to match. Two F-184 tests updated to assert the new contract.
 
 ### Regression coverage
 
