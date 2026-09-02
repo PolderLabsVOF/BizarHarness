@@ -33,6 +33,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveBizarHome } from './config-paths.mjs';
 import { buildClaudeModelOverrides, configuredEnabledModels } from './commands/models.mjs';
+import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -921,7 +922,6 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
         pickEnv('CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS')
         || shipped.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
         || '1',
-      ...(pickEnv('ANTHROPIC_MODEL') ? { ANTHROPIC_MODEL: pickEnv('ANTHROPIC_MODEL') } : {}),
     },
     hooks: {
       UserPromptSubmit: [{ hooks: [hook('user-prompt-submit', 10)] }],
@@ -968,6 +968,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   if (installModel) {
     bizarSettings.model = installModel;
     bizarSettings.modelOverrides = buildClaudeModelOverrides(installModels);
+    bizarSettings.env.ANTHROPIC_MODEL = installModel;
     const configuredContext = pickEnv('CLAUDE_CODE_MAX_CONTEXT_TOKENS') || installContextTokens;
     if (configuredContext) bizarSettings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(configuredContext);
   } else {
@@ -1013,6 +1014,9 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   if (installModel) {
     merged.model = installModel;
     merged.modelOverrides = bizarSettings.modelOverrides;
+    merged.env = { ...(merged.env || {}), ANTHROPIC_MODEL: installModel };
+  } else if (merged.env && typeof merged.env === 'object') {
+    delete merged.env.ANTHROPIC_MODEL;
   }
 
   // Auto-compaction is part of the Bizar reliability contract. Remove legacy
@@ -1348,9 +1352,9 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
   const workflowsSrc = join(REPO_ROOT, 'config', 'workflows');
   if (existsSync(workflowsSrc)) {
     const workflowsDst = join(CLAUDE_DIR, 'workflows');
+    validateNativeWorkflowDirectory(workflowsSrc);
     await copyDirIfExists(workflowsSrc, workflowsDst);
-    counts.workflows = readdirSync(workflowsSrc, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.js')).length;
+    counts.workflows = validateNativeWorkflowDirectory(workflowsDst).count;
   }
 
   return { ok: true, message: `synced (${counts.commands} commands, ${counts.skills} skills, ${counts.hooks} hooks, ${counts.rules} rules, ${counts.workflows} workflows)`, counts };
@@ -1374,7 +1378,6 @@ export const FORCE_CLEAN_PRESERVE_ENV_KEYS = Object.freeze([
   'ANTHROPIC_AUTH_TOKEN',
   'BIZAR_MODEL_ROUTER_URL',
   'BIZAR_HOME',
-  'ANTHROPIC_MODEL',
   'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',
   'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS',
   'CLAUDE_CODE_MAX_CONTEXT_TOKENS',

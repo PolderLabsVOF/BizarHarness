@@ -15,9 +15,9 @@ const input = {
   tool_input: { subagent_type: 'greg' },
 };
 
-test('Agent model guard allows inherited session model without discovery', async () => {
-  assert.deepEqual(await guardAgentModel(input), {});
-  assert.deepEqual(await guardAgentModel({ ...input, tool_input: { ...input.tool_input, model: 'inherit' } }), {});
+test('Agent model guard denies omitted and inherited models', async () => {
+  assert.equal(decision(await guardAgentModel(input)), 'deny');
+  assert.equal(decision(await guardAgentModel({ ...input, tool_input: { ...input.tool_input, model: 'inherit' } })), 'deny');
 });
 
 test('Agent model guard allows one configured live tier candidate', async () => {
@@ -35,23 +35,21 @@ test('Agent model guard rejects policy-forbidden and unavailable overrides witho
     ...input,
     tool_input: { ...input.tool_input, model: 'unknown/provider-model' },
   }, { registry });
-  assert.equal(decision(denied), 'allow');
-  assert.ok(denied.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext for policy-forbidden model');
+  assert.equal(decision(denied), 'deny');
 
   const model = registry.tiers.mid.models[0];
   const liveDenied = await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model },
   }, { registry, availableModelIds: [] });
-  assert.equal(decision(liveDenied), 'allow');
-  assert.ok(liveDenied.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext for unavailable live-discovery model');
+  assert.equal(decision(liveDenied), 'deny');
 });
 
-test('Agent model guard fails open when optional router loading fails', async () => {
-  assert.deepEqual(await guardAgentModel({
+test('Agent model guard fails closed when the global router cannot be loaded', async () => {
+  assert.equal(decision(await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model: 'provider/model' },
-  }, { routerPath: '/definitely/missing/model-router.json' }), {});
+  }, { routerPath: '/definitely/missing/model-router.json' })), 'deny');
 });
 
 test('Agent model guard accepts a userSelected model without live-discovery', async () => {
@@ -92,14 +90,13 @@ test('Agent model guard still requires live-discovery for non-userSelected tier 
     },
   };
   // `tier-premium/only` is in the tier but NOT in userSelected. Live
-  // discovery says no. Must advise (F-176/F-182: deny was downgraded to
-  // advisory additionalContext).
+  // Discovery says no. Model routing is fail-closed even though ordinary
+  // reversible tool permissions remain advisory under F-176.
   const liveBlocked = await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model: 'tier-premium/only' },
   }, { registry, availableModelIds: [] });
-  assert.equal(decision(liveBlocked), 'allow');
-  assert.ok(liveBlocked.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext for live-discovery block');
+  assert.equal(decision(liveBlocked), 'deny');
 
   // `tier-premium/only` IS reported by live discovery. Must allow.
   assert.deepEqual(await guardAgentModel({
@@ -119,8 +116,7 @@ test('Agent model guard rejects a model that is in neither userSelected nor any 
     ...input,
     tool_input: { ...input.tool_input, model: 'stranger/c' },
   }, { registry });
-  assert.equal(decision(blocked), 'allow');
-  assert.ok(blocked.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext for stranger model');
+  assert.equal(decision(blocked), 'deny');
 });
 
 test('portable hook dispatcher retains the Agent model validator', () => {
@@ -165,8 +161,7 @@ test('Agent model guard rejects an out-of-pool fallback even with routingDecisio
       additionalContext: { routingDecisionId: 'r-2026-08-27-001', fallback: 'stranger/c' },
     },
   }, { registry });
-  assert.equal(decision(blocked), 'allow', 'F-176 advisory path');
-  assert.ok(blocked.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext for out-of-pool fallback');
+  assert.equal(decision(blocked), 'deny');
 });
 
 test('Agent model guard still requires primary to be in the pool when routingDecisionId is set', async () => {
@@ -184,8 +179,7 @@ test('Agent model guard still requires primary to be in the pool when routingDec
       additionalContext: { routingDecisionId: 'r-2026-08-27-001', fallback: 'claude-minimax/MiniMax-M3' },
     },
   }, { registry });
-  assert.equal(decision(blocked), 'allow', 'F-176 advisory path');
-  assert.ok(blocked.hookSpecificOutput?.additionalContext, 'expected advisory additionalContext for out-of-pool primary');
+  assert.equal(decision(blocked), 'deny');
 });
 
 test('Agent model guard ignores additionalContext.fallback when routingDecisionId is missing', async () => {

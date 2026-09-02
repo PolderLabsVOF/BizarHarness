@@ -2,40 +2,63 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## Complete — F-198 installed workflow discovery (2026-09-02)
+## Complete — F-198 native workflow discovery (2026-09-02)
 
-The shipped workflow scripts at `config/workflows/bizar-research.js`,
-`bizar-implement.js`, `bizar-debug.js`, `ultracode.js`, `ultracode-research.js`,
-and `ultracode-review.js` had `import` statements on lines 1-2 followed by
-`export const meta = {...}` on line 4. The Claude Code Workflow tool requires
-`meta` to be the first top-level statement for direct invocation, so
-`Workflow({scriptPath: ...})` rejected the scripts. Combined with the
-workflow-first routing guard installed by F-195, this created a deadlock:
-the guard required a named workflow to lift, but the named workflow scripts
-refused to load.
+A fresh Claude Code session correctly classified a substantive request as a
+Bizar workflow task, but native discovery exposed only the built-in
+`deep-research` workflow. Its fallback to a shipped script then failed because
+all six Bizar workflow files place imports before the `meta` export, while the
+current Claude runtime requires `export const meta = { ... }` to be the first
+statement. The existing installer and tests verify copied files and custom
+execution semantics, but never validate Claude's native entry grammar.
 
-The fix hoists `export const meta` to be the first statement in all six
-scripts. ES module imports are hoisted regardless of textual position (see
-https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import),
-so the move is semantically a no-op — only the discovery contract changes.
-The hoist is pinned by a new regression fence at
-`config/workflows/__tests__/meta-first.test.mjs` (4/4 pass) that scans every
-`.js` file directly under `config/workflows/`, asserts line 1 is
-`export const meta = {...}`, asserts imports still appear somewhere in the
-body, asserts the directory layout (`lib/` + `__tests__/`) is intact, and
-asserts each script's `meta.name` matches its filename.
+This change will make every shipped workflow natively parseable, add a shared
+grammar/discovery validator to provisioning and diagnostics, cover installed
+copies with regression tests, and give Mike an exact-path recovery rule when
+name discovery is unavailable. The fix remains isolated on
+`wt/todd-f198-workflow-discovery`; existing operator files are untouched.
 
-Named-invocation discovery (`Workflow({name: 'bizar-research'})`) still
-returns only the built-in `deep-research` because the Workflow tool caches
-its discovery list at session start, before install-time scripts register.
-The F-198 fallback clause covers this case: `Workflow({scriptPath: ...})`
-or `node config/workflows/<name>.js` continues to work after the meta-first
-fix, so installed sessions no longer deadlock.
+The user additionally reported that the attempted workflow selected Sonnet 5
+instead of the configured Bizar models. Runtime inspection showed the native
+workflow VM is fully self-contained (both static and dynamic imports are
+rejected), so the old import-based dispatch router could never run. The fix now
+also passes explicit globally configured model IDs through workflow arguments,
+hard-denies missing/inherited/out-of-pool Agent models, redirects every
+recognized Claude alias into the configured pool, and removes stale
+`ANTHROPIC_MODEL` preservation.
 
-Land commit `c584c33` is on master; this release carries the change as an
-unversioned workflow-discovery patch (no npm publish, no version bump). The
-operator's installed `~/.claude/workflows/` will resync on the next
-`bizar update`. Existing untracked operator files remain untouched.
+The first full retained-suite pass exposed one stale test harness: its prompt
+capture replaced the former imported dispatcher and omitted the new explicit
+routing input, so all six workflows correctly failed closed before dispatch.
+The harness will now exercise and measure the actual self-contained dispatch
+path instead of rewriting it.
+
+The clean-state wrapper then reproduced a separate productivity problem: it
+buffered the entire verbose test suite in a shell variable and stalled twice
+despite the same suite passing directly. Its checker now spools output to a
+temporary file, prints only the failure tail, and removes the spool file after
+each completed check.
+
+Implemented and verified. All six entries now satisfy the installed Claude
+runtime's first-statement and self-contained-body contract. Provisioning and
+doctor validate source/installed workflows; Mike retries absent name discovery
+only by absolute global path and supplies explicit configured routing. Agent
+dispatch fails closed on missing, inherited, disabled, or out-of-pool models;
+all 16 recognized Claude aliases and `ANTHROPIC_MODEL` resolve into the enabled
+configured pool. Successful native `async_launched` responses unlock routing,
+while nested compile errors remain locked.
+
+Evidence: focused native/dispatch contracts 63/63; SDK 513/513; retained
+Node/harness 1084/1084; workflow prompt ceiling 7/7 (largest 529/3072 bytes);
+TypeScript, architecture, removed-surface, repository-structure, E2E 13/13,
+`git diff --check`, and clean-state 5/5 all pass.
+
+Integration found concurrent commits `c584c33`/`0e316b6`, which moved imports
+below metadata and added a fence requiring those imports. Installed-runtime
+evidence shows imports are rejected anywhere in the native VM, so the merge
+keeps the self-contained entries and replaces that incomplete fence with the
+stronger compile/discovery validator. No operator-owned untracked files were
+modified.
 
 ## In Progress — 10.23.7 searchable-picker release (2026-09-02)
 

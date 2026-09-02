@@ -17,14 +17,13 @@ import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { randomUUID } from 'node:crypto';
 
 const here = fileURLToPath(import.meta.url);
 const workflowsDir = resolve(here, '..', '..', '..', 'config', 'workflows');
 const dispatchPath = resolve(workflowsDir, 'lib', 'dispatch.js');
 const dispatch = await import(pathToFileURL(dispatchPath).href);
 
-const { MAX_BARRIER_BYTES, computeDecision, augmentPayload } = dispatch;
+const { MAX_BARRIER_BYTES } = dispatch;
 
 // Mirror the capture test's stub fabricator so workflow bodies continue
 // past their early-return gates. The shape is the minimum the workflow
@@ -47,20 +46,6 @@ function buildStub(label) {
   }
   if (/final/i.test(label)) return { ready: true };
   return { ok: true };
-}
-
-function makeCtx() {
-  return {
-    selectedProfiles: [
-      { id: 'provider/cheap', tier: 'budget', profile: { capabilities: { reasoning: true, toolCall: true, structuredOutput: true, attachment: true, temperature: true }, limits: { contextTokens: 32000, inputTokens: null, outputTokens: null } } },
-      { id: 'provider/strong', tier: 'high', profile: { capabilities: { reasoning: true, toolCall: true, structuredOutput: true, attachment: true, temperature: true }, limits: { contextTokens: 200000, inputTokens: null, outputTokens: null } } },
-    ],
-    staticProfiles: [],
-    activeSessionModel: 'session/inherit',
-    budget: {},
-    health: {},
-    history: undefined,
-  };
 }
 
 async function runWorkflow(scriptFile, args) {
@@ -88,16 +73,16 @@ async function runWorkflow(scriptFile, args) {
   }
   let body = source.slice(end + 1);
   body = body.replace(/^\s*import\s+(?:\{([^}]+)\}|([^\s{]+))\s+from\s+['"][^'"]+['"];?\s*$/gm, '');
-  body = body.replace(/dispatchAgent\(/g, 'dispatchCaptured(');
-
   const captured = [];
-  const ctx = makeCtx();
-  const dispatchCaptured = async (agentFn, name, prompt, opts = {}) => {
-    const decision = computeDecision(name, prompt, opts, ctx);
-    captured.push({ name, label: opts.label || name, prompt, phase: opts.phase });
-    return buildStub(opts.label || name);
+  const fakeAgent = async (prompt) => {
+    const header = /^\[Bizar dispatch \d+: ([^;]+); role=[^;]+; phase=([^;]+); label=([^\]]+)\]\n/.exec(prompt);
+    const name = header?.[1] || 'unknown';
+    const phaseName = header?.[2] || 'work';
+    const label = header?.[3] || name;
+    const bodyPrompt = header ? prompt.slice(header[0].length) : prompt;
+    captured.push({ name, label, prompt: bodyPrompt, phase: phaseName });
+    return buildStub(label);
   };
-  const fakeAgent = async () => ({});
   const fakeParallel = async (fns) => Promise.all((Array.isArray(fns) ? fns : []).map((f) => f()));
   const fakePipeline = async (items, fn) => {
     if (typeof fn !== 'function') return items;
@@ -105,17 +90,18 @@ async function runWorkflow(scriptFile, args) {
     for (let i = 0; i < items.length; i++) out.push(await fn(items[i], items, i));
     return out;
   };
-  // Real writeArtifact + barrierRef (uses BIZAR_RUNS_DIR override for isolation).
   const tmpRoot = mkdtempSync(join(tmpdir(), 'bizar-bloat-pin-'));
   process.env.BIZAR_RUNS_DIR = tmpRoot;
-  const realWrite = (...a) => dispatch.writeArtifact(...a);
-  const realRef = (...a) => dispatch.barrierRef(...a);
   const fn = new Function(
-    'args', 'agent', 'pipeline', 'parallel', 'phase', 'log', 'dispatchCaptured', 'randomUUID', 'writeArtifact', 'barrierRef',
+    'args', 'agent', 'pipeline', 'parallel', 'phase', 'log',
     `return (async () => { ${body.trim()} })();`,
   );
   try {
-    await fn(args, fakeAgent, fakePipeline, fakeParallel, () => {}, () => {}, dispatchCaptured, randomUUID, realWrite, realRef);
+    const routedArgs = {
+      ...args,
+      routing: { default: 'provider/cheap', medium: 'provider/cheap', high: 'provider/strong' },
+    };
+    await fn(routedArgs, fakeAgent, fakePipeline, fakeParallel, () => {}, () => {});
   } finally {
     rmSync(tmpRoot, { recursive: true, force: true });
   }

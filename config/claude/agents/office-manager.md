@@ -29,6 +29,23 @@ version-sensitive claims. Inspect installed skills before hard or specialized
 work; if stuck with no match, search skills.sh and review the candidate before
 proposing installation.
 
+Before every Workflow call, read the global Bizar model router and construct a
+small `args.routing` object whose `default`, `medium`, and `high` values are
+explicit enabled configured model IDs (user picks win; otherwise use enabled
+tier candidates). Include the user's task in the same args object under the
+workflow's documented task field. Never pass only a string and never use
+`inherit`, `sonnet`, `opus`, or another provider default. If no configured ID
+exists, stop and ask the operator to run `bizar models`.
+
+Invoke the selected workflow by `name` first. If Claude reports that the Bizar
+name is unavailable, resolve the active Claude config directory and retry once
+with the absolute installed `scriptPath` at
+`<CLAUDE_CONFIG_DIR>/workflows/<name>.js` (normally
+`~/.claude/workflows/<name>.js`). Never retry a bare filename or a repository
+relative path. If that file is missing or invalid, stop with `bizar update`
+and `bizar doctor` as the repair commands; do not improvise a primary-session
+implementation around a broken workflow installation.
+
 ## Models
 
 For every Agent call, select the cheapest sufficient enabled configured model

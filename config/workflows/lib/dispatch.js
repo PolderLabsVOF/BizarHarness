@@ -1,5 +1,5 @@
 /**
- * config/workflows/lib/dispatch.js — Workflow-side dispatch wrapper (F-189 / IMP-014).
+ * config/workflows/lib/dispatch.js — host-side dispatch and evidence utilities.
  *
  * Closes the IMP-014 P0 gap from `IMPROVEMENTS.md` line 867: every
  * `agent(...)` call emitted by native workflow scripts (`config/workflows/*.js`)
@@ -7,7 +7,7 @@
  * ride on every dispatch. The acceptance gate is verbatim: "Captured nested
  * Agent payloads contain expected models."
  *
- * This module is the single entry point for workflow-side dispatch. It:
+ * This retained host-side module:
  *
  *   1. Reads the operator's `userSelected.profiles`, the provider-health
  *      snapshot, and the budget from the canonical config paths.
@@ -21,10 +21,11 @@
  *   4. Supports `dryRun: true` so the capture test can introspect
  *      payloads without invoking a real agent.
  *
- * IMPORTANT: every workflow script in `config/workflows/*.js` MUST import
- * `dispatchAgent` from this module. The drift guard
- * `scripts/__tests__/autonomy-contract-workflow.test.mjs` fails CI when a
- * bare `agent(` call is reintroduced without a documented bypass.
+ * Claude's native workflow VM rejects static and dynamic imports. Shipped
+ * workflow entrypoints therefore contain a small self-contained wrapper and
+ * receive explicit configured model IDs through `args.routing`. This module
+ * remains the canonical host/test implementation for selector and evidence
+ * behavior outside that VM boundary.
  */
 
 import { randomUUID, createHash } from 'node:crypto';
@@ -883,10 +884,6 @@ export async function dispatchAgent(agentFn, agentName, prompt, opts = {}, conte
 
   if (opts.dryRun === true) {
     return { __dispatchDecision: decision, payload: augmented };
-  }
-
-  if (opts.forceModel && typeof opts.forceModel === 'string') {
-    augmented.model = opts.forceModel;
   }
 
   const startMs = Date.now();

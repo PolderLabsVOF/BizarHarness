@@ -36,27 +36,17 @@
  *     validated by `pickFailover` against the same registry.
  *   - The hard deny of out-of-pool models STILL APPLIES when
  *     `routingDecisionId` is absent — the contract is opt-in.
- *   - Registry load failures still fail open (F-176 advisory): the orchestrator
- *     already chose a model, let Claude Code validate it once.
+ *   - Registry load failures fail closed: allowing the dispatch would hand
+ *     model choice back to Claude Code's unconfigured provider default.
  *
- * The contract is intentionally additive. Existing callers that only pass
- * `model` see no behavior change.
+ * Callers that pass only `model` are accepted only when that literal ID is in
+ * the enabled configured pool. Missing or inherited model selection is denied.
  */
 
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
-
-function advise(reason) {
-  return {
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'allow',
-      additionalContext: `🟡 Model override guidance: ${reason} The dispatch will proceed regardless.`,
-    },
-  };
-}
 
 function deny(reason) {
   return {
@@ -72,8 +62,6 @@ function deny(reason) {
  * 10.22.0 / Phase 4: extract the operator's `disabledProviders` list from
  * the loaded registry. Whitespace-trimmed + lowercased at read time.
  * Returns `[]` for legacy configs that lack the key (no in-code default).
- * The hook MUST fail open on parse errors — the orchestrator already
- * chose a model; let Claude Code validate it once.
  */
 function readDisabledProvidersFromRegistry(registry) {
   if (!registry || typeof registry !== 'object') return [];
@@ -90,14 +78,15 @@ function readDisabledProvidersFromRegistry(registry) {
 }
 
 /**
- * 10.22.0 / Phase 4: case-sensitive prefix filter against the (lowercase)
- * disabled list. Empty / missing prefix list is a no-op (returns input).
+ * 10.22.0 / Phase 4: case-insensitive prefix filter against the normalized
+ * disabled list. Empty / missing prefix list is a no-op.
  */
 function isDisabledId(id, prefixes) {
   if (!Array.isArray(prefixes) || prefixes.length === 0) return false;
   if (typeof id !== 'string' || !id) return false;
+  const normalized = id.toLowerCase();
   for (const p of prefixes) {
-    if (typeof p === 'string' && p && id.startsWith(p)) return true;
+    if (typeof p === 'string' && p && normalized.startsWith(p)) return true;
   }
   return false;
 }
@@ -171,18 +160,15 @@ export async function guardAgentModel(input, options = {}) {
   const failoverBlock = readFailoverBlock(toolInput);
   const hasFailoverContract = Boolean(failoverBlock.routingDecisionId) && Boolean(failoverBlock.fallback);
 
-  // The workflow dispatcher enforces a model override. This permissive branch
-  // keeps the hook compatible with non-Bizar Agent callers.
-  if (!requested) return {};
-  if (requested === 'inherit') return {};
+  if (!requested || requested === 'inherit') {
+    return deny('Bizar Agent dispatch blocked: every Agent call requires an explicit enabled model from `bizar models`; session/provider inheritance is prohibited.');
+  }
 
   let registry;
   try {
     registry = options.registry || loadModelRouter(options.routerPath);
   } catch {
-    // A broken optional router must not strand subagents. The caller already
-    // chose a model; let Claude Code/provider validate it once.
-    return {};
+    return deny('Bizar Agent dispatch blocked: the global model router is missing or invalid. Run `bizar models`, then retry.');
   }
 
   // Disabled is an enforceable operator boundary. Falling through here would
@@ -201,17 +187,17 @@ export async function guardAgentModel(input, options = {}) {
   // already computed by `pickFailover` against this same registry.
   if (hasFailoverContract) {
     if (!userPicks.has(failoverBlock.fallback)) {
-      return advise(`Bizar Agent dispatch: fallback ${failoverBlock.fallback} is outside the user-selected pool; select an enabled configured fallback.`);
+      return deny(`Bizar Agent dispatch blocked: fallback ${failoverBlock.fallback} is outside the user-selected pool; select an enabled configured fallback.`);
     }
     if (!allowed.has(requested)) {
-      return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Pick it via \`bizar models\`.`);
+      return deny(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Pick it via \`bizar models\`.`);
     }
     // Both IDs are user-selected. Accept without re-probing the gateway.
     return {};
   }
 
   if (!allowed.has(requested)) {
-    return advise(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Pick it via \`bizar models\`.`);
+    return deny(`Bizar Agent dispatch blocked: model override ${requested} is outside the configured dynamic tiers and the user-selected pool. Pick it via \`bizar models\`.`);
   }
 
   // User-selected models bypass live-discovery validation. The picker is the
@@ -220,7 +206,7 @@ export async function guardAgentModel(input, options = {}) {
   if (!fromUserPick && Array.isArray(options.availableModelIds)) {
     const available = new Set(options.availableModelIds);
     if (!available.has(requested)) {
-      return advise(`Bizar Agent dispatch blocked: ${requested} was not reported by live discovery. Select another enabled configured model; do not retry aliases.`);
+      return deny(`Bizar Agent dispatch blocked: ${requested} was not reported by live discovery. Select another enabled configured model; do not retry aliases.`);
     }
   }
 

@@ -234,7 +234,7 @@ function syncOnce() {
   ];
   settings.modelPicker = { options };
   settings.modelOverrides = Object.fromEntries(
-    liveIds.slice(0, overrideKeys.length).map((id, index) => [overrideKeys[index], id]),
+    overrideKeys.map((key, index) => [key, liveIds[index % liveIds.length]]),
   );
 
   let modelChanged = false;

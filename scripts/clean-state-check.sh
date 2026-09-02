@@ -10,10 +10,12 @@ FAIL=0
 
 check() {
   local label="$1"
+  local output_file
   shift
   echo "▶ $label"
+  output_file="$(mktemp "${TMPDIR:-/tmp}/bizar-clean-check.XXXXXX")"
   set +e
-  OUTPUT=$("$@" 2>&1)
+  "$@" >"$output_file" 2>&1
   RC=$?
   set -e
   if [[ $RC -eq 0 ]]; then
@@ -21,9 +23,10 @@ check() {
     PASS=$((PASS + 1))
   else
     echo "  FAIL"
-    echo "$OUTPUT" | tail -12 | sed 's/^/  /'
+    tail -12 "$output_file" | sed 's/^/  /'
     FAIL=$((FAIL + 1))
   fi
+  rm -f -- "$output_file"
 }
 
 echo "═══════════════════════════════════════"

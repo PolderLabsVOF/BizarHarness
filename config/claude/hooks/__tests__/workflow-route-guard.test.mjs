@@ -44,6 +44,7 @@ test('workflow route guard stays locked for unsuccessful or unproven Workflow re
       ['nested', { status: 'success', result: { status: 'failed' } }],
       ['missing', {}],
       ['error', { status: 'success', is_error: true }],
+      ['compile-error', { data: { status: 'async_launched', taskType: 'local_workflow', error: 'SyntaxError' } }],
     ]) {
       const session_id = `workflow-${suffix}`;
       run({ hook_event_name: 'UserPromptSubmit', session_id, prompt: 'fix authentication logic' }, home);
@@ -58,6 +59,20 @@ test('workflow route guard stays locked for unsuccessful or unproven Workflow re
       tool_response: { status: 'dry' },
     }, home);
     assert.deepEqual(run({ hook_event_name: 'PreToolUse', session_id: 'workflow-dry', tool_name: 'Edit' }, home), {});
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('workflow route guard recognizes Claude native error-free async launch', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-route-'));
+  try {
+    run({ hook_event_name: 'UserPromptSubmit', session_id: 'native-launch', prompt: 'fix authentication logic' }, home);
+    run({
+      hook_event_name: 'PostToolUse', session_id: 'native-launch', tool_name: 'Workflow',
+      tool_response: { data: { status: 'async_launched', taskType: 'local_workflow', workflowName: 'bizar-debug', runId: 'wf_123456' } },
+    }, home);
+    assert.deepEqual(run({ hook_event_name: 'PreToolUse', session_id: 'native-launch', tool_name: 'Edit' }, home), {});
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

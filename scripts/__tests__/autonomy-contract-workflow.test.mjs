@@ -129,14 +129,14 @@ test('autonomy-contract-workflow: every workflow script routes agent() through d
   assert.deepEqual(failures, [], failures.join('\n'));
 });
 
-test('autonomy-contract-workflow: every workflow script imports dispatchAgent from lib/dispatch.js', () => {
+test('autonomy-contract-workflow: every workflow script is self-contained with explicit model routing', () => {
   const scripts = listWorkflowScripts();
   const failures = [];
   for (const script of scripts) {
     const source = readFileSync(join(workflowsDir, script), 'utf8');
-    if (!/import\s*\{[^}]*\bdispatchAgent\b[^}]*\}\s*from\s*['"]\.\/lib\/dispatch\.js['"]/.test(source)) {
-      failures.push(`${script}: must import dispatchAgent from './lib/dispatch.js'`);
-    }
+    if (/^\s*import\s/m.test(source)) failures.push(`${script}: native workflow body cannot import modules`);
+    if (!/const dispatchAgent\s*=.*agentFn/s.test(source)) failures.push(`${script}: missing self-contained dispatch wrapper`);
+    if (!/model:\s*routeModel\(/.test(source)) failures.push(`${script}: missing explicit configured model`);
   }
   assert.deepEqual(failures, [], failures.join('\n'));
 });

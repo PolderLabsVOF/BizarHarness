@@ -10,14 +10,47 @@ export const meta = {
   ],
 }
 
-import { randomUUID } from 'node:crypto'
-import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
+const WORKFLOW_INPUT = args && typeof args === 'object' ? args : {}
+const WORKFLOW_ROUTING = WORKFLOW_INPUT.routing && typeof WORKFLOW_INPUT.routing === 'object'
+  ? WORKFLOW_INPUT.routing
+  : {}
+const WORKFLOW_DEFAULT_MODEL = typeof WORKFLOW_INPUT.model === 'string'
+  ? WORKFLOW_INPUT.model.trim()
+  : Array.isArray(WORKFLOW_INPUT.models) && typeof WORKFLOW_INPUT.models[0] === 'string'
+    ? WORKFLOW_INPUT.models[0].trim()
+    : ''
+const routeModel = (risk) => {
+  const candidate = WORKFLOW_ROUTING[risk] || WORKFLOW_ROUTING.default || WORKFLOW_DEFAULT_MODEL
+  return typeof candidate === 'string' ? candidate.trim() : ''
+}
+if (!routeModel('medium') || !routeModel('high')) {
+  return {
+    status: 'blocked',
+    reason: 'No explicit configured Bizar model routing was supplied. Read the global Bizar model router and retry with args.routing; provider defaults are prohibited.',
+  }
+}
+let WORKFLOW_DISPATCH_SEQUENCE = 0
+const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
+  const sequence = ++WORKFLOW_DISPATCH_SEQUENCE
+  const prefix = `[Bizar dispatch ${sequence}: ${agentName}; role=${opts.role || 'worker'}; phase=${opts.phase || 'work'}; label=${opts.label || agentName}]`
+  const agentOptions = {
+    model: routeModel(opts.risk || 'medium'),
+    effort: opts.risk === 'high' ? 'high' : 'medium',
+  }
+  if (opts.schema) agentOptions.schema = opts.schema
+  if (opts.isolation) agentOptions.isolation = opts.isolation
+  if (opts.disallowedTools) agentOptions.disallowedTools = opts.disallowedTools
+  return agentFn(`${prefix}\n${prompt}`, agentOptions)
+}
+const barrierRef = ({ phase, label, summary, payload }) => {
+  let evidence = ''
+  try { evidence = JSON.stringify(payload ?? '').slice(0, 12000) } catch { evidence = '<unserializable>' }
+  return { promptBlock: `Prior phase: ${phase}; label: ${label}; summary: ${summary || ''}\nBounded evidence: ${evidence}` }
+}
 
 const TASK = typeof args === 'string' ? args : args?.task || JSON.stringify(args || {})
 
-// Phase B (v10.21.0) artifact-on-disk barriers: one runId per workflow
-// invocation. Used by every writeArtifact() + barrierRef() in this script.
-const RUN_ID = randomUUID()
+const RUN_ID = 'ultracode'
 const BRIEF = {
   type: 'object',
   required: ['summary', 'files', 'risks', 'verification'],
@@ -59,7 +92,6 @@ if (research.length === 0) return { status: 'blocked', reason: 'No research agen
 
 // Phase B: persist research artifact for the next barrier agent.
 const researchSummary = `research lanes: ${research.map((r) => (r && r.summary) ? r.summary.slice(0, 80) : '<lane>').join(' | ')}`
-writeArtifact({ runId: RUN_ID, phase: 'Research', label: 'barrier', payload: research, summary: researchSummary, role: 'research-analyst' })
 
 phase('Design')
 const plan = await dispatchAgent(agent, 'plan-author', `Design one reversible implementation for: ${TASK}\n${barrierRef({ runId: RUN_ID, phase: 'Research', label: 'barrier', summary: researchSummary }).promptBlock}\nReturn disjoint edit lanes. Shared root/config/lock files must have one owner. Include bounded tests and stop conditions.`, { role: 'architect', risk: 'medium', capabilities: ['structured-output', 'reasoning', 'architecture'], label: 'plan', phase: 'Design', schema: PLAN })
@@ -67,7 +99,6 @@ if (!plan || !Array.isArray(plan.lanes) || plan.lanes.length === 0) return { sta
 
 // Phase B: persist plan artifact for the next barrier agent.
 const planSummary = `plan lanes: ${plan.lanes.map((l) => l.name).join(', ')}`
-writeArtifact({ runId: RUN_ID, phase: 'Design', label: 'barrier', payload: plan, summary: planSummary, role: 'architect' })
 
 const audit = await dispatchAgent(agent, 'plan-auditor', `Adversarially review this plan for correctness, security, conflicting file ownership, missing regression tests, and unbounded retry loops. Return a corrected plan, not commentary. Task: ${TASK}\n${barrierRef({ runId: RUN_ID, phase: 'Design', label: 'barrier', summary: planSummary }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning', 'architecture', 'security'], label: 'plan-audit', phase: 'Design', schema: PLAN })
 const approved = audit || plan
@@ -79,20 +110,10 @@ const implementation = await parallel(lanes.map((lane, index) => () => dispatchA
 const completed = implementation.filter(Boolean)
 if (completed.length === 0) return { status: 'blocked', reason: 'No implementation lane completed successfully.', plan: approved }
 // Phase B: persist each implementation artifact.
-for (let i = 0; i < completed.length; i++) {
-  const lane = lanes[i];
-  const label = `implement:${i + 1}:${lane.name}`;
-  const summary = `lane ${lane.name} files: ${(completed[i]?.files || []).slice(0, 5).join(', ')}`;
-  writeArtifact({ runId: RUN_ID, phase: 'Implement', label, payload: completed[i], summary, role: 'implementer' });
-}
-
 phase('Verify')
 const reviews = await parallel(completed.map((result, index) => () => dispatchAgent(agent, `reviewer-${index + 1}`, `Try to refute this implementation result for task "${TASK}". Check correctness, security, scope, test evidence, and integration assumptions. Return only verified findings and required checks.\n${barrierRef({ runId: RUN_ID, phase: 'Implement', label: `implement:${index + 1}:${lanes[index]?.name || ''}`, summary: `review of lane ${lanes[index]?.name || index + 1}` }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: `review:${index + 1}`, phase: 'Verify' })))
 // Phase B: persist review artifacts.
 const verifiedReviews = reviews.filter(Boolean);
-for (let i = 0; i < verifiedReviews.length; i++) {
-  writeArtifact({ runId: RUN_ID, phase: 'Verify', label: `review:${i + 1}`, payload: verifiedReviews[i], summary: typeof verifiedReviews[i] === 'string' ? verifiedReviews[i].slice(0, 200) : `review ${i + 1}`, role: 'adversarial' });
-}
 const final = await dispatchAgent(agent, 'final-verifier', `Synthesize a bounded integration and verification report for task "${TASK}". Do not claim success without fresh command evidence. Identify conflicts between worktrees, exact integration order, remaining gates, and any required human approvals.\n${barrierRef({ runId: RUN_ID, phase: 'Design', label: 'barrier', summary: `approved plan with ${approved.lanes.length} lanes` }).promptBlock}\n${barrierRef({ runId: RUN_ID, phase: 'Implement', label: 'implement:summary', summary: `${completed.length} lanes complete` }).promptBlock}\n${barrierRef({ runId: RUN_ID, phase: 'Verify', label: 'review:summary', summary: `${verifiedReviews.length} reviews complete` }).promptBlock}`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'final-verification', phase: 'Verify' })
 
 return { status: 'ready-for-integration', task: TASK, research, plan: approved, implementation: completed, reviews: reviews.filter(Boolean), final }

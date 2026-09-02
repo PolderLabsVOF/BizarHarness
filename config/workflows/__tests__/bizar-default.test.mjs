@@ -171,8 +171,10 @@ function makeRuntime(args) {
   }
 
   const agent = async (prompt, opts) => {
-    calls.push({ primitive: 'agent', label: opts?.label, phase: opts?.phase });
-    return buildStub(opts || {}, prompt);
+    const header = typeof prompt === 'string' ? prompt.match(/^\[Bizar dispatch \d+: [^;]+; role=([^;]+); phase=([^;]+); label=([^\]]+)\]/) : null;
+    const dispatchMeta = { role: header?.[1], phase: header?.[2], label: header?.[3] };
+    calls.push({ primitive: 'agent', ...dispatchMeta, model: opts?.model, isolation: opts?.isolation });
+    return buildStub(dispatchMeta, prompt);
   };
   const parallel = async (fns) => {
     calls.push({ primitive: 'parallel', count: Array.isArray(fns) ? fns.length : 0 });
@@ -213,7 +215,11 @@ async function runWorkflow(file, args) {
   const source = loadSource(file);
   const { imports, body } = extractBody(source);
   const bindings = await resolveImports(imports);
-  const runtime = makeRuntime(args);
+  const routedArgs = {
+    ...(args && typeof args === 'object' ? args : {}),
+    routing: { default: 'provider/default', medium: 'provider/mid', high: 'provider/high' },
+  };
+  const runtime = makeRuntime(routedArgs);
   const fn = new Function(
     'args', 'agent', 'pipeline', 'parallel', 'phase', 'log',
     ...Object.keys(bindings),
@@ -275,6 +281,8 @@ test('bizar-implement: one bounded writer by default (no planning or review cere
 
   const agentCalls = calls.filter((c) => c.primitive === 'agent');
   assert.equal(agentCalls.length, 1, 'bounded workflow must use exactly one writer');
+  assert.equal(agentCalls[0].model, 'provider/mid');
+  assert.equal(agentCalls[0].isolation, 'worktree');
   const parallelCalls = calls.filter((c) => c.primitive === 'parallel');
   assert.equal(parallelCalls.length, 0, 'one bounded lane must not pay parallel fan-out overhead');
   const pipelineCalls = calls.filter((c) => c.primitive === 'pipeline');
@@ -315,5 +323,7 @@ test('all workflows: phase() calls fire in declared order', async () => {
     const phases = calls.filter((c) => c.primitive === 'phase').map((c) => c.name);
     const minPhases = script.minPhases ?? 3;
     assert.ok(phases.length >= minPhases, `${script.name}: expected >=${minPhases} phase() calls, saw ${phases.length}`);
+    const agentCalls = calls.filter((call) => call.primitive === 'agent');
+    assert.ok(agentCalls.every((call) => ['provider/mid', 'provider/high'].includes(call.model)), `${script.name}: every Agent call needs an explicit routed model`);
   }
 });
