@@ -1372,9 +1372,9 @@
       "description": "Release the verified F-198 workflow discovery and custom-model enforcement changes as 10.23.8 and verify the installed registry artifacts.",
       "behavior": "npm root and SDK packages, Git tag, installed global Bizar surfaces, and Claude SessionStart all expose the same self-contained workflows and configured-only model routing.",
       "verification": "make clean-check; make verify-repo-structure; npm pack --dry-run; registry version/install; bizar doctor --json; live custom-model probe",
-      "state": "in_progress",
-      "wip_holder": "@mike",
-      "wip": 1,
+      "state": "passing",
+      "wip_holder": null,
+      "wip": 0,
       "category": "release",
       "layer": "distribution",
       "owner": "@mike",
@@ -1394,12 +1394,14 @@
         "feature_list.json"
       ],
       "created": "2026-09-02",
-      "evidence": "Preflight: npm user drb0rk; registry root/SDK 10.23.7; local version advanced consistently to 10.23.8. Dry packs contain 376 root and 196 SDK runtime files, include all workflows and the native validator, and exclude tests/operator state. Gateway discovery fix focused tests pass 89/89; SDK 513/513, retained Node/harness 1085/1085, E2E 13/13, clean-state 5/5, TypeScript, architecture, structure, removed-surface, version, WIP, and diff gates pass. Real SessionStart preserves discovery=1, 13 configured picker IDs, and 16 custom alias overrides; the SDK stopped reporting unrecognized_model and reached the configured gateway (provider later returned Cloudflare 524 timeout)."
+      "passed": "2026-09-02",
+      "commit": "1fd3cbe",
+      "evidence": "Published release commit 1fd3cbe and annotated v10.23.8 tag to origin; npm root and SDK both report 10.23.8. Dry packs contain 376 root and 196 SDK runtime files and exclude tests/operator state. Gateway discovery focused tests pass 89/89; SDK 513/513, retained Node/harness 1085/1085, E2E 13/13, clean-state 5/5, TypeScript, architecture, structure, removed-surface, version, WIP, and diff gates pass. Clean registry install and doctor pass 13/13. Installed SessionStart preserves cx/gpt-5.6-luna with discovery=1, 13 picker IDs, and 16 custom alias overrides; the final generation probe reached the configured path but exceeded its 90-second smoke timeout without an error payload."
     }
   ],
   "vcr": {
-    "passing": 78,
+    "passing": 79,
     "activated": 79,
-    "ratio": 0.9873417721518988
+    "ratio": 1
   }
 }

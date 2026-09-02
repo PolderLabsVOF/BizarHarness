@@ -2,7 +2,7 @@
 
 > Canonical current-work record. Update before and after implementation.
 
-## In Progress — 10.23.8 native-workflow release (2026-09-02)
+## Complete — 10.23.8 native-workflow release (2026-09-02)
 
 The user authorized publication of F-198. npm authentication is valid as
 `drb0rk`; local root/SDK manifests, the registry, and the newest release tag
@@ -39,6 +39,17 @@ model. `/simplify` no longer emitted `unrecognized_model`; it reached the
 configured gateway and then received an upstream Cloudflare 524 after the
 provider's 120-second response timeout. The deterministic staged review found
 no release inconsistency, so the non-retryable release steps may proceed.
+
+Published and installed. Release commit `1fd3cbe` is on `origin/master`, the
+annotated `v10.23.8` tag is on the remote, and both `@polderlabs/bizar` and
+`@polderlabs/bizar-sdk` report 10.23.8 from npm. A clean registry install
+completed with doctor 13/13, including all six native workflows, 16 agents,
+66 skills, 39 commands, 30 hook entrypoints, and a reachable 143-model
+provider. A real installed SessionStart retained `cx/gpt-5.6-luna`, enabled
+gateway discovery, and populated 13 picker entries plus 16 alias overrides.
+The final direct generation probe reached the configured custom-model path but
+timed out after 90 seconds with no error payload; packaging, discovery,
+configuration, and provider-reachability checks all remain green.
 
 ## Complete — F-198 native workflow discovery (2026-09-02)
 
