@@ -8,10 +8,11 @@
  * `setRawMode`), the picker switches to the arrow-key / space / enter
  * keypress loop and continues to:
  *
- *   - honour `enter` / `q` / `esc` as confirmations
- *   - honour `space` / `x` as row toggles under the cursor
- *   - honour `j` / `k` (and the named arrow keys) as cursor movement
- *   - honour `a` / `n` for select-all / clear
+ *   - honour `enter` / `esc` as confirmations
+ *   - type printable characters directly into fuzzy search
+ *   - honour `space` as the row toggle under the cursor
+ *   - honour named arrow keys as cursor movement
+ *   - honour Ctrl+A / Ctrl+N for select-all / clear
  *   - honour `?` to toggle the help footer
  *   - scroll the viewport so the cursor row stays visible for 30+ candidates
  *   - decode raw escape sequences (`\x1b[A`, `\x1b[B`) when fed via `data`
@@ -145,27 +146,27 @@ test('pickModelsInteractive: arrow-down then space then arrow-up then space togg
   assert.deepEqual(result, []);
 });
 
-test('pickModelsInteractive: vim j/k bind identically to arrow keys', async () => {
+test('pickModelsInteractive: direct typing fuzzy-filters by profile name', async () => {
   const candidates = [
-    { id: 'a/1' }, { id: 'b/2' }, { id: 'c/3' },
+    { id: 'a/1', profile: { name: 'Alpha' } },
+    { id: 'b/2', profile: { name: 'Beta' } },
+    { id: 'c/3', profile: { name: 'Code Luna' } },
   ];
-  const { result } = await runPicker({
+  const { result, stdout } = await runPicker({
     candidates,
     current: [],
     input: (stdin) => {
-      sendKey(stdin, 'j', { name: 'j' });  // cursor → b/2
-      sendKey(stdin, 'j', { name: 'j' });  // cursor → c/3
-      sendSpace(stdin);                   // toggle c/3
-      sendKey(stdin, 'k', { name: 'k' });  // cursor → b/2
-      sendKey(stdin, 'k', { name: 'k' });  // cursor → a/1
-      sendSpace(stdin);                   // toggle a/1
+      for (const char of 'luna') sendKey(stdin, char, { name: char });
+      sendSpace(stdin);
       sendReturn(stdin);
     },
   });
-  assert.deepEqual(result, ['c/3', 'a/1']);
+  assert.deepEqual(result, ['c/3']);
+  assert.match(stdout.buffer(), /Search: luna/);
+  assert.match(stdout.buffer(), /1\/3 shown/);
 });
 
-test('pickModelsInteractive: "a" selects every row in original order', async () => {
+test('pickModelsInteractive: Ctrl+A selects every row in original order', async () => {
   const candidates = [
     { id: 'a/1' }, { id: 'b/2' }, { id: 'c/3' }, { id: 'd/4' },
   ];
@@ -173,14 +174,14 @@ test('pickModelsInteractive: "a" selects every row in original order', async () 
     candidates,
     current: [],
     input: (stdin) => {
-      sendKey(stdin, 'a', { name: 'a' });
+      sendKey(stdin, '\x01', { name: 'a', ctrl: true });
       sendReturn(stdin);
     },
   });
   assert.deepEqual(result, ['a/1', 'b/2', 'c/3', 'd/4']);
 });
 
-test('pickModelsInteractive: "n" clears every selection', async () => {
+test('pickModelsInteractive: Ctrl+N clears every selection', async () => {
   const candidates = [
     { id: 'a/1' }, { id: 'b/2' }, { id: 'c/3' },
   ];
@@ -188,25 +189,28 @@ test('pickModelsInteractive: "n" clears every selection', async () => {
     candidates,
     current: ['a/1', 'b/2'],
     input: (stdin) => {
-      sendKey(stdin, 'n', { name: 'n' });
+      sendKey(stdin, '\x0e', { name: 'n', ctrl: true });
       sendReturn(stdin);
     },
   });
   assert.deepEqual(result, []);
 });
 
-test('pickModelsInteractive: "q" confirms and current selection is returned', async () => {
+test('pickModelsInteractive: printable q searches instead of exiting', async () => {
   const candidates = [
-    { id: 'a/1' }, { id: 'b/2' }, { id: 'c/3' },
+    { id: 'a/1' }, { id: 'qwen/qwen-3' }, { id: 'c/3' },
   ];
-  const { result } = await runPicker({
+  const { result, stdout } = await runPicker({
     candidates,
-    current: ['c/3', 'a/1'],
+    current: [],
     input: (stdin) => {
       sendKey(stdin, 'q', { name: 'q' });
+      sendSpace(stdin);
+      sendReturn(stdin);
     },
   });
-  assert.deepEqual(result, ['c/3', 'a/1']);
+  assert.deepEqual(result, ['qwen/qwen-3']);
+  assert.match(stdout.buffer(), /Search: q/);
 });
 
 test('pickModelsInteractive: ESC alone (name="escape") confirms and returns picks', async () => {
@@ -238,7 +242,47 @@ test('pickModelsInteractive: "?" toggles the help footer line', async () => {
   assert.deepEqual(result, []);
   // The help footer phrase is unique enough to assert without coupling to
   // exact chalk escape sequences.
-  assert.match(stdout.buffer(), /Extra: j\/k · x toggle · q\/esc confirm · \? help\./);
+  assert.match(stdout.buffer(), /Extra: type to search · backspace edit · esc clear\/confirm · ctrl\+a all · ctrl\+n none · \? help\./);
+});
+
+test('pickModelsInteractive: backspace edits and escape clears an active query before confirming', async () => {
+  const candidates = [
+    { id: 'openai/luna', profile: { name: 'Luna' } },
+    { id: 'minimax/m3', profile: { name: 'MiniMax' } },
+  ];
+  const { result, stdout } = await runPicker({
+    candidates,
+    current: ['minimax/m3'],
+    input: (stdin) => {
+      for (const char of 'lunax') sendKey(stdin, char, { name: char });
+      sendKey(stdin, '\x7f', { name: 'backspace' });
+      sendKey(stdin, '\x1b', { name: 'escape', code: '\x1b' });
+      sendSpace(stdin); // after clear, cursor is safely back on openai/luna
+      sendReturn(stdin);
+    },
+  });
+  assert.deepEqual(result, ['minimax/m3', 'openai/luna'], 'selection hidden by search remains selected');
+  assert.match(stdout.buffer(), /Search: lunax/);
+  assert.match(stdout.buffer(), /Search: luna/);
+  assert.match(stdout.buffer(), /Search: type a model name or ID/);
+});
+
+test('pickModelsInteractive: no-match arrow and space input are safe', async () => {
+  const candidates = [{ id: 'openai/luna' }, { id: 'minimax/m3' }];
+  const { result, stdout } = await runPicker({
+    candidates,
+    current: ['minimax/m3'],
+    input: (stdin) => {
+      for (const char of 'zzzz') sendKey(stdin, char, { name: char });
+      sendDown(stdin);
+      sendUp(stdin);
+      sendSpace(stdin);
+      sendReturn(stdin);
+    },
+  });
+  assert.deepEqual(result, ['minimax/m3']);
+  assert.match(stdout.buffer(), /No models match your search/);
+  assert.match(stdout.buffer(), /0\/2 shown/);
 });
 
 test('pickModelsInteractive: viewport stays bounded when 30 candidates are scrolled', async () => {

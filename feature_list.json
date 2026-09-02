@@ -1289,7 +1289,7 @@
       "verification": "node --test cli/__tests__/models-picker.test.mjs cli/__tests__/models-refresh.test.mjs cli/__tests__/models-namespace-sync.test.mjs; make check; make e2e",
       "state": "passing",
       "passed": "2026-09-02",
-      "commit": null,
+      "commit": "3a190e3",
       "category": "models",
       "layer": "cli",
       "owner": "@mike",
@@ -1302,11 +1302,35 @@
       ],
       "created": "2026-09-01",
       "evidence": "Fixed pre-picker concurrent one-shot Models.dev enrichment, cleared timeout handles, collision-safe canonical/provider matching, renderer-safe fallbacks, and cached-profile preservation. Live 143-candidate verification completed in about 1.1s with correct canonical context values (GPT-5.6 Luna 1,050,000; MiniMax-M3 1,048,576; GLM-5 204,800) and gateway fallback for every miss. Focused model tests 95/95, SDK tests 513/513, retained Node/harness tests, E2E 13/13, clean-check 5/5, TypeScript, architecture, structure, and removed-surface gates pass."
+    },
+    {
+      "id": "F-197",
+      "title": "Searchable fuzzy model picker",
+      "description": "Allow operators to type a model name or family in the interactive bizar models picker and fuzzy-filter the available gateway inventory.",
+      "behavior": "TTY and line-mode pickers search model IDs and display metadata incrementally without losing existing selections; clearing the query restores the full gateway ordering.",
+      "verification": "node --test cli/__tests__/models-picker.test.mjs cli/__tests__/models-picker-context.test.mjs; make check; make test; make e2e",
+      "state": "passing",
+      "passed": "2026-09-02",
+      "commit": "current-change",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "models",
+      "layer": "cli",
+      "owner": "@mike",
+      "scope": [
+        "cli/commands/models.mjs",
+        "cli/__tests__/models-picker.test.mjs",
+        "cli/__tests__/models-picker-context.test.mjs",
+        "feature_list.json",
+        "PROGRESS.md"
+      ],
+      "created": "2026-09-02",
+      "evidence": "Implemented direct TTY type-to-search and line-mode /query/search commands over IDs plus Models.dev and gateway metadata. Selections persist across filters; visible numeric indices, empty matches, cursor/viewport clamps, Backspace/Escape, and global all/none are covered. Bounded-gap fuzzy matching removes scattered-character noise; live 143-model checks return only both Luna aliases for luna. Focused picker tests 76/76, SDK 513/513, retained Node/harness 1078/1078, E2E 13/13, TypeScript, architecture, structure, and removed-surface gates pass."
     }
   ],
   "vcr": {
-    "passing": 76,
-    "activated": 76,
+    "passing": 77,
+    "activated": 77,
     "ratio": 1
   }
 }

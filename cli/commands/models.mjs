@@ -535,12 +535,15 @@ export async function enrichPicksByMetadata({
 
 function capabilityLabel(profile) {
   if (!profile) return 'metadata unavailable';
+  const capabilities = profile.capabilities || {};
+  const modalities = Array.isArray(capabilities.inputModalities) ? capabilities.inputModalities : [];
+  const limits = profile.limits || {};
   const caps = [];
-  if (profile.capabilities.reasoning) caps.push('reasoning');
-  if (profile.capabilities.toolCall) caps.push('tools');
-  if (profile.capabilities.structuredOutput) caps.push('structured');
-  if (profile.capabilities.inputModalities.some((m) => m !== 'text')) caps.push('multimodal');
-  if (profile.limits.contextTokens) caps.push(formatContextTokens(profile.limits.contextTokens));
+  if (capabilities.reasoning) caps.push('reasoning');
+  if (capabilities.toolCall) caps.push('tools');
+  if (capabilities.structuredOutput) caps.push('structured');
+  if (modalities.some((m) => m !== 'text')) caps.push('multimodal');
+  if (limits.contextTokens) caps.push(formatContextTokens(limits.contextTokens));
   return caps.length > 0 ? caps.join(', ') : 'basic text';
 }
 
@@ -1503,10 +1506,12 @@ export function explainSelection({ routerPath, role, requirements = {} } = {}) {
  * Interactive multi-select picker. Pure function over streams — testable.
  *
  * Branching: when stdin is a TTY with raw-mode support, the picker drives a
- * keypress-driven checklist (arrow keys / j-k / space / a / n / enter / q /
- * esc / ?).  When stdin is not a TTY (pipes, CI, tests) the picker falls
+ * keypress-driven checklist with direct type-to-search (arrow keys / space /
+ * Ctrl+A / Ctrl+N / enter / esc / backspace / ?). When stdin is not a TTY (pipes, CI,
+ * tests) the picker falls
  * through to a line-mode loop that accepts a space-separated index list,
- * `all`, `none`, `toggle <i>`, an empty line (confirm), or `q` (quit). Both
+ * `all`, `none`, `toggle <i>`, `/query`, `search query`, an empty line
+ * (confirm), or `q` (quit). Both
  * branches return the chosen IDs in the user's most-recent selection order,
  * so external callers and existing tests see a single `Promise<string[]>`.
  *
@@ -1550,10 +1555,112 @@ export async function pickModels({ candidates, current = [], stdin, stdout, prom
   }
 }
 
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Score a fuzzy query against one text field. Exact, prefix, token-prefix,
+ * and substring matches lead; ordered subsequences remain useful for compact
+ * queries such as `gpt56l`. A negative score means no match.
+ */
+function fuzzyTextScore(value, query, allowSubsequence = true) {
+  const text = normalizeSearchText(value);
+  const needle = normalizeSearchText(query);
+  if (!needle) return 0;
+  if (!text) return -1;
+  if (text === needle) return 10_000;
+  if (text.startsWith(needle)) return 9_000 - (text.length - needle.length);
+
+  const tokenIndex = text.split(' ').findIndex((token) => token.startsWith(needle));
+  if (tokenIndex >= 0) return 8_000 - tokenIndex * 10;
+
+  const substringIndex = text.indexOf(needle);
+  if (substringIndex >= 0) return 7_000 - substringIndex;
+
+  // One- and two-character subsequences are too permissive across model
+  // descriptions. Short searches must be contiguous.
+  if (!allowSubsequence || needle.replace(/\s/g, '').length < 3) return -1;
+
+  let textIndex = 0;
+  let first = -1;
+  let previous = -1;
+  let gaps = 0;
+  let boundaries = 0;
+  for (const char of needle) {
+    if (char === ' ') continue;
+    const found = text.indexOf(char, textIndex);
+    if (found < 0) return -1;
+    if (first < 0) first = found;
+    if (previous >= 0) gaps += found - previous - 1;
+    if (found === 0 || text[found - 1] === ' ') boundaries++;
+    previous = found;
+    textIndex = found + 1;
+  }
+  const compactNeedleLength = needle.replace(/\s/g, '').length;
+  if (gaps > Math.max(8, compactNeedleLength * 2)) return -1;
+  return 4_000 + boundaries * 25 - first * 2 - gaps;
+}
+
+/**
+ * Pure fuzzy filter used by both picker modes. Match quality determines
+ * inclusion while gateway order remains stable as the query changes.
+ *
+ * @param {Array<{id: string, profile?: object, _gateway?: object}>} candidates
+ * @param {string} query
+ * @returns {Array<{id: string, profile?: object, _gateway?: object}>}
+ */
+export function filterModelCandidates(candidates, query) {
+  if (!Array.isArray(candidates)) return [];
+  const needle = normalizeSearchText(query);
+  if (!needle) return [...candidates];
+
+  return candidates
+    .map((candidate, index) => {
+      const profile = candidate?.profile || {};
+      const gateway = candidate?._gateway || {};
+      const fields = [
+        [candidate?.id, 300, true],
+        [profile.baseModel, 275, true],
+        [profile.name, 200, true],
+        [gateway.name, 200, true],
+        [profile.displayName, 200, true],
+        [gateway.display_name, 200, true],
+        [profile.family, 175, true],
+        [gateway.family, 175, true],
+        [profile.description, 100, false],
+        [gateway.description, 100, false],
+        [profile.summary, 50, false],
+        [gateway.summary, 50, false],
+      ];
+      const score = Math.max(...fields.map(([value, bonus, allowSubsequence]) => {
+        const fieldScore = fuzzyTextScore(value, needle, allowSubsequence);
+        return fieldScore < 0 ? -1 : fieldScore + bonus;
+      }));
+      return { candidate, index, score };
+    })
+    .filter((entry) => entry.score >= 0)
+    // Gateway order is the stable picker contract. Fuzzy scoring decides
+    // inclusion; it deliberately does not reshuffle rows while the operator
+    // types, which keeps cursor movement predictable.
+    .sort((a, b) => a.index - b.index)
+    .map((entry) => entry.candidate);
+}
+
 async function pickModelsLineMode({ ordered, candidates, selected, lastOrder, stdin, stdout, prompt }) {
   const lines = makeLineReader(stdin);
+  let query = '';
   for (;;) {
-    renderPicker(stdout, ordered, selected, prompt, candidates);
+    const visibleCandidates = filterModelCandidates(candidates, query);
+    const visibleIds = visibleCandidates.map((candidate) => candidate.id);
+    renderPicker(stdout, visibleIds, selected, prompt, visibleCandidates, {
+      query,
+      total: ordered.length,
+    });
     const line = await readPrompt(lines, stdout, stdin.isTTY === true, '> ');
     if (line === null) break; // EOF on non-TTY
     const cmd = String(line || '').trim();
@@ -1569,13 +1676,25 @@ async function pickModelsLineMode({ ordered, candidates, selected, lastOrder, st
       continue;
     }
     if (cmd === 'q' || cmd === 'quit' || cmd === ':wq') break;
+    if (cmd === '/' || cmd === 'search' || cmd === 'clear search') {
+      query = '';
+      continue;
+    }
+    if (cmd.startsWith('/')) {
+      query = cmd.slice(1).trim();
+      continue;
+    }
+    if (cmd.startsWith('search ')) {
+      query = cmd.slice('search '.length).trim();
+      continue;
+    }
     if (cmd.startsWith('toggle ')) {
       const idx = Number(cmd.slice('toggle '.length).trim());
-      if (!Number.isInteger(idx) || idx < 1 || idx > ordered.length) {
+      if (!Number.isInteger(idx) || idx < 1 || idx > visibleIds.length) {
         stdout.write(chalk.red(`  x index out of range\n`));
         continue;
       }
-      const id = ordered[idx - 1];
+      const id = visibleIds[idx - 1];
       if (selected.has(id)) {
         selected.delete(id);
         lastOrder = lastOrder.filter((x) => x !== id);
@@ -1588,8 +1707,8 @@ async function pickModelsLineMode({ ordered, candidates, selected, lastOrder, st
     const indices = cmd.split(/\s+/).map((s) => Number(s)).filter((n) => Number.isInteger(n));
     let changed = false;
     for (const n of indices) {
-      if (n < 1 || n > ordered.length) continue;
-      const id = ordered[n - 1];
+      if (n < 1 || n > visibleIds.length) continue;
+      const id = visibleIds[n - 1];
       if (selected.has(id)) {
         selected.delete(id);
         lastOrder = lastOrder.filter((x) => x !== id);
@@ -1599,7 +1718,7 @@ async function pickModelsLineMode({ ordered, candidates, selected, lastOrder, st
       }
       changed = true;
     }
-    if (!changed) stdout.write(chalk.yellow(`  ! unrecognised input - try 'all', 'none', 'toggle <i>', or '1 3 5'\n`));
+    if (!changed) stdout.write(chalk.yellow(`  ! unrecognised input - try '/query', 'search query', 'all', 'none', 'toggle <i>', or '1 3 5'\n`));
   }
   const seen = new Set();
   return lastOrder.filter((id) => {
@@ -1634,6 +1753,9 @@ async function pickModelsInteractive({ ordered, candidates, selected, lastOrder,
   let scrollTop = 0;
   let lastRenderHeight = 0;
   let showHelp = false;
+  let query = '';
+  let visibleCandidates = [...candidates];
+  const originalIndices = new Map(candidates.map((candidate, index) => [candidate, index]));
 
   readline.emitKeypressEvents(stdin);
   if (typeof stdin.resume === 'function') stdin.resume();
@@ -1642,8 +1764,18 @@ async function pickModelsInteractive({ ordered, candidates, selected, lastOrder,
   const exitState = await new Promise((resolve) => {
     const onKey = (str, key) => {
       if (!key) return;
-      // Resolve confirmation
-      if (key.name === 'return' || str === 'q' || key.name === 'escape') {
+      // Resolve confirmation. Escape clears an active search first so a
+      // typo never accidentally exits the picker.
+      if (key.name === 'return') {
+        return finish();
+      }
+      if (key.name === 'escape') {
+        if (query) {
+          query = '';
+          refreshFilter();
+          render();
+          return;
+        }
         return finish();
       }
       if (key.ctrl && key.name === 'c') {
@@ -1652,27 +1784,36 @@ async function pickModelsInteractive({ ordered, candidates, selected, lastOrder,
         lastOrder.length = 0;
         return finish();
       }
-      if (key.name === 'up' || str === 'k') {
-        cursor = (cursor - 1 + ordered.length) % ordered.length;
-      } else if (key.name === 'down' || str === 'j') {
-        cursor = (cursor + 1) % ordered.length;
-      } else if (key.name === 'space' || str === 'x') {
-        const id = ordered[cursor];
-        if (selected.has(id)) {
-          selected.delete(id);
-          lastOrder = lastOrder.filter((x) => x !== id);
-        } else {
-          selected.add(id);
-          lastOrder.push(id);
+      if (key.name === 'up' && visibleCandidates.length > 0) {
+        cursor = (cursor - 1 + visibleCandidates.length) % visibleCandidates.length;
+      } else if (key.name === 'down' && visibleCandidates.length > 0) {
+        cursor = (cursor + 1) % visibleCandidates.length;
+      } else if (key.name === 'space') {
+        if (visibleCandidates.length > 0) {
+          const id = visibleCandidates[cursor].id;
+          if (selected.has(id)) {
+            selected.delete(id);
+            lastOrder = lastOrder.filter((x) => x !== id);
+          } else {
+            selected.add(id);
+            lastOrder.push(id);
+          }
         }
-      } else if (str === 'a') {
+      } else if (key.ctrl && key.name === 'a') {
         for (const id of ordered) selected.add(id);
         lastOrder = [...ordered];
-      } else if (str === 'n') {
+      } else if (key.ctrl && key.name === 'n') {
         selected.clear();
         lastOrder = [];
       } else if (str === '?') {
         showHelp = !showHelp;
+      } else if (key.name === 'backspace' || key.name === 'delete') {
+        if (!query) return;
+        query = query.slice(0, -1);
+        refreshFilter();
+      } else if (typeof str === 'string' && str.length === 1 && !key.ctrl && !key.meta && str >= ' ') {
+        query += str;
+        refreshFilter();
       } else {
         return;
       }
@@ -1701,16 +1842,22 @@ async function pickModelsInteractive({ ordered, candidates, selected, lastOrder,
   });
 
   function adjustScroll() {
-    if (ordered.length <= VIEWPORT_SIZE) {
+    if (visibleCandidates.length === 0 || visibleCandidates.length <= VIEWPORT_SIZE) {
       scrollTop = 0;
       return;
     }
     if (cursor < scrollTop) scrollTop = cursor;
     else if (cursor >= scrollTop + VIEWPORT_SIZE) scrollTop = cursor - VIEWPORT_SIZE + 1;
     if (scrollTop < 0) scrollTop = 0;
-    if (scrollTop > Math.max(0, ordered.length - VIEWPORT_SIZE)) {
-      scrollTop = Math.max(0, ordered.length - VIEWPORT_SIZE);
+    if (scrollTop > Math.max(0, visibleCandidates.length - VIEWPORT_SIZE)) {
+      scrollTop = Math.max(0, visibleCandidates.length - VIEWPORT_SIZE);
     }
+  }
+
+  function refreshFilter() {
+    visibleCandidates = filterModelCandidates(candidates, query);
+    cursor = 0;
+    scrollTop = 0;
   }
 
   function render() {
@@ -1718,34 +1865,39 @@ async function pickModelsInteractive({ ordered, candidates, selected, lastOrder,
     const columns = typeof stdout.columns === 'number' ? stdout.columns : 80;
     const lines = [];
     lines.push(`\x1b[K${chalk.bold(`-- ${prompt} --`)}`);
+    lines.push(`\x1b[K${query ? `  Search: ${chalk.bold(query)}` : chalk.dim('  Search: type a model name or ID')}`);
     const start = scrollTop;
-    const end = Math.min(ordered.length, start + VIEWPORT_SIZE);
+    const end = Math.min(visibleCandidates.length, start + VIEWPORT_SIZE);
     const above = start;
-    const below = ordered.length - end;
+    const below = visibleCandidates.length - end;
     if (above > 0) lines.push(`\x1b[K${chalk.dim(`  ⋮ ${above} more above`)}`);
     for (let i = start; i < end; i++) {
-      const profile = candidates.find((candidate) => candidate.id === ordered[i])?.profile;
+      const candidate = visibleCandidates[i];
+      const originalIndex = originalIndices.get(candidate) ?? i;
       const row = fitRow({
-        i,
-        id: ordered[i],
-        profile,
+        i: originalIndex,
+        id: candidate.id,
+        profile: candidate.profile,
         width,
         isCursor: i === cursor,
-        isSelected: selected.has(ordered[i]),
+        isSelected: selected.has(candidate.id),
         columns,
       });
       lines.push(`\x1b[K${row}`);
     }
+    if (visibleCandidates.length === 0) lines.push(`\x1b[K${chalk.yellow('  No models match your search.')}`);
     if (below > 0) lines.push(`\x1b[K${chalk.dim(`  ⋮ ${below} more below`)}`);
-    lines.push(`\x1b[K${chalk.dim(`  ${selected.size}/${ordered.length} selected. ↑/↓ move · space toggle · a all · n none · enter confirm.`)}`);
-    if (showHelp) lines.push(`\x1b[K${chalk.dim(`  Extra: j/k · x toggle · q/esc confirm · ? help.`)}`);
+    lines.push(`\x1b[K${chalk.dim(`  ${selected.size}/${ordered.length} selected · ${visibleCandidates.length}/${ordered.length} shown. ↑/↓ move · space toggle · enter confirm.`)}`);
+    if (showHelp) lines.push(`\x1b[K${chalk.dim(`  Extra: type to search · backspace edit · esc clear/confirm · ctrl+a all · ctrl+n none · ? help.`)}`);
     lines.push(`\x1b[K`);
 
+    const contentHeight = lines.length;
+    while (lines.length < lastRenderHeight) lines.push('\x1b[K');
     if (lastRenderHeight > 0) {
       stdout.write(cursorUp(lastRenderHeight));
     }
     stdout.write(lines.join('\n'));
-    lastRenderHeight = lines.length;
+    lastRenderHeight = Math.max(lastRenderHeight, contentHeight);
   }
 }
 
@@ -1981,17 +2133,22 @@ async function readPrompt(lineReader, out$, isTTY, prefix) {
   return r.value;
 }
 
-function renderPicker(out, ordered, selected, prompt, candidates = []) {
+function renderPicker(out, ordered, selected, prompt, candidates = [], { query = '', total = ordered.length } = {}) {
   out.write('\n' + chalk.bold(`-- ${prompt} --`) + '\n');
-  const width = String(ordered.length).length;
+  out.write(query
+    ? `  Search: ${chalk.bold(query)}  ${chalk.dim(`(${ordered.length}/${total} shown)`)}\n`
+    : chalk.dim(`  Search: /query or search query  (${ordered.length}/${total} shown)\n`));
+  const width = String(Math.max(ordered.length, 1)).length;
+  const candidatesById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   for (let i = 0; i < ordered.length; i++) {
     const id = ordered[i];
     const mark = selected.has(id) ? chalk.green('[x]') : '[ ]';
     const idx = String(i + 1).padStart(width, ' ');
-    const profile = candidates.find((candidate) => candidate.id === id)?.profile;
+    const profile = candidatesById.get(id)?.profile;
     out.write(`  ${mark} ${chalk.dim(idx + '.')} ${id}${chalk.dim(`  [${capabilityLabel(profile)}]`)}\n`);
   }
-  out.write(chalk.dim(`\n  ${selected.size}/${ordered.length} selected. Type numbers to toggle, 'all', 'none', or Enter to confirm.\n`));
+  if (ordered.length === 0) out.write(chalk.yellow('  No models match your search.\n'));
+  out.write(chalk.dim(`\n  ${selected.size}/${total} selected. Numbers target shown rows; '/', 'all', 'none', or Enter to confirm.\n`));
 }
 
 function askLine(rl, prefix) {
@@ -2007,7 +2164,7 @@ function showHelp() {
   bizar models - User-controlled model picker
 
   Usage:
-    bizar models                    Interactive picker (TTY: arrow keys / space / enter; pipe: line-mode)
+    bizar models                    Interactive searchable picker
     bizar models --list             Print candidate IDs, one per line
     bizar models --set a,b,c        Persist the comma-separated IDs to userSelected
     bizar models --clear            Remove userSelected; use the first enabled configured-tier model
@@ -2019,6 +2176,12 @@ function showHelp() {
   The orchestrator (@mike) prefers userSelected and otherwise uses enabled
   configured-tier candidates. Every dispatch receives an explicit model;
   Bizar never inherits an unconfigured provider default.
+
+  Picker search: in a TTY, type a model ID or name to fuzzy-filter, use
+  Backspace to edit, and Escape to clear the query (or confirm when clear).
+  Arrow keys move, Space toggles, Enter confirms, and Ctrl+A/Ctrl+N select
+  all or none. In line mode, use /query or "search query"; / clears search,
+  and numeric choices target the currently shown rows.
 
   Post-confirm status screen (interactive only): after the picker saves a
   selection, every confirmed id is reported on its own row with one of:
