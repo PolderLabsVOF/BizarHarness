@@ -181,7 +181,7 @@ const FIXTURE_CONTEXT = {
   history: undefined,
 };
 
-test('dispatchAgent: with selectedProfiles + risk=high -> model + routingDecisionId', async () => {
+test('dispatchAgent: with selectedProfiles + risk=high -> additionalContext.bizarConfiguredModel + routingDecisionId', async () => {
   let capturedOpts = null;
   const agentFn = async (prompt, opts) => { capturedOpts = opts; return { prompt, opts }; };
   const result = await dispatch.dispatchAgent(
@@ -192,8 +192,11 @@ test('dispatchAgent: with selectedProfiles + risk=high -> model + routingDecisio
     FIXTURE_CONTEXT,
   );
   assert.ok(capturedOpts, 'agentFn must be invoked');
-  assert.notEqual(capturedOpts.model, undefined, 'model must be present');
-  assert.equal(capturedOpts.model, 'provider/strong');
+  // F-201 transport compatibility: the native Agent tool rejects raw gateway
+  // IDs in its enum-limited `model` field, so the Bizar-selected ID is
+  // carried as auditable additionalContext instead.
+  assert.equal(capturedOpts.model, undefined, 'model field must be omitted (native Agent tool rejects gateway IDs)');
+  assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/strong');
   assert.ok(UUID_RE.test(capturedOpts.routingDecisionId));
   assert.equal(capturedOpts.tier, 'high');
   assert.equal(capturedOpts.selectorReason, dispatch.REASON.STRONGEST_NEVER_DOWNGRADE);
@@ -209,7 +212,8 @@ test('dispatchAgent: risk=low returns the cheapest healthy selected', async () =
     { role: 'generic', risk: 'low', label: 'cheap' },
     FIXTURE_CONTEXT,
   );
-  assert.equal(capturedOpts.model, 'provider/cheap');
+  assert.equal(capturedOpts.model, undefined);
+  assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/cheap');
   assert.equal(capturedOpts.tier, 'budget');
   assert.equal(capturedOpts.selectorReason, dispatch.REASON.CHEAPEST_RISK_LOW);
 });
@@ -227,7 +231,11 @@ test('dispatchAgent: dryRun=true returns decision without invoking agentFn', asy
   assert.equal(invoked, false, 'agentFn must NOT be invoked when dryRun=true');
   assert.ok(result.__dispatchDecision, 'result carries the decision');
   assert.ok(UUID_RE.test(result.__dispatchDecision.routingDecisionId));
-  assert.equal(result.payload.model, 'provider/strong');
+  // F-201 transport compatibility: dryRun surfaces the Bizar-selected ID
+  // through additionalContext (matching augmentPayload's shape) rather than
+  // the native-Agent-incompatible `model` field.
+  assert.equal(result.payload.model, undefined);
+  assert.equal(result.payload.additionalContext?.bizarConfiguredModel, 'provider/strong');
 });
 
 test('dispatchAgent: empty configured pool fails closed instead of inheriting a provider default', async () => {
@@ -251,7 +259,8 @@ test('dispatchAgent: caller cannot bypass the configured pool with forceModel', 
     { role: 'security', risk: 'high', forceModel: 'claude-sonnet-5' },
     FIXTURE_CONTEXT,
   );
-  assert.equal(capturedOpts.model, 'provider/strong');
+  assert.equal(capturedOpts.model, undefined);
+  assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/strong');
 });
 
 test('dispatchAgent: two sequential calls produce distinct routingDecisionId values', async () => {
@@ -274,7 +283,8 @@ test('dispatchAgent: capture hook receives the augmented payload', async () => {
     assert.equal(captured.length, 1);
     assert.equal(captured[0].agentName, 'mike');
     assert.ok(captured[0].opts.routingDecisionId);
-    assert.equal(captured[0].opts.model, 'provider/strong');
+    assert.equal(captured[0].opts.model, undefined);
+    assert.equal(captured[0].opts.additionalContext?.bizarConfiguredModel, 'provider/strong');
   } finally {
     dispatch.resetCaptureFn();
   }
@@ -346,11 +356,61 @@ test('dispatch: captured payloads from a synthetic dispatch contain model + rout
   for (const entry of captured) {
     assert.ok(entry.opts.routingDecisionId, `payload ${entry.agentName} missing routingDecisionId`);
     assert.ok(UUID_RE.test(entry.opts.routingDecisionId));
-    // For security+high the model must be set; for the others it MAY be set.
+    // F-201 transport compatibility: the Bizar-selected ID is always
+    // carried as additionalContext.bizarConfiguredModel so the guard can
+    // verify it matches the global Claude parent model before allowing
+    // the dispatch to inherit. High-risk dispatches MUST carry it.
     if (entry.opts.role === 'security' || entry.opts.risk === 'high') {
-      assert.notEqual(entry.opts.model, undefined, `${entry.agentName}: high-risk / security dispatch must have model`);
+      assert.ok(
+        entry.opts.additionalContext?.bizarConfiguredModel,
+        `${entry.agentName}: high-risk / security dispatch must carry additionalContext.bizarConfiguredModel`,
+      );
     }
   }
+});
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*          augmentPayload: F-201 transport-compatibility shape                */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+test('dispatch.augmentPayload: model is omitted; additionalContext.bizarConfiguredModel carries the Bizar selection', () => {
+  const decision = {
+    modelId: 'claude-qwen/qwen3.8-max',
+    routingDecisionId: 'r-2026-09-02-001',
+    tier: 'premium',
+    reason: 'strongest',
+    fallbackChain: [],
+  };
+  const payload = dispatch.augmentPayload({ role: 'generic', risk: 'low' }, decision, 'mike');
+  // F-201 transport compatibility: Claude Code's native Agent tool rejects
+  // raw gateway IDs in its enum-limited `model` field, so the Bizar
+  // selection must NOT be placed under `model`.
+  assert.equal(payload.model, undefined, 'model must be omitted (native Agent tool rejects gateway IDs)');
+  assert.equal(payload.additionalContext?.bizarConfiguredModel, 'claude-qwen/qwen3.8-max');
+  assert.equal(payload.routingDecisionId, 'r-2026-09-02-001');
+  assert.equal(payload.tier, 'premium');
+  assert.equal(payload.routedAgent, 'mike');
+});
+
+test('dispatch.augmentPayload: preserves caller-provided additionalContext and merges bizarConfiguredModel', () => {
+  const decision = { modelId: 'provider/x', routingDecisionId: 'r1', tier: 'mid', reason: 'reason', fallbackChain: [] };
+  const payload = dispatch.augmentPayload(
+    { additionalContext: { existing: 'value', otherKey: 42 } },
+    decision,
+    'todd',
+  );
+  assert.equal(payload.additionalContext.existing, 'value');
+  assert.equal(payload.additionalContext.otherKey, 42);
+  assert.equal(payload.additionalContext.bizarConfiguredModel, 'provider/x');
+});
+
+test('dispatch.augmentPayload: null decision.modelId renders as null additionalContext value, not omitted', () => {
+  // computeDecision() throws when modelId is missing, but augmentPayload
+  // is the lower-level shape — it must tolerate null and produce a
+  // deterministic additionalContext value the guard can match against.
+  const payload = dispatch.augmentPayload({}, { modelId: null, routingDecisionId: 'r1', tier: 'x', reason: 'r', fallbackChain: [] }, 'a');
+  assert.equal(payload.model, undefined);
+  assert.equal(payload.additionalContext?.bizarConfiguredModel, null);
 });
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -423,13 +483,24 @@ test('dispatch: env override BIZAR_ACTIVE_SESSION_MODEL surfaces in loadDispatch
 });
 
 test('dispatch: loadDispatchContext uses enabled configured tier candidates and filters disabled providers', () => {
-  const ctx = dispatch.loadDispatchContext({
-    cwd: workflowsDir,
-    env: { BIZAR_MODEL_ROUTER_CONFIG: resolve(repoRoot, 'config', 'claude', 'model-router.json') },
-  });
-  assert.ok(ctx.selectedProfiles.length > 0);
-  assert.ok(ctx.staticProfiles.length > 0);
-  assert.ok(ctx.selectedProfiles.every((candidate) => !candidate.id.startsWith('anthropic/')));
+  const fixture = mkdtempSync(join(tmpdir(), 'bizar-dispatch-router-'));
+  try {
+    const routerPath = join(fixture, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({
+      disabledProviders: ['anthropic'],
+      userSelected: { models: ['anthropic/blocked', 'provider/enabled'], tierHints: {} },
+      tiers: { default: { models: ['provider/fallback'] } },
+    }));
+    const ctx = dispatch.loadDispatchContext({
+      cwd: workflowsDir,
+      env: { BIZAR_MODEL_ROUTER_CONFIG: routerPath },
+    });
+    assert.ok(ctx.selectedProfiles.length > 0);
+    assert.ok(ctx.staticProfiles.length > 0);
+    assert.ok(ctx.selectedProfiles.every((candidate) => !candidate.id.startsWith('anthropic/')));
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });
 
 test('dispatch: loadDispatchContext reads the same global router from unrelated cwd values', () => {

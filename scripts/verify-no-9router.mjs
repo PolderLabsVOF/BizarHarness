@@ -48,7 +48,6 @@ const scanRoots = [
   'config/skills',
   'config/claude/skills',
   'config/claude/settings.json',
-  'config/claude/model-router.json',
   'Makefile',
   'package.json',
   'tsconfig.json',

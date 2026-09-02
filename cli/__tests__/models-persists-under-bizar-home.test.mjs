@@ -4,7 +4,7 @@
  * Regression coverage for the operator-reported bug:
  *
  *   "User ran `bizar models`, and the model router file
- *    (`config/claude/model-router.json` or its mirror) was saved to the
+ *    (`model-router.json`) was saved to the
  *    CURRENT WORKING DIRECTORY instead of the global `BIZAR_HOME`
  *    directory (`~/.config/bizar/`). Things like this should always be
  *    configured globally so they can be used everywhere."

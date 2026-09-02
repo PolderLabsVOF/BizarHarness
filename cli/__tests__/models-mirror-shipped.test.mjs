@@ -39,10 +39,12 @@ const DIST_MIRROR = resolve(
   'failover-mirror.mjs',
 );
 const CLI_MODELS = resolve(REPO_ROOT, 'cli', 'commands', 'models.mjs');
-const SHIPPED_ROUTER = resolve(REPO_ROOT, 'config', 'claude', 'model-router.json');
+const PROJECT_ROUTER = resolve(REPO_ROOT, 'config', 'claude', 'model-router.json');
 
-test('shipped model router has no provider or model defaults', () => {
-  const router = JSON.parse(readFileSync(SHIPPED_ROUTER, 'utf8'));
+test('the project ships no runtime model router; installer factory stays model-neutral', async () => {
+  assert.equal(existsSync(PROJECT_ROUTER), false, 'a repository must never be a model-policy source');
+  const { EMPTY_GLOBAL_MODEL_ROUTER } = await import('../provision.mjs');
+  const router = EMPTY_GLOBAL_MODEL_ROUTER;
   assert.deepEqual(router.disabledProviders, ['anthropic'], 'Anthropic must remain opted out without pinning any model');
   for (const [tier, config] of Object.entries(router.tiers || {})) {
     assert.deepEqual(config.models, [], `shipped ${tier} tier must not hardcode a model`);

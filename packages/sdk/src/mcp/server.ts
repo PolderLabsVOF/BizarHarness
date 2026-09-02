@@ -443,7 +443,7 @@ const bizarAuditTool = defineTool<Record<string, string>>(
 // `bizar model list --json` — gateway model inventory.
 const bizarModelListTool = defineTool<Record<string, string>>(
   "bizar_model_list",
-  "Wrapper around `bizar models --json`. Returns ONLY the models the user has explicitly enabled via `bizar models` (the `userSelected` block of `config/claude/model-router.json`). Live discovery is filtered out by default to avoid surfacing dozens of unrelated models. Empty list = orchestrator inherits the active session model.",
+  "Wrapper around `bizar models --json`. Returns ONLY the models the user has explicitly enabled via `bizar models` in the global Bizar router (`$BIZAR_HOME/config/claude/model-router.json#userSelected`). Live discovery is filtered out by default to avoid surfacing dozens of unrelated models. An empty list means no agent dispatch is permitted until the operator configures models.",
   {},
   async () => {
     try {

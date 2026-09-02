@@ -5,7 +5,7 @@
  * `bizar tier` — automatic task-based model selection.
  *
  * Replays the same tier resolution the @mike orchestrator uses:
- *  1. Read the role default from ~/.claude/model-router.json.
+ *  1. Read the role default from the global Bizar model router.
  *  2. Adjust the tier from current task risk and complexity.
  *  3. Print ordered candidates; dispatch uses a candidate only when live
  *     discovery proves it, otherwise Agent omits model and inherits the session.

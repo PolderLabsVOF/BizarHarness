@@ -130,6 +130,31 @@ test('model router ownership recognizes Bizar schemas and preserves foreign sche
   assert.equal(isBizarManagedModelRouter(null), false);
 });
 
+test('syncModelRouter creates and preserves only the global Bizar router', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-global-router-'));
+  const previous = process.env.BIZAR_HOME;
+  process.env.BIZAR_HOME = home;
+  try {
+    const { syncModelRouter } = await import('./provision.mjs');
+    const first = await syncModelRouter();
+    const routerPath = join(home, 'config', 'claude', 'model-router.json');
+    assert.equal(first.path, routerPath);
+    assert.equal(existsSync(routerPath), true);
+    const created = JSON.parse(readFileSync(routerPath, 'utf8'));
+    assert.deepEqual(created.userSelected.models, []);
+    assert.deepEqual(created.disabledProviders, ['anthropic']);
+    writeFileSync(routerPath, JSON.stringify({ userSelected: { models: ['operator/model'] } }));
+    const second = await syncModelRouter({ force: true });
+    assert.equal(second.preserved, true);
+    assert.deepEqual(JSON.parse(readFileSync(routerPath, 'utf8')).userSelected.models, ['operator/model']);
+    assert.equal(existsSync(join(REPO_ROOT, 'config', 'claude', 'model-router.json')), false);
+  } finally {
+    if (previous === undefined) delete process.env.BIZAR_HOME;
+    else process.env.BIZAR_HOME = previous;
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 describe('syncConfigExtras() — native workflows', () => {
   test('dry-run reports workflow support', async () => {
     const { syncConfigExtras } = await import('./provision.mjs');

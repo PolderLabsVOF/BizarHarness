@@ -5,10 +5,8 @@
  *
  *   - `filterCandidatesByDisabledProviders`: case-sensitive prefix filter
  *     against the (already-lowercase) disabled list. Empty list is a no-op.
- *   - `readDisabledProviders`: dual-path read (Bizar path wins; legacy
- *     mirror is fallback). Whitespace + lowercase normalization at read
- *     time. An explicit `[]` on the Bizar path beats a non-empty legacy
- *     mirror.
+ *   - `readDisabledProviders`: reads only the Bizar global router. Whitespace
+ *     + lowercase normalization happens at read time.
  *   - The case-sensitivity pin test: `Anthropic/claude-X` (capital A) is
  *     intentionally NOT stripped when `disabledProviders` is
  *     `["anthropic"]`.
@@ -49,41 +47,29 @@ test('filterCandidatesByDisabledProviders: case-sensitive prefix strips lowercas
   assert.deepEqual(out.stripped, ['anthropic/claude-X', 'anthropic/claude-Y']);
 });
 
-test('readDisabledProviders: dual-path Bizar path wins over legacy', () => {
-  // Both files exist with different disabled lists. Bizar path's value
-  // wins — including the explicit `[]` case.
+test('readDisabledProviders: reads the supplied global router only', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bizar-disabled-providers-'));
   const bizarDir = join(dir, 'bizar', 'config', 'claude');
-  const legacyDir = join(dir, 'legacy');
   mkdirSync(bizarDir, { recursive: true });
-  mkdirSync(legacyDir, { recursive: true });
   const bizarPath = join(bizarDir, 'model-router.json');
-  const legacyPath = join(legacyDir, 'model-router.json');
   try {
     writeFileSync(bizarPath, JSON.stringify({ disabledProviders: ['minimax'] }));
-    writeFileSync(legacyPath, JSON.stringify({ disabledProviders: ['anthropic'] }));
-    const out = readDisabledProviders({ routerPath: bizarPath, legacyPath });
+    const out = readDisabledProviders({ routerPath: bizarPath });
     assert.deepEqual(out, ['minimax']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('readDisabledProviders: explicit [] on Bizar path beats non-empty legacy', () => {
-  // The pin test: the operator may pin "no providers disabled" without
-  // deleting the legacy mirror. Empty Bizar wins.
+test('readDisabledProviders: honors an explicit empty global policy', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bizar-disabled-providers-'));
   const bizarDir = join(dir, 'bizar', 'config', 'claude');
-  const legacyDir = join(dir, 'legacy');
   mkdirSync(bizarDir, { recursive: true });
-  mkdirSync(legacyDir, { recursive: true });
   const bizarPath = join(bizarDir, 'model-router.json');
-  const legacyPath = join(legacyDir, 'model-router.json');
   try {
     writeFileSync(bizarPath, JSON.stringify({ disabledProviders: [] }));
-    writeFileSync(legacyPath, JSON.stringify({ disabledProviders: ['anthropic', 'minimax'] }));
-    const out = readDisabledProviders({ routerPath: bizarPath, legacyPath });
-    assert.deepEqual(out, [], 'explicit empty Bizar list must beat non-empty legacy');
+    const out = readDisabledProviders({ routerPath: bizarPath });
+    assert.deepEqual(out, []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

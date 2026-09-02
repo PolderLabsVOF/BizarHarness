@@ -793,15 +793,17 @@ export function classifyDispatchOutcome(result, error, startMs) {
 }
 
 /**
- * Build the augmented agent-call payload. Adds `model`,
- * `routingDecisionId`, `tier`, and `selectorReason` so the Agent
- * tool can route correctly and the audit trail can prove which
- * selector step fired.
+ * Build the augmented agent-call payload. The native Agent model field cannot
+ * carry arbitrary gateway IDs, so the selected Bizar ID is audit context and
+ * the guard permits inheritance only from an identical configured parent.
  */
 export function augmentPayload(opts, decision, agentName) {
   return {
     ...opts,
-    model: decision.modelId ?? undefined,
+    additionalContext: {
+      ...(opts.additionalContext && typeof opts.additionalContext === 'object' ? opts.additionalContext : {}),
+      bizarConfiguredModel: decision.modelId ?? null,
+    },
     routingDecisionId: decision.routingDecisionId,
     tier: decision.tier,
     selectorReason: decision.reason,

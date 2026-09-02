@@ -8,11 +8,12 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolveGlobalModelRouter } from '../../cli/config-paths.mjs';
 
-const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-export const DEFAULT_MODEL_ROUTER_PATH = resolve(ROOT, 'config', 'claude', 'model-router.json');
+/** Resolve the single operator-owned router at call time, never from a repo. */
+export function defaultModelRouterPath() {
+  return resolveGlobalModelRouter();
+}
 
 function fail(code, message) {
   const error = new Error(message);
@@ -39,9 +40,6 @@ function assertDynamicRegistry(registry) {
   if (!registry.tiers || typeof registry.tiers !== 'object' || Object.keys(registry.tiers).length === 0) {
     fail('MODEL_REGISTRY_INVALID', 'The model router must define at least one dynamic tier.');
   }
-  for (const [name, tier] of Object.entries(registry.tiers)) {
-    if (normalizeModelIds(tier?.models).length === 0) fail('MODEL_REGISTRY_INVALID', `Tier ${name} has no candidate models.`);
-  }
   const policies = registry.policies || {};
   if (policies.selectionOwner !== 'orchestrator') fail('MODEL_POLICY_INVALID', 'The orchestrator must own model selection.');
   if (!['configured-tier-fallback', 'inherit-session'].includes(policies.discoveryFailure)
@@ -54,7 +52,7 @@ function assertDynamicRegistry(registry) {
   return registry;
 }
 
-export function loadModelRouter(path = DEFAULT_MODEL_ROUTER_PATH) {
+export function loadModelRouter(path = defaultModelRouterPath()) {
   try {
     return assertDynamicRegistry(JSON.parse(readFileSync(path, 'utf8')));
   } catch (error) {
@@ -73,7 +71,16 @@ export function resolveDispatchModel({
   const definition = registry.tiers?.[chosenTier];
   if (!definition) fail('UNKNOWN_TIER', `Unknown model tier ${chosenTier}.`);
   const disabled = new Set(normalizeModelIds(registry.disabledProviders).map((prefix) => prefix.toLowerCase()));
-  const candidates = normalizeModelIds(definition.models)
+  const selected = normalizeModelIds(registry.userSelected?.models)
+    .filter((candidate) => ![...disabled].some((prefix) => candidate.toLowerCase().startsWith(prefix)));
+  const hints = registry.userSelected?.tierHints && typeof registry.userSelected.tierHints === 'object'
+    ? registry.userSelected.tierHints
+    : {};
+  // The operator's picker is authoritative. A matching tier hint narrows the
+  // pool; otherwise all enabled picks remain eligible rather than silently
+  // falling back to repository-supplied candidates.
+  const hinted = selected.filter((candidate) => hints[candidate] === chosenTier);
+  const candidates = (hinted.length > 0 ? hinted : selected.length > 0 ? selected : normalizeModelIds(definition.models))
     .filter((candidate) => ![...disabled].some((prefix) => candidate.toLowerCase().startsWith(prefix)));
   if (candidates.length === 0) fail('NO_ENABLED_TIER_MODEL', `Tier ${chosenTier} has no enabled candidate models.`);
   const available = availableModelIds == null ? null : new Set(normalizeModelIds(availableModelIds));

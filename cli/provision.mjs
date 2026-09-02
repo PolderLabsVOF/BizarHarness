@@ -31,7 +31,7 @@ import {
 import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveBizarHome } from './config-paths.mjs';
+import { resolveBizarHome, resolveGlobalModelRouter } from './config-paths.mjs';
 import {
   buildClaudeModelOverrides,
   configuredEnabledModels,
@@ -465,9 +465,20 @@ export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
   return { ok: true, message: `${copied} agent(s) synced (${skipped} kept)${sharedCopied ? `, ${sharedCopied} _shared/*.md` : ''}${tail}`, copied, skipped, pruned };
 }
 
-// The dynamic model router lives at config/claude/model-router.json and is
-// copied to user-level `$CLAUDE_CONFIG_DIR/model-router.json` so Mike and the
-// SDK can select tiers without a repository cwd dependency.
+// The dynamic model router is operator-owned state. It is created only under
+// Bizar's global config root; a repository can never supply a runtime model.
+
+export const EMPTY_GLOBAL_MODEL_ROUTER = {
+  $schema: 'https://bizar.dev/schema/model-router.v3.json',
+  version: '13.0.0',
+  endpoint: null,
+  disabledProviders: ['anthropic'],
+  userSelected: { models: [], lastUpdated: null, source: 'default-empty', tierHints: {} },
+  gateway: { required: false, endpoint: null, availabilityProbe: '/models', discoveryTimeoutMs: 3000, unavailableBehavior: 'configured-tier-fallback' },
+  tiers: Object.fromEntries(['premium', 'high', 'mid-design', 'default', 'mid', 'budget'].map((name) => [name, { models: [] }])),
+  roleDefaults: { mike: 'premium', paul: 'premium', carl: 'premium', karen: 'high', linda: 'high', ria: 'mid-design', greg: 'default', steve: 'default', oscar: 'mid', todd: 'mid', susan: 'mid', pam: 'budget', brenda: 'budget', janet: 'budget', kevin: 'budget', brad: 'mid-design' },
+  policies: { mainOrchestrator: 'mike', selectionOwner: 'orchestrator', dispatchModelOverride: 'required-configured-candidate', unknownAgent: 'configured-tier-fallback', discoveryFailure: 'configured-tier-fallback', unavailableModel: 'configured-tier-fallback', silentProviderSubstitution: false, retryModelAliases: false, snapshotDecisions: true, maxDispatchModelAttempts: 1 },
+};
 
 export function isBizarManagedModelRouter(value) {
   return Boolean(
@@ -479,16 +490,14 @@ export function isBizarManagedModelRouter(value) {
 }
 
 export async function syncModelRouter({ dryRun = false, force = false } = {}) {
-  const src = join(REPO_ROOT, 'config', 'claude', 'model-router.json');
-  const dest = join(CLAUDE_DIR, 'model-router.json');
-  if (!existsSync(src)) return { ok: true, message: `no model-router at ${src}` };
-  if (existsSync(dest) && !force && !isBizarManagedModelRouter(readJsonSafe(dest, null))) {
-    return { ok: true, message: `${dest} is user-managed — pass --force to overwrite`, preserved: true };
+  const dest = resolveGlobalModelRouter();
+  if (existsSync(dest)) {
+    return { ok: true, message: `${dest} is operator-managed — preserved`, preserved: true };
   }
-  if (dryRun) return { ok: true, message: `[dry-run] would copy ${src} → ${dest}` };
-  ensureDir(CLAUDE_DIR);
-  copyFileSync(src, dest);
-  return { ok: true, message: `model-router.json → ${dest}`, path: dest };
+  if (dryRun) return { ok: true, message: `[dry-run] would create global model router at ${dest}` };
+  ensureDir(dirname(dest));
+  writeFileSync(dest, `${JSON.stringify(EMPTY_GLOBAL_MODEL_ROUTER, null, 2)}\n`);
+  return { ok: true, message: `global model-router.json → ${dest}`, path: dest };
 }
 
 export async function syncSkillFiles({ dryRun = false, force = false } = {}) {
@@ -949,16 +958,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   // wins; otherwise the first enabled configured tier candidate is used.
   // This prevents Claude Code from falling through to an unconfigured
   // provider default when `userSelected.models` is intentionally empty.
-  // Dual-path read matches
-  // `cli/commands/models.mjs#readDisabledProviders` and
-  // `cli/commands/upgrade-defaults.mjs#readUserSelectedModels`.
-  const bizarRouterPath = process.env.BIZAR_MODEL_ROUTER_CONFIG?.trim()
-    || join(BIZAR_HOME(), 'config', 'claude', 'model-router.json');
-  const legacyRouterPath = join(CLAUDE_DIR, 'model-router.json');
+  // The Bizar global router is the sole source of model policy and picks.
+  const bizarRouterPath = resolveGlobalModelRouter();
   let installModel;
   let installContextTokens;
   let installModels = [];
-  for (const p of [bizarRouterPath, legacyRouterPath]) {
+  for (const p of [bizarRouterPath]) {
     if (!existsSync(p)) continue;
     const parsed = readJsonSafe(p, null);
     if (!parsed || typeof parsed !== 'object') continue;
@@ -966,8 +971,6 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     installModels = configuredEnabledModels(parsed);
     installContextTokens = installModel ? configuredModelContextTokens(parsed, installModel) : undefined;
     if (installModel) break;
-    // The Bizar path is authoritative even when it has no enabled candidates.
-    if (p === bizarRouterPath) break;
   }
   if (installModel) {
     bizarSettings.model = installModel;
@@ -1177,15 +1180,15 @@ export async function runProvision(opts = {}) {
   await runStep('Installing git hooks', () => installGitHooks({ dryRun }));
   await runStep('Building SDK',       () => buildSdk({ dryRun }));
 
+  section('Ensuring global model-router.json');
+  const routerStep = await syncModelRouter({ dryRun, force });
+  if (routerStep.ok) logOk(routerStep.message); else logErr(routerStep.message);
+  stepResults.push({ label: 'model-router', ...routerStep });
+
   section('Writing settings.json');
   const settingsStep = writeClaudeSettings({ dryRun, force });
   if (settingsStep.ok) logOk(settingsStep.message); else logErr(settingsStep.message);
   stepResults.push({ label: 'settings.json', ...settingsStep });
-
-  section('Syncing model-router.json');
-  const routerStep = await syncModelRouter({ dryRun, force });
-  if (routerStep.ok) logOk(routerStep.message); else logErr(routerStep.message);
-  stepResults.push({ label: 'model-router', ...routerStep });
 
   section('MCP server (bizar)');
   const mcpStep = setupMcpServer({ dryRun });
@@ -1221,7 +1224,7 @@ export async function runProvision(opts = {}) {
   // back to a clear hint to run `bizar models`.
   let premiumPick = null;
   try {
-    const routerPath = join(BIZAR_HOME(), 'config', 'claude', 'model-router.json');
+    const routerPath = resolveGlobalModelRouter();
     const router = JSON.parse(readFileSync(routerPath, 'utf8'));
     const picks = Array.isArray(router?.userSelected?.tierHints?.premium)
       ? router.userSelected.tierHints.premium.filter((id) => typeof id === 'string' && id)

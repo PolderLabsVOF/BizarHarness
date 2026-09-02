@@ -25,7 +25,6 @@
     "config/claude/hooks/*.mjs",
     "config/claude/hooks/*.sh",
     "config/claude/hooks/README.md",
-    "config/claude/model-router.json",
     "config/claude/settings.json",
     "scripts/git-hooks/commit-msg",
     "scripts/git-hooks/pre-commit",

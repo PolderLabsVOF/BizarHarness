@@ -43,7 +43,8 @@ Every plan you produce MUST follow this shape. The user (or Mike, or any downstr
 
 ## Subagent Model Selection
 
-When you delegate implementation, you recommend the model tier. Read `.claude/model-router.json` to confirm.
+When you delegate implementation, you recommend the model tier. Read the
+operator-global Bizar router (`$BIZAR_HOME/config/claude/model-router.json`) to confirm.
 
 | Task shape | Route to | Tier |
 |---|---|---|

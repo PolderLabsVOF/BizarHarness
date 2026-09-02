@@ -181,9 +181,10 @@ custom agent carries fixed `model:` frontmatter. Before each dispatch Mike
 selects the cheapest sufficient user-selected model from task risk and
 complexity. **Model selection is user-driven, not auto-discovered**: the
 user explicitly enables the IDs they trust via `bizar models`, which writes
-them to `config/claude/model-router.json#userSelected`. The orchestrator
+them to the global `$BIZAR_HOME/config/claude/model-router.json#userSelected`
+file. The repository is never a model-policy source. The orchestrator
 dispatches ONLY with IDs in that block; if the block is missing or empty,
-the Agent call omits `model` and inherits the active session model. The
+the dispatch fails closed rather than inheriting an unconfigured session model. The
 picker is the discovery surface — live gateway discovery is not required to
 validate user picks (the Agent-model-guard enforces that and bypasses the
 live probe for IDs in `userSelected`). A dispatch is attempted once; Bizar

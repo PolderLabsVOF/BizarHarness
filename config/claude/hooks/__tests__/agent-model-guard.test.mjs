@@ -1,12 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { loadModelRouter } from '../../../../config/agents/model-assignment.mjs';
 import { guardAgentModel } from '../agent-model-guard.mjs';
 import { selectEventChain } from '../../../../cli/commands/hook.mjs';
 
 function decision(output) {
   return output.hookSpecificOutput?.permissionDecision;
+}
+
+function configuredRegistry() {
+  return {
+    policies: { selectionOwner: 'orchestrator', discoveryFailure: 'configured-tier-fallback', unavailableModel: 'configured-tier-fallback', retryModelAliases: false, maxDispatchModelAttempts: 1 },
+    tiers: { mid: { models: ['test/tier-model'] } },
+    userSelected: { models: [] },
+  };
 }
 
 const input = {
@@ -21,7 +28,7 @@ test('Agent model guard denies omitted and inherited models', async () => {
 });
 
 test('Agent model guard allows one configured live tier candidate', async () => {
-  const registry = loadModelRouter();
+  const registry = configuredRegistry();
   const model = registry.tiers.mid.models[0];
   assert.deepEqual(await guardAgentModel({
     ...input,
@@ -30,7 +37,7 @@ test('Agent model guard allows one configured live tier candidate', async () => 
 });
 
 test('Agent model guard rejects policy-forbidden and unavailable overrides without retrying', async () => {
-  const registry = loadModelRouter();
+  const registry = configuredRegistry();
   const denied = await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model: 'unknown/provider-model' },
@@ -121,6 +128,92 @@ test('Agent model guard rejects a model that is in neither userSelected nor any 
 
 test('portable hook dispatcher retains the Agent model validator', () => {
   assert.ok(selectEventChain('pre-tool-use', JSON.stringify({ tool_name: 'Agent' })).includes('agent-model-guard'));
+});
+
+// ─── F-201 transport compatibility (native Agent inheritance) ────────────────
+
+test('Agent model guard allows inherit when bizarConfiguredModel equals global parent model and is a user pick', async () => {
+  // The native Claude Code Agent tool rejects arbitrary gateway IDs in its
+  // enum-limited `model` field. Workflows therefore omit `model` (or set it
+  // to 'inherit') and carry the Bizar selection under
+  // additionalContext.bizarConfiguredModel. The guard allows this ONLY when
+  // the configured Bizar ID matches the actual global Claude parent model
+  // AND is in the user-selected pool.
+  const registry = {
+    tiers: { mid: { models: ['never/used'] } },
+    userSelected: { models: ['configured-parent-model'] },
+  };
+  assert.deepEqual(await guardAgentModel({
+    ...input,
+    tool_input: {
+      ...input.tool_input,
+      // model omitted — native Agent inherits from session
+      additionalContext: { bizarConfiguredModel: 'configured-parent-model' },
+    },
+  }, { registry, parentModel: 'configured-parent-model' }), {});
+});
+
+test('Agent model guard still denies inherit when additionalContext.bizarConfiguredModel is missing', async () => {
+  const registry = {
+    tiers: { mid: { models: ['x'] } },
+    userSelected: { models: ['configured-parent-model'] },
+  };
+  const blocked = await guardAgentModel({
+    ...input,
+    tool_input: { ...input.tool_input, model: 'inherit' },
+  }, { registry, parentModel: 'configured-parent-model' });
+  assert.equal(decision(blocked), 'deny');
+});
+
+test('Agent model guard denies inherit when configured ID differs from the global parent model', async () => {
+  const registry = {
+    tiers: { mid: { models: ['x'] } },
+    userSelected: { models: ['bizar-pick', 'configured-parent-model'] },
+  };
+  const blocked = await guardAgentModel({
+    ...input,
+    tool_input: {
+      ...input.tool_input,
+      additionalContext: { bizarConfiguredModel: 'bizar-pick' },
+    },
+  }, { registry, parentModel: 'configured-parent-model' });
+  assert.equal(decision(blocked), 'deny');
+});
+
+test('Agent model guard denies inherit when configured ID is not a user pick', async () => {
+  // Operator-selected parent matches the Bizar pick, but the Bizar pick
+  // is a tier-only candidate that was never promoted to userSelected.
+  // Fail closed so an unconfigured tier model cannot dispatch.
+  const registry = {
+    tiers: { mid: { models: ['tier-only'] } },
+    userSelected: { models: [] },
+  };
+  const blocked = await guardAgentModel({
+    ...input,
+    tool_input: {
+      ...input.tool_input,
+      additionalContext: { bizarConfiguredModel: 'tier-only' },
+    },
+  }, { registry, parentModel: 'tier-only' });
+  assert.equal(decision(blocked), 'deny');
+});
+
+test('Agent model guard fails closed when global settings.json cannot be read and no override is supplied', async () => {
+  const registry = {
+    tiers: { mid: { models: ['x'] } },
+    userSelected: { models: ['configured-parent-model'] },
+  };
+  // No `parentModel` override and no readable settings.json on disk — the
+  // guard must deny because it cannot prove the inherited model is a
+  // Bizar-selected ID.
+  const blocked = await guardAgentModel({
+    ...input,
+    tool_input: {
+      ...input.tool_input,
+      additionalContext: { bizarConfiguredModel: 'configured-parent-model' },
+    },
+  }, { registry, settingsPath: '/nonexistent/settings.json' });
+  assert.equal(decision(blocked), 'deny');
 });
 
 // ─── F-185 / IMP-019 health-aware failover contract ──────────────────────

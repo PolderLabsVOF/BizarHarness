@@ -162,7 +162,7 @@ Phase 4 dynamic disable-providers mechanism. Adds an operator-controlled `disabl
 - **`cli/commands/models.mjs`** — new exports:
   - `normalizeDisabledPrefix(raw)` — trim + lowercase; case-insensitive input normalization.
   - `extractDisabledProviders(parsed)` — safe reader off a parsed router block; tolerates missing/non-array/non-string entries.
-  - `readDisabledProviders({ routerPath, legacyPath })` — dual-path reader. Bizar path (`~/.config/bizar/config/claude/model-router.json`) wins when present and the `disabledProviders` key exists; empty `[]` on the Bizar path explicitly beats a non-empty legacy mirror. Falls back to the legacy `~/.claude/model-router.json` only when the Bizar path is absent or unreadable.
+  - `readDisabledProviders({ routerPath })` — global-only reader. The Bizar path (`~/.config/bizar/config/claude/model-router.json`) is the sole source; an explicit empty `[]` is a valid operator policy.
   - `filterCandidatesByDisabledProviders(candidates, disabledProviders)` — case-sensitive prefix filter; returns `{ kept, stripped }` so the CLI can surface what was dropped without crashing on the disable list.
   - `disabledProviders` parameter on `applyModels`, `applyModelOverrides`, `applyModelPicker`, `partitionStalePicks`, `applyRefresh`, `currentSelection` — optional override for deterministic tests; production callers omit it and read from disk.
 - **`config/claude/hooks/sessionstart-model-sync.mjs`** — inline dual-path reader + `filterDisabled` helper. Strip disabled-provider ids from `settings.modelPicker.options` AND from `settings.model` (replace with first surviving pick) so Claude Code's `/model` picker never surfaces a disabled option.
@@ -170,7 +170,7 @@ Phase 4 dynamic disable-providers mechanism. Adds an operator-controlled `disabl
 - **`cli/commands/model.mjs`** — replaced hardcoded `PROVIDER_GROUPS` with `classifyKind` from `models.mjs`. Provider group names are derived from the canonical family classifier; no compiled-in family allowlist.
 - **`cli/provision.mjs`** — install-banner premium model now derives from `userSelected.tierHints.premium[0]`; `settings.json#model` and `settings.json#modelOverrides` derive from `userSelected.models[0]` (omitted when empty). Install never pins a literal model id.
 - **`cli/commands/upgrade-defaults.mjs`** — replaces hardcoded `model: 'claude/minimax/MiniMax-M3'` with derivation from `userSelected.models[0]`; omits the key when the picker has no entries.
-- **`config/claude/model-router.json`** — `disabledProviders: ["anthropic"]` ships as the default example; comment explains the case-sensitive prefix contract.
+- **Global model router** — `disabledProviders: ["anthropic"]` is created in the operator's Bizar config; the repository ships no runtime model router.
 - **`.claude/agents/office-manager.md`** — JSDoc example model ids (`claude-minimax/MiniMax-M3`, `claude-qwen/qwen3.8-max`) replaced with `<pick-from-default-tier>` / `<pick-from-premium-tier>` placeholders so the documentation is decoupled from any specific provider.
 - **`cli/__tests__/models-disabled-providers.test.mjs`** (new, 4 cases) — `normalizeDisabledPrefix` / `extractDisabledProviders` units; dual-path empty-array precedence; `filterCandidatesByDisabledProviders` kept/stripped split.
 - **Regression coverage extended** (12 new tests across 6 files):

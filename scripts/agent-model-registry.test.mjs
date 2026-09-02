@@ -5,14 +5,24 @@ import { describe, it } from 'node:test';
 
 import {
   createRunAssignmentSnapshot,
-  loadModelRouter,
   resolveDispatchModel,
   verifyRunAssignmentSnapshot,
 } from '../config/agents/model-assignment.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const AGENTS_DIR = join(ROOT, 'config', 'claude', 'agents');
-const ROUTER_PATH = join(ROOT, 'config', 'claude', 'model-router.json');
+function testRegistry() {
+  return {
+    version: 'test',
+    policies: { selectionOwner: 'orchestrator', discoveryFailure: 'configured-tier-fallback', unavailableModel: 'configured-tier-fallback', retryModelAliases: false, maxDispatchModelAttempts: 1 },
+    userSelected: {
+      models: ['test/premium', 'test/mid'],
+      tierHints: { 'test/premium': 'premium', 'test/mid': 'mid' },
+    },
+    tiers: { premium: { models: [] }, mid: { models: [] }, default: { models: [] } },
+    roleDefaults: { mike: 'premium', todd: 'mid', greg: 'default' },
+  };
+}
 
 function readAgents() {
   return readdirSync(AGENTS_DIR)
@@ -28,7 +38,7 @@ describe('dynamic model router', () => {
   });
 
   it('defines orchestrator-owned dynamic tiers and bounded failure behavior', () => {
-    const registry = loadModelRouter(ROUTER_PATH);
+    const registry = testRegistry();
     assert.equal(registry.policies.selectionOwner, 'orchestrator');
     assert.equal(registry.policies.discoveryFailure, 'configured-tier-fallback');
     assert.equal(registry.policies.unavailableModel, 'configured-tier-fallback');
@@ -38,24 +48,23 @@ describe('dynamic model router', () => {
   });
 
   it('selects the first live candidate from the chosen tier', () => {
-    const registry = loadModelRouter(ROUTER_PATH);
-    const second = registry.tiers.mid.models[1];
-    const decision = resolveDispatchModel({ agent: 'todd', availableModelIds: [second], registry });
+    const registry = testRegistry();
+    const decision = resolveDispatchModel({ agent: 'todd', availableModelIds: ['test/mid'], registry });
     assert.equal(decision.tier, 'mid');
-    assert.equal(decision.model, second);
+    assert.equal(decision.model, 'test/mid');
     assert.equal(decision.inheritSession, false);
   });
 
   it('retains an explicit configured model when discovery is unavailable', () => {
-    const registry = loadModelRouter(ROUTER_PATH);
+    const registry = testRegistry();
     assert.equal(resolveDispatchModel({ agent: 'greg', registry }).inheritSession, false);
     assert.equal(resolveDispatchModel({ agent: 'greg', availableModelIds: [], registry }).inheritSession, false);
     assert.equal(resolveDispatchModel({ agent: 'unknown', availableModelIds: [], registry }).tier, 'default');
   });
 
   it('snapshots only requested dispatch decisions and protects integrity', () => {
-    const registry = loadModelRouter(ROUTER_PATH);
-    const availableModelIds = Object.values(registry.tiers).flatMap((tier) => tier.models);
+    const registry = testRegistry();
+    const availableModelIds = registry.userSelected.models;
     const snapshot = createRunAssignmentSnapshot({
       runId: 'run-123',
       agentNames: ['mike', 'todd'],

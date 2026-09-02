@@ -42,13 +42,11 @@ const CLAUDE_DIR = resolveClaudeConfigDir();
 const SETTINGS_PATH = join(CLAUDE_DIR, 'settings.json');
 // 10.22.0 / Phase 4 spirit-of-constraint: the install model id comes
 // from the operator's `userSelected.models[0]`, not a hardcoded literal.
-// Dual-path read matches `cli/commands/models.mjs#readDisabledProviders`:
-// the Bizar path wins when present; the Claude Code mirror is fallback.
+// The Bizar global router is the sole model-policy source.
 const BIZAR_ROUTER_PATH = resolveGlobalModelRouter();
-const LEGACY_ROUTER_PATH = join(CLAUDE_DIR, 'model-router.json');
 
 function readConfiguredModels() {
-  for (const path of [BIZAR_ROUTER_PATH, LEGACY_ROUTER_PATH]) {
+  for (const path of [BIZAR_ROUTER_PATH]) {
     if (!existsSync(path)) continue;
     try {
       const parsed = JSON.parse(readFileSync(path, 'utf8'));
@@ -58,8 +56,7 @@ function readConfiguredModels() {
       if (list.length > 0) return list;
       const fallback = configuredFallbackModels(parsed);
       if (fallback.length > 0) return fallback;
-      // Bizar path exists with an explicit empty `userSelected.models` —
-      // honour that intent (do NOT fall through to the legacy mirror).
+      // An explicit empty selection is an intentional global policy.
       if (path === BIZAR_ROUTER_PATH && parsed && typeof parsed === 'object'
           && Array.isArray(parsed.userSelected?.models)) {
         return [];

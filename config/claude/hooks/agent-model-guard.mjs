@@ -44,9 +44,11 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
+import { resolveClaudeConfigDir } from '../../../cli/config-paths.mjs';
 
 function deny(reason) {
   return {
@@ -152,6 +154,17 @@ function readFailoverBlock(toolInput) {
   };
 }
 
+function readConfiguredParentModel(options = {}) {
+  if (typeof options.parentModel === 'string') return options.parentModel.trim();
+  const settingsPath = options.settingsPath || join(resolveClaudeConfigDir(), 'settings.json');
+  try {
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    return typeof settings?.model === 'string' ? settings.model.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 export async function guardAgentModel(input, options = {}) {
   if (!input || typeof input !== 'object') return {};
   if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Agent') return {};
@@ -159,10 +172,6 @@ export async function guardAgentModel(input, options = {}) {
   const requested = typeof toolInput.model === 'string' ? toolInput.model.trim() : '';
   const failoverBlock = readFailoverBlock(toolInput);
   const hasFailoverContract = Boolean(failoverBlock.routingDecisionId) && Boolean(failoverBlock.fallback);
-
-  if (!requested || requested === 'inherit') {
-    return deny('Bizar Agent dispatch blocked: every Agent call requires an explicit enabled model from `bizar models`; session/provider inheritance is prohibited.');
-  }
 
   let registry;
   try {
@@ -180,6 +189,20 @@ export async function guardAgentModel(input, options = {}) {
 
   const allowed = configuredModels(registry);
   const userPicks = userSelectedModels(registry);
+
+  // The native Agent tool rejects arbitrary gateway IDs in its `model` enum.
+  // Inheritance is safe only when the auditable Bizar selection equals the
+  // actual global Claude parent model and is a selected, enabled user pick.
+  if (!requested || requested === 'inherit') {
+    const configured = typeof toolInput.additionalContext?.bizarConfiguredModel === 'string'
+      ? toolInput.additionalContext.bizarConfiguredModel.trim()
+      : '';
+    const parent = readConfiguredParentModel(options);
+    if (!configured || configured !== parent || !userPicks.has(configured)) {
+      return deny('Bizar Agent dispatch blocked: native Agent inheritance requires the global Claude parent model to exactly match an enabled Bizar user selection. Run `bizar models` and restart Claude Code.');
+    }
+    return {};
+  }
 
   // F-185 contract: when the orchestrator passes both `routingDecisionId`
   // and `fallback`, validate the fallback against the userSelected pool

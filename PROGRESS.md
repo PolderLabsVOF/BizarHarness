@@ -4,6 +4,28 @@
 
 ## In Progress — F-201 adaptive orchestration and model isolation (2026-09-02)
 
+Global-router correction in progress: the model router is an operator-owned,
+user-global Bizar setting only. Runtime lookup, installation, and provider
+opt-outs must resolve exclusively through `BIZAR_MODEL_ROUTER_CONFIG` or
+`$BIZAR_HOME/config/claude/model-router.json`; neither a repository router nor
+a `~/.claude` mirror may participate in selection or fallback.
+
+Evidence: deleted `config/claude/model-router.json`; the installer now creates
+the global router before writing Claude settings and never overwrites it,
+including under `--force`. Model assignment, the Agent guard, picker/provider
+filtering, settings generation, SessionStart synchronization, and workflow
+dispatch use only the global resolver. Focused suites passed 105/105; `make
+check`, `make verify-repo-structure`, `make check-arch`, and `make
+verify-removed-surfaces` pass. The known aggregate Node 24 runner issue still
+prevents claiming the full `make test` / `make e2e` gates here.
+
+Transport compatibility correction in progress: Claude Code's native Agent
+tool rejects raw gateway IDs in its enum-limited `model` field. Workflows must
+therefore omit that incompatible field and carry the Bizar-selected ID as
+auditable context. The Agent guard may permit this only after proving that the
+current global Claude parent model equals an enabled, non-disabled Bizar pick;
+otherwise it fails closed.
+
 Remove the hard native-workflow tool gate that deadlocked ordinary project
 orientation. Mike must first gather bounded read-only context, ask one concise
 clarification checkpoint, then choose the lightest fitting coordination mode:

@@ -716,9 +716,8 @@ export function classifyKind(modelId) {
 // in-code hardcoded list — adding or removing a blocked provider is a
 // single JSON edit.
 //
-// Dual-path read: the Bizar path (`~/.config/bizar/config/claude/model-router.json`)
-// WINS when both exist, including an explicit `[]` (operators may pin
-// "no providers disabled" without deleting the legacy mirror). Whitespace
+// Global-only read: the Bizar path (`~/.config/bizar/config/claude/model-router.json`)
+// is the sole operator policy source. Whitespace
 // trim + lowercase normalization happens at read time so operators may
 // write `"  Anthropic  "` in JSON and still match `anthropic/...` model
 // ids. The comparison itself is a case-sensitive prefix filter against
@@ -758,44 +757,28 @@ function extractDisabledProviders(router) {
 
 /**
  * Read the operator's `disabledProviders` list from the model-router
- * config. Dual-path: the Bizar path wins when present (even with an
- * explicit empty array); the legacy `~/.claude/model-router.json` mirror
- * is the fallback. Both paths are normalized (trim + lowercase) at read.
+ * config. The Bizar global path is the only source. It is normalized (trim +
+ * lowercase) at read.
  *
  * Pure function over the filesystem; returns an empty array when neither
- * file exists, when both files lack the key, or when both reads fail.
+ * file exists, lacks the key, or cannot be read.
  *
- * @param {{ routerPath?: string, legacyPath?: string }} [opts]
+ * @param {{ routerPath?: string }} [opts]
  *   - `routerPath` defaults to the Bizar home path
  *     (`~/.config/bizar/config/claude/model-router.json`).
- *   - `legacyPath` defaults to the Claude Code mirror
- *     (`~/.claude/model-router.json`).
  * @returns {string[]} normalized disabled-provider prefixes
  */
-export function readDisabledProviders({ routerPath, legacyPath } = {}) {
+export function readDisabledProviders({ routerPath } = {}) {
   const bizarPath = routerPath || resolveGlobalModelRouter();
-  const fallPath = legacyPath || join(resolveClaudeConfigDir(), 'model-router.json');
   if (existsSync(bizarPath)) {
     try {
       const parsed = JSON.parse(readFileSync(bizarPath, 'utf8'));
       const extracted = extractDisabledProviders(parsed);
-      // Bizar path exists — its `disabledProviders` is authoritative even
-      // when explicitly `[]` (operators may pin "no providers disabled"
-      // without deleting the legacy mirror). Missing key still falls back.
+      // An explicit empty list is a valid global opt-out policy.
       if (Array.isArray(parsed && typeof parsed === 'object' ? parsed.disabledProviders : undefined)) {
         return extracted;
       }
-    } catch {
-      // Corrupt Bizar file — fall through to the legacy mirror.
-    }
-  }
-  if (existsSync(fallPath)) {
-    try {
-      const parsed = JSON.parse(readFileSync(fallPath, 'utf8'));
-      return extractDisabledProviders(parsed);
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   }
   return [];
 }

@@ -61,16 +61,12 @@ function readRouterPath() {
 
 /**
  * 10.22.0 / Phase 4: read the operator's `disabledProviders: string[]`
- * list with the same dual-path contract as `cli/commands/models.mjs`.
- * The Bizar path (`~/.config/bizar/config/claude/model-router.json`) wins
- * when both exist (even with explicit `[]`); the legacy
- * `~/.claude/model-router.json` mirror is the fallback. Whitespace +
- * lowercase normalization happens here. Returns `[]` on any failure —
+ * list from the sole global Bizar router. Whitespace + lowercase
+ * normalization happens here. Returns `[]` on any failure —
  * the hook is advisory and must NEVER block session start.
  */
 function readDisabledProviders() {
   const bizarPath = readRouterPath();
-  const legacyPath = join(resolveClaudeConfigDir(), 'model-router.json');
   const extract = (parsed) => {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     if (!Array.isArray(parsed.disabledProviders)) return null;
@@ -85,17 +81,11 @@ function readDisabledProviders() {
   };
   if (existsSync(bizarPath)) {
     const parsed = readJsonIfObject(bizarPath);
-    // Bizar path exists — its `disabledProviders` is authoritative even
-    // when explicit `[]`. Missing key still falls back to the legacy.
+    // An explicit empty global list is a valid operator policy.
     if (parsed && Array.isArray(parsed.disabledProviders)) {
       const extracted = extract(parsed);
       if (extracted !== null) return extracted;
     }
-  }
-  const legacy = readJsonIfObject(legacyPath);
-  if (legacy && Array.isArray(legacy.disabledProviders)) {
-    const extracted = extract(legacy);
-    if (extracted !== null) return extracted;
   }
   return [];
 }
@@ -193,8 +183,7 @@ function syncOnce() {
     : {};
   // 10.22.0 / Phase 4: filter the operator's disabled-provider ids out
   // of the SessionStart re-apply so Claude Code's `/model` picker never
-  // surfaces e.g. `anthropic/*` after a session restart. Dual-path read
-  // matches `cli/commands/models.mjs#readDisabledProviders`.
+  // surfaces e.g. `anthropic/*` after a session restart.
   const disabled = readDisabledProviders();
   const selectedIds = filterDisabled(
     models.filter((id) => typeof id === 'string' && id.trim()),
