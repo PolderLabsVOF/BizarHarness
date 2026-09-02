@@ -23,6 +23,15 @@ hygiene gates. npm authentication is valid as `drb0rk`; registry root and SDK
 remain at 10.23.6 and remote tag `v10.23.7` is absent. Next: staged review,
 release commit and tag, push, ordered publication, registry install, and smoke.
 
+Publication is complete. Release commit `d41d539` and annotated tag `v10.23.7`
+are on `origin`; npm reports both `@polderlabs/bizar-sdk` and
+`@polderlabs/bizar` at 10.23.7. The exact public root package was installed
+globally, `bizar --version` reports 10.23.7, and its installed `bizar models`
+help exposes direct fuzzy type-to-search, `/query` line-mode filtering,
+Backspace/Escape editing, and Ctrl+A/Ctrl+N bulk selection. npm emitted only
+the upstream `prebuild-install@7.1.3` deprecation notice during installation;
+the Bizar CLI smoke completed successfully.
+
 ## Complete — F-197 searchable model picker (2026-09-02)
 
 The interactive `bizar models` picker previously required scrolling or numeric
