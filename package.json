@@ -35,11 +35,11 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build:sdk": "node scripts/build-sdk.mjs",
+    "build:sdk": "node scripts/with-sdk-dist-lock.mjs node scripts/build-sdk.mjs",
     "test:sdk": "vitest run --root packages/sdk",
     "test:sdk:watch": "vitest --root packages/sdk",
     "test:node": "node scripts/run-node-tests.mjs",
-    "test": "npm run build:sdk && npm run test:sdk && npm run test:node",
+    "test": "node scripts/with-sdk-dist-lock.mjs node scripts/run-test-with-sdk-build.mjs",
     "build": "npm run build:sdk",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build",

@@ -1397,11 +1397,37 @@
       "passed": "2026-09-02",
       "commit": "1fd3cbe",
       "evidence": "Published release commit 1fd3cbe and annotated v10.23.8 tag to origin; npm root and SDK both report 10.23.8. Dry packs contain 376 root and 196 SDK runtime files and exclude tests/operator state. Gateway discovery focused tests pass 89/89; SDK 513/513, retained Node/harness 1085/1085, E2E 13/13, clean-state 5/5, TypeScript, architecture, structure, removed-surface, version, WIP, and diff gates pass. Clean registry install and doctor pass 13/13. Installed SessionStart preserves cx/gpt-5.6-luna with discovery=1, 13 picker IDs, and 16 custom alias overrides; the final generation probe reached the configured path but exceeded its 90-second smoke timeout without an error payload."
+    },
+    {
+      "id": "F-200",
+      "title": "SDK distribution-build serialization",
+      "description": "Prevent concurrent verification targets from deleting packages/sdk/dist while another target consumes it.",
+      "behavior": "Build-owning test and E2E commands coordinate through a repository-local, stale-safe lock and wait rather than exposing partial SDK output.",
+      "verification": "targeted lock regression test; concurrent make test + make e2e smoke; make test; make e2e; make clean-check; make check",
+      "state": "passing",
+      "wip_holder": null,
+      "wip": 0,
+      "category": "harness",
+      "layer": "verification",
+      "owner": "@mike",
+      "scope": [
+        "scripts/with-sdk-dist-lock.mjs",
+        "scripts/run-e2e-with-sdk-build.mjs",
+        "scripts/__tests__/sdk-dist-lock.test.mjs",
+        "package.json",
+        "Makefile",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "created": "2026-09-02",
+      "passed": "2026-09-02",
+      "commit": "current-change",
+      "evidence": "A stale-safe checkout-local SDK-dist lock serializes build-and-consume lifecycles. Targeted lock coverage passes; the former concurrent make test + make e2e failure mode passes with SDK 513/513, retained Node/harness 1086/1086, and E2E 13/13. Clean-state 5/5, TypeScript, architecture, removed-surface, and repository-structure gates pass."
     }
   ],
   "vcr": {
-    "passing": 79,
-    "activated": 79,
+    "passing": 80,
+    "activated": 80,
     "ratio": 1
   }
 }

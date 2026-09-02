@@ -2,6 +2,41 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-200 SDK distribution-build serialization (2026-09-02)
+
+The confirmed concurrent-verification race is fixed. Build-owning commands now
+hold a repository-local `node_modules/.cache` SDK-dist lock through their full
+build-and-consume lifecycle; nested commands inherit the lock safely, competing
+commands wait, stale PID state is recovered through an atomic rename, and lock files never enter Git or
+the package artifact. `npm test` and `make e2e` use small locked runners so a
+consumer cannot observe `packages/sdk/dist` between its wipe and rebuild.
+
+Regression coverage exercises wait behavior and stale-lock recovery. The exact
+former failure mode (`make test` and `make e2e` launched concurrently) now
+passes with SDK 513/513, retained Node/harness 1086/1086, and E2E 13/13.
+Fresh clean-state 5/5, TypeScript, architecture, removed-surface,
+repository-structure, and diff-hygiene gates pass. Test-generated
+`.test-bizar-home/` remains removable runtime state; existing operator files
+are untouched.
+
+## Complete — verification follow-up (2026-09-02)
+
+The verification campaign found one reproducible evidence-collection trap, not
+a product regression: `make test` and `make e2e` rebuild
+`packages/sdk/dist`, while `make clean-check` invokes `make test` and its
+build begins by deleting that same directory. Running those targets concurrently
+can therefore produce false `ERR_MODULE_NOT_FOUND` / missing-dist failures.
+Release and CI evidence must run build-owning targets serially; read-only gates
+may still run concurrently. A targeted rerun of the seemingly failed
+worker-suggest test passed 27/27, confirming the earlier signal was contention.
+
+Fresh serial evidence: `make test` (SDK 513/513 plus retained Node/harness
+suite), `make e2e` 13/13, `make clean-check` 5/5, `make check-arch`,
+`make verify-removed-surfaces`, `make verify-repo-structure`, `make vcr`
+(79/79 = 1.000), and `make check` all pass. The test-created
+`.test-bizar-home/` was moved to the desktop trash; pre-existing untracked
+operator files remain untouched.
+
 ## Complete — 10.23.8 native-workflow release (2026-09-02)
 
 The user authorized publication of F-198. npm authentication is valid as

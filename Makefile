@@ -37,8 +37,7 @@ test:  ## Run all unit tests (sdk + cli)
 
 e2e:  ## End-to-end tests (SDK + Claude Code integration)
 	@echo "▶ E2E: SDK load + tool registration..."
-	@npm run build:sdk
-	@node scripts/bh-full-e2e.mjs
+	@node scripts/with-sdk-dist-lock.mjs node scripts/run-e2e-with-sdk-build.mjs
 
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
 vcr:  ## Verify Code Reality (VCR) check via feature_list.json
