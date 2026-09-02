@@ -31,6 +31,9 @@ export function showInstallHelp() {
     bizar install --deep                Alias for --force (clean-install semantics)
     bizar install --yes                 Non-interactive install (CI/script friendly)
     bizar install --non-interactive     Alias for --yes
+    bizar install --tools=claude,codex  Choose which coding tools to install (F-202).
+                                        Comma-separated, deduped; unknown ids skipped.
+    bizar install --all-tools           Install every supported coding tool (F-202)
     bizar install --help                Show this help
 
   Description:
@@ -84,6 +87,8 @@ export function showUpdateHelp() {
                                         re-sync everything from the repo
     bizar update --yes | -y            Assume yes for any non-destructive prompt
     bizar update --non-interactive     Alias for --yes
+    bizar update --tools=claude,codex  Same tool selection flags as install (F-202)
+    bizar update --all-tools           Install every supported coding tool (F-202)
     bizar update --help                Show this help
 
   Behavior (v10.19.6+):
@@ -163,8 +168,8 @@ export async function install(args, isHelpRequest) {
   // parser for the installer family. Reusing it keeps install and
   // update in lockstep on flag semantics. --deep is parsed as an
   // alias for --force (clean-install semantics, F-183).
-  const { mode, dryRun, force, yes } = parseFlags(args);
-  const result = await runInstaller({ mode, dryRun, force, yes });
+  const { mode, dryRun, force, yes, tools } = parseFlags(args);
+  const result = await runInstaller({ mode, dryRun, force, yes, tools });
   // F-183 — print a one-line summary of the wipe scope so operators
   // can see at a glance what changed without re-reading the verbose
   // step list.
@@ -224,8 +229,8 @@ export async function runUpdateWithFlags({
   parseFlags: parseFlagsDep = parseFlags,
   runRepair: runRepairDep = runRepair,
 } = {}) {
-  const { mode, dryRun, force, yes } = parseFlagsDep(args);
-  const result = await runInstallerDep({ mode, dryRun, force, yes });
+  const { mode, dryRun, force, yes, tools } = parseFlagsDep(args);
+  const result = await runInstallerDep({ mode, dryRun, force, yes, tools });
   await runPostInstallerRepair({ runRepair: runRepairDep });
   if (!result?.ok) process.exit(1);
   return result;

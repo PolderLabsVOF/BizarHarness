@@ -1142,12 +1142,18 @@ export function detectStateJson() {
  * Every step is idempotent.
  */
 export async function runProvision(opts = {}) {
-  const { mode = 'install', dryRun = false, force = false } = opts;
+  const { mode = 'install', dryRun = false, force = false, tools = null } = opts;
   const effectiveMode = mode === 'update' ? 'update' : 'install';
+  // F-202 — resolve the effective tool selection. Explicit `tools` wins
+  // over the env var, which wins over the documented default. On update
+  // runs the env var is always present (set by the install that started
+  // this lifecycle), so an update naturally re-mirrors every tool the
+  // operator originally chose without re-asking.
+  const effectiveTools = resolveEffectiveTools(tools);
 
   console.log('');
-  console.log(chalk.bold.cyan(`  ⚡ BizarHarness Provisioner v${BIZAR_VERSION} (Claude Code)`));
-  console.log(chalk.dim(`     Mode: ${effectiveMode}${force ? ' (force)' : ''}${dryRun ? ' (dry-run)' : ''}`));
+  console.log(chalk.bold.cyan(`  ⚡ BizarHarness Provisioner v${BIZAR_VERSION} (${formatToolsLabel(effectiveTools)})`));
+  console.log(chalk.dim(`     Mode: ${effectiveMode}${force ? ' (force)' : ''}${dryRun ? ' (dry-run)' : ''} · tools: ${effectiveTools.join(', ')}`));
   console.log('');
 
   const state = detectState();
@@ -1536,8 +1542,124 @@ export function clearSavedEnv() {
 
 // ─── CLI entry ──────────────────────────────────────────────────────────────
 
+// F-202 — known coding tools and the env var used to carry the selection
+// through to child processes (install.sh, etc.).
+const VALID_TOOLS = new Set(['claude', 'codex']);
+const TOOLS_ENV = 'BIZAR_INSTALL_TOOLS';
+
+function dedupeTools(list) {
+  const seen = new Set();
+  const out = [];
+  for (const t of list) {
+    if (!VALID_TOOLS.has(t)) continue;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * F-202 — pick the effective tool selection. Explicit `tools` argument
+ * wins; BIZAR_INSTALL_TOOLS env var is the secondary source; the
+ * documented default ('claude' only) is the floor so non-interactive
+ * callers and historical CI scripts keep installing Claude Code.
+ *
+ * @param {string[]|null|undefined} tools
+ * @returns {string[]}
+ */
+export function resolveEffectiveTools(tools) {
+  if (Array.isArray(tools) && tools.length > 0) {
+    const filtered = dedupeTools(tools);
+    if (filtered.length > 0) return filtered;
+  }
+  const env = process.env[TOOLS_ENV];
+  if (typeof env === 'string' && env.length > 0) {
+    const fromEnv = env.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const filtered = dedupeTools(fromEnv);
+    if (filtered.length > 0) return filtered;
+  }
+  return ['claude'];
+}
+
+/**
+ * F-202 — short label for the provisioner banner. A single tool prints
+ * just the tool name; two tools print 'Claude Code + Codex'; the
+ * documented default keeps the legacy '(Claude Code)' label so existing
+ * operator screenshots and runbooks still match.
+ *
+ * @param {string[]} tools
+ * @returns {string}
+ */
+export function formatToolsLabel(tools) {
+  if (!Array.isArray(tools) || tools.length === 0) return 'Claude Code';
+  if (tools.length === 1 && tools[0] === 'claude') return 'Claude Code';
+  if (tools.length === 1 && tools[0] === 'codex') return 'Codex CLI';
+  if (tools.includes('claude') && tools.includes('codex')) return 'Claude Code + Codex CLI';
+  return tools.map(humanizeToolId).join(' + ');
+}
+
+function humanizeToolId(id) {
+  if (id === 'claude') return 'Claude Code';
+  if (id === 'codex') return 'Codex CLI';
+  return id;
+}
+
+/**
+ * Parse `--tools=claude,codex` (or `--all-tools`) into a deduped, ordered
+ * array. Returns `null` when no tools flag was supplied, so callers can
+ * distinguish "operator explicitly chose X" from "operator didn't say" and
+ * trigger the interactive prompt only in the second case. Invalid IDs are
+ * skipped silently so a single typo doesn't take down a CI script — the
+ * downstream interactive prompt (when present) remains the source of truth.
+ *
+ * @param {string[]} argv
+ * @returns {{ tools: string[]|null, allTools: boolean }}
+ */
+export function parseToolFlags(argv) {
+  let tools = null;
+  let allTools = false;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--all-tools') {
+      allTools = true;
+      tools = Array.from(VALID_TOOLS);
+      continue;
+    }
+    if (a.startsWith('--tools=')) {
+      const raw = a.slice('--tools='.length);
+      const list = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const seen = new Set();
+      const out = [];
+      for (const id of list) {
+        if (!VALID_TOOLS.has(id)) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(id);
+      }
+      if (out.length > 0) tools = out;
+      continue;
+    }
+    if (a === '--tools') {
+      const raw = argv[++i] || '';
+      const list = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const seen = new Set();
+      const out = [];
+      for (const id of list) {
+        if (!VALID_TOOLS.has(id)) continue;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(id);
+      }
+      if (out.length > 0) tools = out;
+      continue;
+    }
+  }
+  return { tools, allTools };
+}
+
 export function parseFlags(argv) {
-  const opts = { mode: 'install', dryRun: false, force: false, yes: false, start: true, update: false };
+  const opts = { mode: 'install', dryRun: false, force: false, yes: false, start: true, update: false, tools: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--mode=install') opts.mode = 'install';
@@ -1553,11 +1675,22 @@ export function parseFlags(argv) {
     else if (a === '--no-service') opts.start = false;
     else if (a === '--update') opts.mode = 'update';
     else if (a === '--help' || a === '-h') {
-      console.log('Usage: node cli/provision.mjs [--mode=install|update|install-only-system]\n       [--dry-run] [--force] [--yes] [--non-interactive] [--no-service]');
+      console.log('Usage: node cli/provision.mjs [--mode=install|update|install-only-system]\n       [--dry-run] [--force] [--yes] [--non-interactive] [--no-service]\n       [--tools=claude,codex] [--all-tools]');
       process.exit(0);
     }
   }
   if (opts.mode === 'update') opts.update = true;
+  // F-202 — tools flag plumbing. Order matters: --all-tools must be visible
+  // to parseToolFlags even when --tools= is also present, so we scan once
+  // before destructuring. Invalid IDs are dropped (the interactive prompt
+  // is the source of truth), but if the operator passed --tools= with at
+  // least one valid ID we honor it verbatim.
+  const toolFlags = parseToolFlags(argv);
+  if (toolFlags.allTools) opts.tools = Array.from(VALID_TOOLS);
+  else if (toolFlags.tools) opts.tools = toolFlags.tools;
+  // Expose to child processes so install.sh and Makefile-driven flows can
+  // see the operator's selection without re-parsing argv.
+  if (Array.isArray(opts.tools)) process.env[TOOLS_ENV] = opts.tools.join(',');
   return opts;
 }
 
