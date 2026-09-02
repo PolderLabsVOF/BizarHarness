@@ -2,6 +2,28 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-197 searchable model picker (2026-09-02)
+
+The interactive `bizar models` picker previously required scrolling or numeric
+positions across the full gateway inventory. With 143 live candidates, finding
+a known family or model was unnecessarily slow. The TTY picker now fuzzy-filters
+immediately as the operator types, searches model IDs plus Models.dev and
+gateway display metadata, safely handles Backspace, empty results,
+cursor/viewport changes, and Escape-to-clear, and keeps selections that are
+temporarily hidden. Arrow keys, Space, Enter, Ctrl+A, and Ctrl+N provide
+non-conflicting navigation and bulk controls. The line-mode fallback supports
+`/query` and `search query`; its numeric positions refer to visible results
+while `all` and `none` remain global.
+
+Matching is case- and punctuation-insensitive with bounded-gap subsequences,
+preserving gateway order without admitting scattered-character noise from long
+provider namespaces. Live checks over the 143-model inventory return only the
+two Luna models for `luna` and the expected MiniMax family for `minimax`.
+Focused picker tests pass 76/76, SDK tests pass 513/513, retained Node/harness
+tests pass 1,078/1,078, E2E passes 13/13, and TypeScript, architecture,
+structure, and removed-surface gates pass. Existing untracked operator files
+remain untouched.
+
 ## Complete — F-196 Models.dev selection metadata (2026-09-02)
 
 The live `bizar models` command discovered 143 gateway candidates, but its

@@ -20,6 +20,7 @@ import {
   listModels,
   fetchModelsDevCatalog,
   enrichModelsWithCapabilities,
+  filterModelCandidates,
   pickModels,
   applyModels,
   applyModelOverrides,
@@ -171,6 +172,76 @@ test('pickModels: duplicate toggles net to empty for that id', async () => {
     stdin, stdout,
   });
   assert.deepEqual(picked, []);
+});
+
+test('filterModelCandidates: searches IDs and metadata with stable gateway ordering', () => {
+  const candidates = [
+    { id: 'gateway/other', profile: { name: 'Other', description: 'Luna coding specialist' }, _gateway: { family: 'Moonshot' } },
+    { id: 'openai/gpt-5.6-luna', profile: { name: 'GPT 5.6 Luna', family: 'GPT' } },
+    { id: 'minimax/m3', profile: { name: 'M3' }, _gateway: { name: 'MiniMax M3', display_name: 'MiniMax Display', description: 'Fast model' } },
+  ];
+  assert.deepEqual(
+    filterModelCandidates(candidates, 'LUNA').map((candidate) => candidate.id),
+    ['gateway/other', 'openai/gpt-5.6-luna'],
+    'matching does not reshuffle the gateway order',
+  );
+  assert.deepEqual(filterModelCandidates(candidates, 'gpt 56l').map((candidate) => candidate.id), ['openai/gpt-5.6-luna']);
+  assert.deepEqual(filterModelCandidates(candidates, 'Mini-Max').map((candidate) => candidate.id), ['minimax/m3']);
+  assert.deepEqual(filterModelCandidates(candidates, 'minimax display').map((candidate) => candidate.id), ['minimax/m3']);
+  assert.deepEqual(filterModelCandidates(candidates, 'moonshot').map((candidate) => candidate.id), ['gateway/other']);
+  assert.deepEqual(filterModelCandidates(candidates, 'zz').map((candidate) => candidate.id), [], 'short terms require a contiguous match');
+  assert.deepEqual(
+    filterModelCandidates([{ id: 'qwen-cloud-token-plan/deepseek-v4-pro' }], 'luna'),
+    [],
+    'widely scattered characters in a long namespace are not a useful fuzzy match',
+  );
+  assert.deepEqual(filterModelCandidates(candidates, '').map((candidate) => candidate.id), candidates.map((candidate) => candidate.id));
+});
+
+test('pickModels: line all and none remain global while search is active', async () => {
+  const candidates = [{ id: 'openai/luna' }, { id: 'minimax/m3' }, { id: 'qwen/q3' }];
+  const selectAll = await pickModels({ candidates, stdin: makeInput(['/luna', 'all', '']), stdout: makeOutput() });
+  assert.deepEqual(selectAll, candidates.map((candidate) => candidate.id));
+  const selectNone = await pickModels({
+    candidates,
+    current: candidates.map((candidate) => candidate.id),
+    stdin: makeInput(['/luna', 'none', '']),
+    stdout: makeOutput(),
+  });
+  assert.deepEqual(selectNone, []);
+});
+
+test('pickModels: line search numbers target visible rows and hidden selections persist', async () => {
+  const stdin = makeInput(['/luna', '2', '/', '']);
+  const stdout = makeOutput();
+  const picked = await pickModels({
+    candidates: [
+      { id: 'gateway/first', profile: { description: 'Luna compatible' } },
+      { id: 'openai/luna', profile: { name: 'Luna' } },
+      { id: 'minimax/m3', profile: { name: 'MiniMax M3' } },
+    ],
+    current: ['minimax/m3'],
+    stdin,
+    stdout,
+  });
+  assert.deepEqual(picked, ['minimax/m3', 'openai/luna']);
+  assert.match(stdout.buffer(), /Search: luna.*\(2\/3 shown\)/);
+});
+
+test('pickModels: line search supports words, clear, and a clear no-match state', async () => {
+  const stdin = makeInput(['search nonexistent', '/', 'search MiniMax', '1', '']);
+  const stdout = makeOutput();
+  const picked = await pickModels({
+    candidates: [
+      { id: 'openai/luna', profile: { name: 'Luna' } },
+      { id: 'minimax/m3', _gateway: { name: 'MiniMax M3' } },
+    ],
+    stdin,
+    stdout,
+  });
+  assert.deepEqual(picked, ['minimax/m3']);
+  assert.match(stdout.buffer(), /No models match your search/);
+  assert.match(stdout.buffer(), /Search: MiniMax.*\(1\/2 shown\)/);
 });
 
 test('pickModels: throws on empty candidate list', async () => {
