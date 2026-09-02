@@ -1,5 +1,23 @@
 # Changelog
 
+## [10.23.7] - 2026-09-02
+
+### Added
+
+- Add direct type-to-search to the interactive `bizar models` picker, matching
+  gateway IDs plus Models.dev and gateway display metadata while preserving
+  hidden selections and stable gateway order.
+- Add `/query` and `search query` filtering to the line-mode picker, with
+  visible-result numbering and explicit empty-result feedback.
+
+### Fixed
+
+- Fetch and merge Models.dev model and provider metadata before the picker
+  renders, reuse it after confirmation, clear timeout handles promptly, and
+  prevent provider-collision metadata from contaminating canonical profiles.
+- Preserve cached model profiles across transient metadata failures and
+  non-interactive `--set` updates.
+
 ## [10.23.6] - 2026-09-01
 
 ### Fixed

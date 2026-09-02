@@ -2,6 +2,27 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — 10.23.7 searchable-picker release (2026-09-02)
+
+The user authorized pushing and publishing the completed F-196 Models.dev
+selection metadata fix and F-197 fuzzy model picker. Local root, SDK, and SDK
+constant versions were 10.23.6; npm and the latest Git tag also reported
+10.23.6, so the next patch is 10.23.7. The release will synchronize version metadata and
+the changelog, verify packed contents and all release gates, commit and tag,
+push `master` plus `v10.23.7`, publish the SDK before the root package, then
+install the registry artifact and smoke-test the searchable picker. Existing
+untracked operator files remain excluded.
+
+Release preparation is complete. Root, SDK, SDK constant, built SDK output,
+and changelog are synchronized at 10.23.7. Root dry-pack contains 375 files,
+including the updated `cli/commands/models.mjs`; SDK dry-pack contains 196
+files, and both exclude tests and operator state. Fresh evidence passes: SDK
+513/513, retained Node/harness 1,078/1,078, E2E 13/13, clean-check 5/5,
+TypeScript, architecture, structure, removed-surface, version, WIP, and diff
+hygiene gates. npm authentication is valid as `drb0rk`; registry root and SDK
+remain at 10.23.6 and remote tag `v10.23.7` is absent. Next: staged review,
+release commit and tag, push, ordered publication, registry install, and smoke.
+
 ## Complete — F-197 searchable model picker (2026-09-02)
 
 The interactive `bizar models` picker previously required scrolling or numeric

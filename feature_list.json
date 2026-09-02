@@ -1262,7 +1262,7 @@
       "passed": "2026-09-01",
       "commit": "current-change",
       "wip_holder": "@mike",
-      "wip": 1,
+      "wip": 0,
       "category": "routing",
       "layer": "harness",
       "owner": "@mike",
