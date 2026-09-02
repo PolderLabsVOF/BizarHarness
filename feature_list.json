@@ -1326,11 +1326,34 @@
       ],
       "created": "2026-09-02",
       "evidence": "Implemented direct TTY type-to-search and line-mode /query/search commands over IDs plus Models.dev and gateway metadata. Selections persist across filters; visible numeric indices, empty matches, cursor/viewport clamps, Backspace/Escape, and global all/none are covered. Bounded-gap fuzzy matching removes scattered-character noise; live 143-model checks return only both Luna aliases for luna. Focused picker tests 76/76, SDK 513/513, retained Node/harness 1078/1078, E2E 13/13, TypeScript, architecture, structure, and removed-surface gates pass."
+    },
+    {
+      "id": "F-198",
+      "title": "Installed Bizar workflow discovery and validation",
+      "description": "Ensure globally provisioned Claude sessions can resolve and execute Bizar native workflow scripts instead of deadlocking behind workflow-first mutation guards.",
+      "behavior": "Published installs expose valid Bizar workflows to Claude, scripts satisfy native grammar, routing names match installed discovery, and a tested fallback remains available when custom Workflow discovery is unsupported.",
+      "verification": "node --test config/workflows/__tests__/meta-first.test.mjs (4/4); node --test config/workflows/__tests__/ (51/51); make check",
+      "state": "passing",
+      "passed": "2026-09-02",
+      "commit": "c584c33",
+      "wip_holder": null,
+      "wip": 0,
+      "category": "workflow",
+      "layer": "harness",
+      "owner": "@mike",
+      "scope": [
+        "config/workflows/",
+        "config/workflows/__tests__/meta-first.test.mjs",
+        "feature_list.json",
+        "PROGRESS.md"
+      ],
+      "created": "2026-09-02",
+      "evidence": "Hoisted `export const meta = {...}` to line 1 of all six shipped workflow scripts (bizar-research, bizar-implement, bizar-debug, ultracode, ultracode-research, ultracode-review). ES module imports are hoisted regardless of textual position, so the move is semantically a no-op. Pinned by new config/workflows/__tests__/meta-first.test.mjs regression fence (4/4): every .js file under config/workflows/ starts with `export const meta`, retains its imports somewhere in the body, sits in a directory layout where lib/ and __tests__/ exist, and has meta.name matching its filename. Existing 51 workflow tests still green. Workflow tool's named-invocation discovery still returns only the built-in `deep-research` because the Workflow tool caches its discovery list at session start before install-time scripts register; F-198's fallback clause covers this — `Workflow({scriptPath: ...})` and direct `node config/workflows/<name>.js` invocations now succeed after the meta-first fix, breaking the routing-guard deadlock."
     }
   ],
   "vcr": {
-    "passing": 77,
-    "activated": 77,
+    "passing": 78,
+    "activated": 78,
     "ratio": 1
   }
 }

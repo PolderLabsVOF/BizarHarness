@@ -2,6 +2,41 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-198 installed workflow discovery (2026-09-02)
+
+The shipped workflow scripts at `config/workflows/bizar-research.js`,
+`bizar-implement.js`, `bizar-debug.js`, `ultracode.js`, `ultracode-research.js`,
+and `ultracode-review.js` had `import` statements on lines 1-2 followed by
+`export const meta = {...}` on line 4. The Claude Code Workflow tool requires
+`meta` to be the first top-level statement for direct invocation, so
+`Workflow({scriptPath: ...})` rejected the scripts. Combined with the
+workflow-first routing guard installed by F-195, this created a deadlock:
+the guard required a named workflow to lift, but the named workflow scripts
+refused to load.
+
+The fix hoists `export const meta` to be the first statement in all six
+scripts. ES module imports are hoisted regardless of textual position (see
+https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import),
+so the move is semantically a no-op — only the discovery contract changes.
+The hoist is pinned by a new regression fence at
+`config/workflows/__tests__/meta-first.test.mjs` (4/4 pass) that scans every
+`.js` file directly under `config/workflows/`, asserts line 1 is
+`export const meta = {...}`, asserts imports still appear somewhere in the
+body, asserts the directory layout (`lib/` + `__tests__/`) is intact, and
+asserts each script's `meta.name` matches its filename.
+
+Named-invocation discovery (`Workflow({name: 'bizar-research'})`) still
+returns only the built-in `deep-research` because the Workflow tool caches
+its discovery list at session start, before install-time scripts register.
+The F-198 fallback clause covers this case: `Workflow({scriptPath: ...})`
+or `node config/workflows/<name>.js` continues to work after the meta-first
+fix, so installed sessions no longer deadlock.
+
+Land commit `c584c33` is on master; this release carries the change as an
+unversioned workflow-discovery patch (no npm publish, no version bump). The
+operator's installed `~/.claude/workflows/` will resync on the next
+`bizar update`. Existing untracked operator files remain untouched.
+
 ## In Progress — 10.23.7 searchable-picker release (2026-09-02)
 
 The user authorized pushing and publishing the completed F-196 Models.dev
