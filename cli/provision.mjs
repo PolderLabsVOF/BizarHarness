@@ -32,7 +32,11 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveBizarHome } from './config-paths.mjs';
-import { buildClaudeModelOverrides, configuredEnabledModels } from './commands/models.mjs';
+import {
+  buildClaudeModelOverrides,
+  configuredEnabledModels,
+  requiresGatewayModelDiscovery,
+} from './commands/models.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -969,6 +973,9 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     bizarSettings.model = installModel;
     bizarSettings.modelOverrides = buildClaudeModelOverrides(installModels);
     bizarSettings.env.ANTHROPIC_MODEL = installModel;
+    if (operatorGatewayUrl && requiresGatewayModelDiscovery(installModels)) {
+      bizarSettings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = '1';
+    }
     const configuredContext = pickEnv('CLAUDE_CODE_MAX_CONTEXT_TOKENS') || installContextTokens;
     if (configuredContext) bizarSettings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(configuredContext);
   } else {

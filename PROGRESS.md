@@ -2,6 +2,44 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress — 10.23.8 native-workflow release (2026-09-02)
+
+The user authorized publication of F-198. npm authentication is valid as
+`drb0rk`; local root/SDK manifests, the registry, and the newest release tag
+are all at 10.23.7, so the next patch is 10.23.8. This release will synchronize
+root, SDK, SDK constant, built output, and changelog; verify package contents
+and the complete release gates; commit and tag; push `master` plus `v10.23.8`;
+publish SDK before root; install the registry artifacts; and repeat doctor,
+SessionStart model routing, and literal custom-model smoke checks. Existing
+untracked operator files remain excluded.
+
+Release preparation is complete. Root, SDK, SDK constant, built SDK output,
+and changelog are synchronized at 10.23.8. Dry packs contain 376 root and 196
+SDK runtime files; the root includes all workflows plus the native validator,
+and neither tarball includes tests or operator state. Fresh evidence passes:
+SDK 513/513, retained Node/harness 1085/1085, E2E 13/13, clean-state 5/5,
+TypeScript, architecture, removed-surface, repository-structure, version, WIP,
+and diff hygiene. Next: staged review, release commit/tag, push, ordered npm
+publication, registry install, and live installed smokes.
+
+The staged `/simplify` smoke found a distribution blocker before publication:
+the parent session accepts a literal custom gateway ID, but Claude's SDK and
+subagent path rejects that ID as unrecognized when gateway model discovery is
+unset. Current official Claude Code model-configuration documentation requires
+`CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1` to populate custom IDs from an
+LLM gateway's `/v1/models` endpoint. Provisioning, `bizar models`, and
+SessionStart must persist that flag whenever enabled configured IDs require the
+custom gateway; regression tests will pin the setting before release resumes.
+
+The final fix is verified. Focused gateway/model/provision/session tests pass
+89/89 and the complete release gate passes with the updated 1085-test retained
+suite. A local global install plus real SessionStart preserved discovery=`1`,
+13 configured picker models, 16 alias overrides, and the literal custom parent
+model. `/simplify` no longer emitted `unrecognized_model`; it reached the
+configured gateway and then received an upstream Cloudflare 524 after the
+provider's 120-second response timeout. The deterministic staged review found
+no release inconsistency, so the non-retryable release steps may proceed.
+
 ## Complete — F-198 native workflow discovery (2026-09-02)
 
 A fresh Claude Code session correctly classified a substantive request as a

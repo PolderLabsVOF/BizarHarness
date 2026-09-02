@@ -122,6 +122,10 @@ function filterDisabled(ids, disabled) {
   return kept;
 }
 
+function requiresGatewayModelDiscovery(modelIds) {
+  return modelIds.some((id) => !/^(?:claude(?:-|$)|anthropic(?:[./-]|$))/i.test(id));
+}
+
 function readSettingsPath() {
   return join(resolveClaudeConfigDir(), 'settings.json');
 }
@@ -236,6 +240,12 @@ function syncOnce() {
   settings.modelOverrides = Object.fromEntries(
     overrideKeys.map((key, index) => [key, liveIds[index % liveIds.length]]),
   );
+  if (requiresGatewayModelDiscovery(liveIds)) {
+    settings.env = {
+      ...(settings.env || {}),
+      CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1',
+    };
+  }
 
   let modelChanged = false;
   if (typeof settings.model !== 'string' || !liveIds.includes(settings.model)) {

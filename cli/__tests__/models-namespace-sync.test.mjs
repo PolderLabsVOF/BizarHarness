@@ -30,6 +30,7 @@ import {
   partitionStalePicks,
   classifyKind,
   buildClaudeModelOverrides,
+  requiresGatewayModelDiscovery,
   configuredFallbackModels,
   currentSelection,
 } from '../commands/models.mjs';
@@ -105,6 +106,13 @@ test('partitionStalePicks: tolerates non-array inputs', () => {
   assert.deepEqual(result, { liveIds: [], staleIds: [], unknownIds: [] });
 });
 
+test('requiresGatewayModelDiscovery distinguishes custom gateway IDs', () => {
+  assert.equal(requiresGatewayModelDiscovery(['cx/gpt-5.6-luna']), true);
+  assert.equal(requiresGatewayModelDiscovery(['minimax/MiniMax-M3']), true);
+  assert.equal(requiresGatewayModelDiscovery(['claude-sonnet-4-6']), false);
+  assert.equal(requiresGatewayModelDiscovery(['anthropic/claude-opus']), false);
+});
+
 // ── applyModelOverrides ───────────────────────────────────────────────────
 
 test('applyModelOverrides: writes recognized-key mappings for live picks only', () => {
@@ -122,6 +130,7 @@ test('applyModelOverrides: writes recognized-key mappings for live picks only', 
     assert.deepEqual(result.skippedStale, ['a/1']);
     const back = JSON.parse(readFileSync(settingsPath, 'utf8'));
     assert.equal(back.env.ANTHROPIC_AUTH_TOKEN, 'tok'); // preserved
+    assert.equal(back.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
     assert.deepEqual(back.modelOverrides, buildClaudeModelOverrides([
       'minimax/MiniMax-M3', 'codex/gpt-5.6-sol',
     ]));
@@ -185,7 +194,7 @@ test('applyModelOverrides: switches managed context tokens and clears them when 
     applyModelOverrides({ settingsJsonPath: settingsPath, pickedIds: ['provider/unknown'], profiles });
     back = JSON.parse(readFileSync(settingsPath, 'utf8'));
     assert.equal(back.model, 'provider/unknown');
-    assert.equal(back.env, undefined);
+    assert.deepEqual(back.env, { CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1' });
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

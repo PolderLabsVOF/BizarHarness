@@ -231,6 +231,8 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
         HOME: home,
         CLAUDE_CONFIG_DIR: claudeDir,
         BIZAR_HOME: bizarHome,
+        ANTHROPIC_BASE_URL: 'https://gateway.test/v1',
+        BIZAR_MODEL_ROUTER_URL: 'https://gateway.test/v1',
       },
       encoding: 'utf8',
     });
@@ -250,6 +252,7 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.env.BIZAR_HOME, bizarHome);
     assert.equal(settings.model, 'cx/gpt-5.6-luna');
     assert.equal(settings.env.ANTHROPIC_MODEL, 'cx/gpt-5.6-luna');
+    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
     assert.equal(Object.keys(settings.modelOverrides).length, 16);
     assert.ok(Object.values(settings.modelOverrides)
       .every((id) => ['cx/gpt-5.6-luna', 'minimax/MiniMax-M3'].includes(id)));

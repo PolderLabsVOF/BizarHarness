@@ -1008,6 +1008,12 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
   // must be keys; configured gateway aliases are values. This also suppresses
   // print-mode `[claude-code:unrecognized_model]` diagnostics for Agent SDK calls.
   settings.modelOverrides = buildClaudeModelOverrides(synced);
+  if (requiresGatewayModelDiscovery(synced)) {
+    settings.env = {
+      ...(settings.env || {}),
+      CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1',
+    };
+  }
   const previousModel = typeof settings.model === 'string' ? settings.model : null;
   const previousContext = profiles?.[previousModel]?.limits?.contextTokens;
   const nextModel = synced[0] || null;
@@ -1075,6 +1081,14 @@ export function buildClaudeModelOverrides(modelIds) {
   // unconfigured Anthropic default.
   return Object.fromEntries(CLAUDE_MODEL_OVERRIDE_KEYS
     .map((key, index) => [key, unique[index % unique.length]]));
+}
+
+/** Custom gateway IDs must be discoverable to Claude's SDK/subagent path. */
+export function requiresGatewayModelDiscovery(modelIds) {
+  return (Array.isArray(modelIds) ? modelIds : []).some((id) => {
+    if (typeof id !== 'string' || !id.trim()) return false;
+    return !/^(?:claude(?:-|$)|anthropic(?:[./-]|$))/i.test(id.trim());
+  });
 }
 
 /**

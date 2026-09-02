@@ -81,12 +81,12 @@ describe('writeClaudeSettings gateway environment', () => {
       undefined,
       'no default auth token — operators MUST configure ANTHROPIC_AUTH_TOKEN',
     );
-    // F-163 + 10.17.4 (Option A): CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY
-    // is operator-controlled and ABSENT from the shipped template + writer.
+    // Gateway discovery stays absent when no gateway or custom configured
+    // models exist. The writer enables it only for that concrete setup.
     assert.equal(
       settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY,
       undefined,
-      'gateway discovery env must not be emitted by the production writer',
+      'gateway discovery must stay absent without a configured gateway',
     );
     assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
   });

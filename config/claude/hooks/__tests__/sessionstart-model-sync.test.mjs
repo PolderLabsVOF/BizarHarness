@@ -112,6 +112,7 @@ test('model-sync: reapplies modelPicker + modelOverrides + resets dead claude- m
     const after = JSON.parse(readFileSync(stage.settingsPath, 'utf8'));
     assert.equal(after.model, 'codex/gpt-5.6-sol', 'dead claude-* alias should be reset to first user pick');
     assert.equal(after.env.BIZAR_HOME, '/tmp/test-bizar', 'env preserved');
+    assert.equal(after.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
     assert.deepEqual(after.mcpServers, { foo: { command: 'foo', args: [] } }, 'mcpServers preserved');
     assert.deepEqual(after.permissions, { allow: ['Bash(make *)'] }, 'permissions preserved');
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## [10.23.8] - 2026-09-02
+
+### Fixed
+
+- Make all six native workflow entries self-contained and parser-valid, with
+  provisioning and doctor checks plus an absolute installed-path fallback when
+  name discovery is unavailable.
+- Require every workflow Agent dispatch to use an explicit enabled Bizar model;
+  deny missing, inherited, disabled, and out-of-pool models instead of falling
+  through to Claude's provider defaults.
+- Redirect every recognized Claude Sonnet, Opus, Haiku, and Fable alias into
+  the configured custom model pool and synchronize `ANTHROPIC_MODEL` to the
+  active configured model.
+- Enable gateway model discovery whenever custom configured IDs are installed
+  or synchronized so Claude's SDK and subagent paths accept those literal IDs.
+- Accept error-free asynchronous native workflow launches in the routing guard
+  while keeping nested compilation and execution failures locked.
+
+### Changed
+
+- Spool clean-state command output to bounded temporary files so verbose test
+  evidence is not retained in a large shell variable.
+
 ## [10.23.7] - 2026-09-02
 
 ### Added

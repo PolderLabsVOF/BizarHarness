@@ -1365,11 +1365,41 @@
       ],
       "created": "2026-09-02",
       "evidence": "Installed-runtime inspection proved native entries require meta first and reject static/dynamic imports. Six self-contained workflows now route only explicit globally configured model IDs; provisioning/doctor validate discovery grammar, Mike uses absolute global fallback, model guards fail closed, and all 16 Claude aliases map into the configured pool. Focused contracts 63/63, SDK 513/513, retained Node/harness 1084/1084, prompt ceiling 7/7, E2E 13/13, clean-state 5/5, TypeScript, architecture, structure, removed-surface, and diff checks pass."
+    },
+    {
+      "id": "F-199",
+      "title": "Publish native workflow and configured-model enforcement",
+      "description": "Release the verified F-198 workflow discovery and custom-model enforcement changes as 10.23.8 and verify the installed registry artifacts.",
+      "behavior": "npm root and SDK packages, Git tag, installed global Bizar surfaces, and Claude SessionStart all expose the same self-contained workflows and configured-only model routing.",
+      "verification": "make clean-check; make verify-repo-structure; npm pack --dry-run; registry version/install; bizar doctor --json; live custom-model probe",
+      "state": "in_progress",
+      "wip_holder": "@mike",
+      "wip": 1,
+      "category": "release",
+      "layer": "distribution",
+      "owner": "@mike",
+      "scope": [
+        "package.json",
+        "packages/sdk/package.json",
+        "packages/sdk/src/version.ts",
+        "cli/provision.mjs",
+        "cli/provision.test.mjs",
+        "cli/commands/models.mjs",
+        "cli/__tests__/models-namespace-sync.test.mjs",
+        "cli/install/__tests__/merge-settings.test.mjs",
+        "config/claude/hooks/sessionstart-model-sync.mjs",
+        "config/claude/hooks/__tests__/sessionstart-model-sync.test.mjs",
+        "CHANGELOG.md",
+        "PROGRESS.md",
+        "feature_list.json"
+      ],
+      "created": "2026-09-02",
+      "evidence": "Preflight: npm user drb0rk; registry root/SDK 10.23.7; local version advanced consistently to 10.23.8. Dry packs contain 376 root and 196 SDK runtime files, include all workflows and the native validator, and exclude tests/operator state. Gateway discovery fix focused tests pass 89/89; SDK 513/513, retained Node/harness 1085/1085, E2E 13/13, clean-state 5/5, TypeScript, architecture, structure, removed-surface, version, WIP, and diff gates pass. Real SessionStart preserves discovery=1, 13 configured picker IDs, and 16 custom alias overrides; the SDK stopped reporting unrecognized_model and reached the configured gateway (provider later returned Cloudflare 524 timeout)."
     }
   ],
   "vcr": {
     "passing": 78,
-    "activated": 78,
-    "ratio": 1
+    "activated": 79,
+    "ratio": 0.9873417721518988
   }
 }
