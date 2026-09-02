@@ -110,10 +110,14 @@ test('configured model metadata supplies Claude Code context-window enforcement'
 });
 
 test('recognized Claude override keys retain configured gateway values', async () => {
-  const { buildClaudeModelOverrides } = await import('./commands/models.mjs');
+  const { buildClaudeModelOverrides, CLAUDE_MODEL_OVERRIDE_KEYS } = await import('./commands/models.mjs');
   const ids = ['cx/gpt-5.6-luna', 'minimax/MiniMax-M3'];
   const mapped = buildClaudeModelOverrides(ids);
-  assert.deepEqual(Object.values(mapped), ids);
+  assert.deepEqual(Object.keys(mapped), [...CLAUDE_MODEL_OVERRIDE_KEYS]);
+  assert.equal(mapped['claude-fable-5'], ids[0]);
+  assert.equal(mapped['claude-opus-5'], ids[1]);
+  assert.equal(mapped['claude-sonnet-5'], ids[0]);
+  assert.ok(Object.values(mapped).every((id) => ids.includes(id)));
   assert.ok(Object.keys(mapped).every((id) => id.startsWith('claude-')));
   assert.equal(mapped['cx/gpt-5.6-luna'], undefined);
 });
@@ -153,6 +157,7 @@ describe('syncConfigExtras() — native workflows', () => {
       assert.equal(result.status, 0, result.stderr || result.stdout);
       for (const workflow of ['ultracode.js', 'ultracode-review.js', 'ultracode-research.js']) {
         assert.equal(existsSync(join(claudeDir, 'workflows', workflow)), true, workflow);
+        assert.match(readFileSync(join(claudeDir, 'workflows', workflow), 'utf8'), /^export const meta = \{/);
       }
       assert.equal(existsSync(join(claudeDir, 'skills', 'ultracode', 'SKILL.md')), true);
       assert.equal(existsSync(join(claudeDir, 'commands', 'ultracode.md')), true);
@@ -244,9 +249,11 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
     assert.equal(settings.env.BIZAR_HOME, bizarHome);
     assert.equal(settings.model, 'cx/gpt-5.6-luna');
-    assert.deepEqual(Object.values(settings.modelOverrides), [
-      'cx/gpt-5.6-luna', 'minimax/MiniMax-M3',
-    ]);
+    assert.equal(settings.env.ANTHROPIC_MODEL, 'cx/gpt-5.6-luna');
+    assert.equal(Object.keys(settings.modelOverrides).length, 16);
+    assert.ok(Object.values(settings.modelOverrides)
+      .every((id) => ['cx/gpt-5.6-luna', 'minimax/MiniMax-M3'].includes(id)));
+    assert.equal(settings.modelOverrides['claude-sonnet-5'], 'cx/gpt-5.6-luna');
     assert.equal(settings.modelOverrides['cx/gpt-5.6-luna'], undefined);
     assert.equal(settings.disableAutoCompact, false);
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));

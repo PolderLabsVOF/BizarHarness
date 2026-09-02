@@ -947,8 +947,9 @@ export function partitionStalePicks({ liveIds, pickedIds, disabledProviders }) {
  *
  * Behavior:
  *   - Reads `settings.json` if present; preserves every other field.
- *   - Writes `modelOverrides` as a sparse object for picked IDs that are
- *     also in `liveIds`; Claude Code still dispatches each literal value.
+ *   - Maps every recognized Claude alias into picked IDs that are also in
+ *     `liveIds`, preventing internal alias normalization from reaching an
+ *     unconfigured provider default.
  *   - Atomic replace via temp-file + rename (matches `applyModels`).
  *   - When `settingsJsonPath` is provided (tests), uses that instead of
  *     `~/.claude/settings.json`.
@@ -1068,8 +1069,12 @@ export function buildClaudeModelOverrides(modelIds) {
   const unique = [...new Set((Array.isArray(modelIds) ? modelIds : [])
     .filter((id) => typeof id === 'string' && id.trim())
     .map((id) => id.trim()))];
-  return Object.fromEntries(unique.slice(0, CLAUDE_MODEL_OVERRIDE_KEYS.length)
-    .map((id, index) => [CLAUDE_MODEL_OVERRIDE_KEYS[index], id]));
+  if (unique.length === 0) return {};
+  // Cover every built-in alias: the workflow runtime may normalize an Agent
+  // request through one of these names, and no alias may escape to an
+  // unconfigured Anthropic default.
+  return Object.fromEntries(CLAUDE_MODEL_OVERRIDE_KEYS
+    .map((key, index) => [key, unique[index % unique.length]]));
 }
 
 /**

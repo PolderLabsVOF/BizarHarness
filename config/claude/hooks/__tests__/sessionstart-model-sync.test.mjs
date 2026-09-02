@@ -128,12 +128,14 @@ test('model-sync: reapplies modelPicker + modelOverrides + resets dead claude- m
     assert.equal(after.modelPicker.options[1].label, 'MiniMax M3');
     assert.equal(after.modelPicker.options[2].label, 'qwen3.8 max preview');
 
-    // Recognized Claude keys map to every live gateway pick.
-    assert.deepEqual(after.modelOverrides, {
-      'claude-fable-5': 'codex/gpt-5.6-sol',
-      'claude-opus-5': 'minimax/MiniMax-M3',
-      'claude-sonnet-5': 'qct/qwen3.8-max-preview',
-    });
+    // Every recognized Claude alias is redirected into the configured pool.
+    assert.equal(Object.keys(after.modelOverrides).length, 16);
+    assert.equal(after.modelOverrides['claude-fable-5'], 'codex/gpt-5.6-sol');
+    assert.equal(after.modelOverrides['claude-opus-5'], 'minimax/MiniMax-M3');
+    assert.equal(after.modelOverrides['claude-sonnet-5'], 'qct/qwen3.8-max-preview');
+    assert.ok(Object.values(after.modelOverrides).every((id) => [
+      'codex/gpt-5.6-sol', 'minimax/MiniMax-M3', 'qct/qwen3.8-max-preview',
+    ].includes(id)));
   } finally {
     rmSync(stage.dir, { recursive: true, force: true });
   }
@@ -293,10 +295,9 @@ test('model-sync: disabledProviders strips banned ids before picker re-apply', (
     const after = JSON.parse(readFileSync(stage.settingsPath, 'utf8'));
     // Only the non-disabled id survives in the picker.
     assert.deepEqual(after.modelPicker.options.map((o) => o.model), ['minimax/MiniMax-M3']);
-    // The recognized-key mapping also skips disabled ids.
-    assert.deepEqual(after.modelOverrides, {
-      'claude-fable-5': 'minimax/MiniMax-M3',
-    });
+    // Every recognized alias maps to the sole enabled configured model.
+    assert.equal(Object.keys(after.modelOverrides).length, 16);
+    assert.ok(Object.values(after.modelOverrides).every((id) => id === 'minimax/MiniMax-M3'));
   } finally {
     rmSync(stage.dir, { recursive: true, force: true });
   }

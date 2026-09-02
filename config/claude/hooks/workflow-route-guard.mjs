@@ -33,14 +33,18 @@ export function workflowCompletedSuccessfully(input) {
   const root = input?.tool_response ?? input?.tool_result ?? input?.toolUseResult;
   if (!root || typeof root !== 'object') return false;
   const statuses = [];
+  let nestedError = false;
+  let acceptedLaunch = false;
   const visit = (value, depth = 0) => {
     if (!value || typeof value !== 'object' || depth > 3) return;
     if (typeof value.status === 'string') statuses.push(value.status.toLowerCase());
+    if (value.is_error === true || value.error) nestedError = true;
+    if (value.status === 'async_launched' && value.taskType === 'local_workflow') acceptedLaunch = true;
     for (const key of ['result', 'workflow', 'data']) visit(value[key], depth + 1);
   };
   visit(root);
-  if (root.is_error === true || root.error || statuses.some((status) => WORKFLOW_FAILURE.has(status))) return false;
-  return statuses.some((status) => WORKFLOW_SUCCESS.has(status));
+  if (nestedError || statuses.some((status) => WORKFLOW_FAILURE.has(status))) return false;
+  return acceptedLaunch || statuses.some((status) => WORKFLOW_SUCCESS.has(status));
 }
 
 let raw = '';

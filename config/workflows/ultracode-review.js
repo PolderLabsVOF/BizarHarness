@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto'
-import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
-
 export const meta = {
   name: 'ultracode-review',
   description: 'Review a change across independent dimensions and adversarially verify every finding',
@@ -11,11 +8,47 @@ export const meta = {
   ],
 }
 
+const WORKFLOW_INPUT = args && typeof args === 'object' ? args : {}
+const WORKFLOW_ROUTING = WORKFLOW_INPUT.routing && typeof WORKFLOW_INPUT.routing === 'object'
+  ? WORKFLOW_INPUT.routing
+  : {}
+const WORKFLOW_DEFAULT_MODEL = typeof WORKFLOW_INPUT.model === 'string'
+  ? WORKFLOW_INPUT.model.trim()
+  : Array.isArray(WORKFLOW_INPUT.models) && typeof WORKFLOW_INPUT.models[0] === 'string'
+    ? WORKFLOW_INPUT.models[0].trim()
+    : ''
+const routeModel = (risk) => {
+  const candidate = WORKFLOW_ROUTING[risk] || WORKFLOW_ROUTING.default || WORKFLOW_DEFAULT_MODEL
+  return typeof candidate === 'string' ? candidate.trim() : ''
+}
+if (!routeModel('medium') || !routeModel('high')) {
+  return {
+    status: 'blocked',
+    reason: 'No explicit configured Bizar model routing was supplied. Read the global Bizar model router and retry with args.routing; provider defaults are prohibited.',
+  }
+}
+let WORKFLOW_DISPATCH_SEQUENCE = 0
+const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
+  const sequence = ++WORKFLOW_DISPATCH_SEQUENCE
+  const prefix = `[Bizar dispatch ${sequence}: ${agentName}; role=${opts.role || 'worker'}; phase=${opts.phase || 'work'}; label=${opts.label || agentName}]`
+  const agentOptions = {
+    model: routeModel(opts.risk || 'medium'),
+    effort: opts.risk === 'high' ? 'high' : 'medium',
+  }
+  if (opts.schema) agentOptions.schema = opts.schema
+  if (opts.isolation) agentOptions.isolation = opts.isolation
+  if (opts.disallowedTools) agentOptions.disallowedTools = opts.disallowedTools
+  return agentFn(`${prefix}\n${prompt}`, agentOptions)
+}
+const barrierRef = ({ phase, label, summary, payload }) => {
+  let evidence = ''
+  try { evidence = JSON.stringify(payload ?? '').slice(0, 12000) } catch { evidence = '<unserializable>' }
+  return { promptBlock: `Prior phase: ${phase}; label: ${label}; summary: ${summary || ''}\nBounded evidence: ${evidence}` }
+}
+
 const TARGET = typeof args === 'string' ? args : args?.target || 'the current working diff'
 
-// Phase B (v10.21.0) artifact-on-disk barriers: one runId per workflow
-// invocation. Used by every writeArtifact() + barrierRef() in this script.
-const RUN_ID = randomUUID()
+const RUN_ID = 'ultracode-review'
 const FINDINGS = {
   type: 'object',
   required: ['findings'],

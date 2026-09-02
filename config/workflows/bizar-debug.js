@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto'
-import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
-
 export const meta = {
   name: 'bizar-debug',
   description: 'Root-cause a bug with bounded loop-until-dry: RCA hypothesis, adversarial verification, smallest fix, regression test',
@@ -14,6 +11,44 @@ export const meta = {
   ],
 }
 
+const WORKFLOW_INPUT = args && typeof args === 'object' ? args : {}
+const WORKFLOW_ROUTING = WORKFLOW_INPUT.routing && typeof WORKFLOW_INPUT.routing === 'object'
+  ? WORKFLOW_INPUT.routing
+  : {}
+const WORKFLOW_DEFAULT_MODEL = typeof WORKFLOW_INPUT.model === 'string'
+  ? WORKFLOW_INPUT.model.trim()
+  : Array.isArray(WORKFLOW_INPUT.models) && typeof WORKFLOW_INPUT.models[0] === 'string'
+    ? WORKFLOW_INPUT.models[0].trim()
+    : ''
+const routeModel = (risk) => {
+  const candidate = WORKFLOW_ROUTING[risk] || WORKFLOW_ROUTING.default || WORKFLOW_DEFAULT_MODEL
+  return typeof candidate === 'string' ? candidate.trim() : ''
+}
+if (!routeModel('medium') || !routeModel('high')) {
+  return {
+    status: 'blocked',
+    reason: 'No explicit configured Bizar model routing was supplied. Read the global Bizar model router and retry with args.routing; provider defaults are prohibited.',
+  }
+}
+let WORKFLOW_DISPATCH_SEQUENCE = 0
+const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
+  const sequence = ++WORKFLOW_DISPATCH_SEQUENCE
+  const prefix = `[Bizar dispatch ${sequence}: ${agentName}; role=${opts.role || 'worker'}; phase=${opts.phase || 'work'}; label=${opts.label || agentName}]`
+  const agentOptions = {
+    model: routeModel(opts.risk || 'medium'),
+    effort: opts.risk === 'high' ? 'high' : 'medium',
+  }
+  if (opts.schema) agentOptions.schema = opts.schema
+  if (opts.isolation) agentOptions.isolation = opts.isolation
+  if (opts.disallowedTools) agentOptions.disallowedTools = opts.disallowedTools
+  return agentFn(`${prefix}\n${prompt}`, agentOptions)
+}
+const barrierRef = ({ phase, label, summary, payload }) => {
+  let evidence = ''
+  try { evidence = JSON.stringify(payload ?? '').slice(0, 12000) } catch { evidence = '<unserializable>' }
+  return { promptBlock: `Prior phase: ${phase}; label: ${label}; summary: ${summary || ''}\nBounded evidence: ${evidence}` }
+}
+
 const BUG_ID = typeof args === 'string'
   ? args
   : (args && typeof args.bug_id === 'string')
@@ -22,9 +57,7 @@ const BUG_ID = typeof args === 'string'
       ? args.topic
       : JSON.stringify(args || {})
 
-// Phase B (v10.21.0) artifact-on-disk barriers: one runId per workflow
-// invocation. Used by every writeArtifact() + barrierRef() in this script.
-const RUN_ID = randomUUID()
+const RUN_ID = 'bizar-debug'
 
 const HYPOTHESIS = {
   type: 'object',
@@ -48,8 +81,6 @@ const iterations = []
 phase('Hypothesis')
 const initial = await dispatchAgent(agent, 'rca-hypothesis', `Root-cause bug ${BUG_ID} with the cheapest discriminating experiment. Return {cause, experiment, predictedOutcome}. Do not propose a fix yet.`, { role: 'research-analyst', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'hypothesis:initial', phase: 'Hypothesis', schema: HYPOTHESIS })
 iterations.push(initial)
-// Phase B: persist initial hypothesis artifact.
-writeArtifact({ runId: RUN_ID, phase: 'Hypothesis', label: 'hypothesis:initial', payload: initial, summary: initial?.cause ? initial.cause.slice(0, 200) : 'initial hypothesis', role: 'research-analyst' })
 
 let accepted = null
 for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -68,8 +99,6 @@ for (let i = 0; i < MAX_ITERATIONS; i++) {
   phase('Loop')
   const refined = await dispatchAgent(agent, 'rca-refiner', `The previous RCA hypothesis for bug ${BUG_ID} was not confirmed. Produce a refined hypothesis with a new cheapest discriminating experiment.\n${barrierRef({ runId: RUN_ID, phase: 'Hypothesis', label: priorLabel, summary: prior?.cause ? prior.cause.slice(0, 200) : `prior iter ${i + 1}` }).promptBlock}\n${barrierRef({ runId: RUN_ID, phase: 'AdversarialVerify', label: `verify:${i + 1}`, summary: verdict?.reason ? verdict.reason.slice(0, 200) : 'no confirmation' }).promptBlock}`, { role: 'research-analyst', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: `refine:${i + 1}`, phase: 'Loop', schema: HYPOTHESIS })
   iterations.push(refined)
-  // Phase B: persist refined hypothesis artifact.
-  writeArtifact({ runId: RUN_ID, phase: 'Hypothesis', label: `refine:${i + 1}`, payload: refined, summary: refined?.cause ? refined.cause.slice(0, 200) : `refined iter ${i + 1}`, role: 'research-analyst' });
 }
 
 if (!accepted) {
@@ -83,7 +112,6 @@ if (!accepted) {
 
 phase('Fix')
 const fix = await dispatchAgent(agent, 'fix-author', `Implement the smallest fix + regression test for bug ${BUG_ID} based on the accepted hypothesis. Edit and test in your isolated worktree. Do not commit, push, publish, or deploy.\n${barrierRef({ runId: RUN_ID, phase: 'Hypothesis', label: 'hypothesis:initial', summary: accepted.hypothesis?.cause ? accepted.hypothesis.cause.slice(0, 200) : 'accepted hypothesis' }).promptBlock}`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'fix', phase: 'Fix', isolation: 'worktree' })
-writeArtifact({ runId: RUN_ID, phase: 'Fix', label: 'fix', payload: fix, summary: typeof fix === 'string' ? fix.slice(0, 200) : 'fix proposed', role: 'implementer' })
 
 phase('Verify')
 const verify = await dispatchAgent(agent, 'fix-verifier', `Re-check the proposed fix for bug ${BUG_ID} against the regression test and adjacent paths. Reject the fix if it is unbounded, out of scope, or already covered.\n${barrierRef({ runId: RUN_ID, phase: 'Fix', label: 'fix', summary: typeof fix === 'string' ? fix.slice(0, 200) : 'fix artifact' }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: 'fix-verify', phase: 'Verify' })

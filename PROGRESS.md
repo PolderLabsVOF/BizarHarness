@@ -2,6 +2,57 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — F-198 native workflow discovery (2026-09-02)
+
+A fresh Claude Code session correctly classified a substantive request as a
+Bizar workflow task, but native discovery exposed only the built-in
+`deep-research` workflow. Its fallback to a shipped script then failed because
+all six Bizar workflow files place imports before the `meta` export, while the
+current Claude runtime requires `export const meta = { ... }` to be the first
+statement. The existing installer and tests verify copied files and custom
+execution semantics, but never validate Claude's native entry grammar.
+
+This change will make every shipped workflow natively parseable, add a shared
+grammar/discovery validator to provisioning and diagnostics, cover installed
+copies with regression tests, and give Mike an exact-path recovery rule when
+name discovery is unavailable. The fix remains isolated on
+`wt/todd-f198-workflow-discovery`; existing operator files are untouched.
+
+The user additionally reported that the attempted workflow selected Sonnet 5
+instead of the configured Bizar models. Runtime inspection showed the native
+workflow VM is fully self-contained (both static and dynamic imports are
+rejected), so the old import-based dispatch router could never run. The fix now
+also passes explicit globally configured model IDs through workflow arguments,
+hard-denies missing/inherited/out-of-pool Agent models, redirects every
+recognized Claude alias into the configured pool, and removes stale
+`ANTHROPIC_MODEL` preservation.
+
+The first full retained-suite pass exposed one stale test harness: its prompt
+capture replaced the former imported dispatcher and omitted the new explicit
+routing input, so all six workflows correctly failed closed before dispatch.
+The harness will now exercise and measure the actual self-contained dispatch
+path instead of rewriting it.
+
+The clean-state wrapper then reproduced a separate productivity problem: it
+buffered the entire verbose test suite in a shell variable and stalled twice
+despite the same suite passing directly. Its checker now spools output to a
+temporary file, prints only the failure tail, and removes the spool file after
+each completed check.
+
+Implemented and verified. All six entries now satisfy the installed Claude
+runtime's first-statement and self-contained-body contract. Provisioning and
+doctor validate source/installed workflows; Mike retries absent name discovery
+only by absolute global path and supplies explicit configured routing. Agent
+dispatch fails closed on missing, inherited, disabled, or out-of-pool models;
+all 16 recognized Claude aliases and `ANTHROPIC_MODEL` resolve into the enabled
+configured pool. Successful native `async_launched` responses unlock routing,
+while nested compile errors remain locked.
+
+Evidence: focused native/dispatch contracts 63/63; SDK 513/513; retained
+Node/harness 1084/1084; workflow prompt ceiling 7/7 (largest 529/3072 bytes);
+TypeScript, architecture, removed-surface, repository-structure, E2E 13/13,
+`git diff --check`, and clean-state 5/5 all pass.
+
 ## In Progress — 10.23.7 searchable-picker release (2026-09-02)
 
 The user authorized pushing and publishing the completed F-196 Models.dev

@@ -42,6 +42,7 @@ import {
   REQUIRED_HOOKS,
 } from './commands/validate.mjs';
 import { configuredEnabledModels, listModels, resolveEndpoint } from './commands/models.mjs';
+import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
 
 const REQUIRED_RULES = [
   'general.md', 'git.md', 'javascript.md', 'python.md',
@@ -157,6 +158,13 @@ async function checkHookFilesInstalled() {
   return `all ${REQUIRED_HOOKS.length} hook entrypoints installed`;
 }
 
+async function checkNativeWorkflowsInstalled() {
+  const dir = join(claudeDir(), 'workflows');
+  if (!existsSync(dir)) throw new Error(`workflows dir missing: ${dir} — run \`bizar update\``);
+  const result = validateNativeWorkflowDirectory(dir);
+  return `${result.count} native workflows parser-compatible and filename-addressable`;
+}
+
 /**
  * Lenient: passes if at least one of semble/skills/claude is on PATH.
  * These are informational — none of them are strictly required for
@@ -216,6 +224,7 @@ const CHECKS = [
   { name: 'skill-files-installed',     run: checkSkillFilesInstalled },
   { name: 'rule-files-installed',      run: checkRuleFilesInstalled },
   { name: 'hook-files-installed',      run: checkHookFilesInstalled },
+  { name: 'native-workflows-valid',    run: checkNativeWorkflowsInstalled },
   { name: 'tools-on-path',             run: checkToolsAvailable },
   { name: 'bizar-home',                run: checkBizarHome },
   { name: 'provider-reachable',        run: checkProviderReachable },

@@ -96,6 +96,10 @@ function buildStub(label) {
  * payload into the harness's agent-tool stub.
  */
 async function runCapturedWorkflow(file, args, harness) {
+  args = {
+    ...(args && typeof args === 'object' ? args : {}),
+    routing: { default: 'provider/cheap', medium: 'provider/cheap', high: 'provider/strong' },
+  };
   const source = readFileSync(resolve(workflowsDir, file), 'utf8');
   const metaStart = source.search(/export\s+const\s+meta\s*=\s*\{/);
   const open = source.indexOf('{', metaStart);

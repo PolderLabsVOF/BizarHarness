@@ -241,6 +241,19 @@ test('dispatchAgent: empty configured pool fails closed instead of inheriting a 
   assert.equal(capturedOpts, null);
 });
 
+test('dispatchAgent: caller cannot bypass the configured pool with forceModel', async () => {
+  let capturedOpts;
+  const agentFn = async (_prompt, opts) => { capturedOpts = opts; return { ok: true }; };
+  await dispatch.dispatchAgent(
+    agentFn,
+    'mike',
+    'review',
+    { role: 'security', risk: 'high', forceModel: 'claude-sonnet-5' },
+    FIXTURE_CONTEXT,
+  );
+  assert.equal(capturedOpts.model, 'provider/strong');
+});
+
 test('dispatchAgent: two sequential calls produce distinct routingDecisionId values', async () => {
   const calls = [];
   const agentFn = async (prompt, opts) => { calls.push(opts.routingDecisionId); return { prompt, opts }; };
@@ -280,13 +293,12 @@ const WORKFLOW_SCRIPTS = [
   'ultracode-review.js',
 ];
 
-test('dispatch: every fixture workflow imports dispatchAgent from lib/dispatch.js', () => {
+test('dispatch: every fixture workflow is self-contained and defines explicit model routing', () => {
   for (const script of WORKFLOW_SCRIPTS) {
     const source = readFileSync(resolve(workflowsDir, script), 'utf8');
-    assert.ok(
-      /import\s*\{[^}]*dispatchAgent[^}]*\}\s*from\s*['"]\.\/lib\/dispatch\.js['"]/.test(source),
-      `${script} must import dispatchAgent from './lib/dispatch.js'`,
-    );
+    assert.doesNotMatch(source, /^\s*import\s/m, `${script} cannot import inside Claude's workflow VM`);
+    assert.match(source, /const dispatchAgent\s*=.*agentFn/s, `${script} must define its native dispatch wrapper`);
+    assert.match(source, /model:\s*routeModel\(/, `${script} must pass an explicit routed model`);
   }
 });
 

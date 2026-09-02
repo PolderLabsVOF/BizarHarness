@@ -153,6 +153,10 @@ function makeCaptureDispatch(captured, ctx) {
  * standard runtime primitives + the captured dispatch.
  */
 async function runCapturedWorkflow(file, args, captured, ctx) {
+  args = {
+    ...(args && typeof args === 'object' ? args : {}),
+    routing: { default: 'provider/default', medium: 'provider/mid', high: 'provider/high' },
+  };
   const source = readFileSync(resolve(workflowsDir, file), 'utf8');
   const metaStart = source.search(/export\s+const\s+meta\s*=\s*\{/);
   const open = source.indexOf('{', metaStart);
