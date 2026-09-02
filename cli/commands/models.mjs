@@ -189,7 +189,7 @@ export async function fetchProviderCatalog({
   return fetchModelsDevCatalog({ fetchFn, timeoutMs, url });
 }
 
-function flattenModelsDevCatalog(catalog) {
+function flattenModelsDevCatalog(catalog, { providerCatalog = false } = {}) {
   const entries = new Map();
   const add = (id, value) => {
     if (typeof id !== 'string' || !id.trim() || !value || typeof value !== 'object' || Array.isArray(value)) return;
@@ -213,13 +213,46 @@ function flattenModelsDevCatalog(catalog) {
       for (const [modelId, model] of Object.entries(value)) add(modelId, model);
     }
     if (key === 'providers') {
-      for (const provider of Object.values(value)) {
+      for (const [providerId, provider] of Object.entries(value)) {
         if (!provider || typeof provider !== 'object' || Array.isArray(provider)) continue;
-        for (const [modelId, model] of Object.entries(provider.models || {})) add(modelId, model);
+        for (const [modelId, model] of Object.entries(provider.models || {})) {
+          // catalog.json commonly uses the same bare model id under several
+          // providers. Keep that identity in the key: a bare-id map would be
+          // last-writer-wins and could attach one provider's serving facts to
+          // another provider's model.
+          const qualifiedId = providerCatalog && !modelId.includes('/')
+            ? `${providerId}/${modelId}`
+            : modelId;
+          add(qualifiedId, { provider: providerId, ...model });
+        }
       }
     }
   }
   return entries;
+}
+
+function uniqueCatalogMatch(entries, gatewayId, { requireProvider = false } = {}) {
+  const raw = String(gatewayId || '').trim().toLowerCase();
+  if (!raw) return null;
+  const exact = entries.get(raw);
+  if (exact) return exact;
+
+  const wanted = normalizedModelIdentity(raw);
+  const values = [...entries.values()];
+  const providerMatches = wanted.provider
+    ? values.filter((entry) => {
+      const found = normalizedModelIdentity(entry.id);
+      return found.model === wanted.model && found.provider === wanted.provider;
+    })
+    : [];
+  if (providerMatches.length === 1) return providerMatches[0];
+  if (requireProvider) return null;
+
+  // Wrapper namespaces (for example cx/ or a gateway-specific prefix) are
+  // not canonical providers. A canonical suffix is still safe when exactly
+  // one catalog entry owns it; collisions deliberately remain unmatched.
+  const suffixMatches = values.filter((entry) => normalizedModelIdentity(entry.id).model === wanted.model);
+  return suffixMatches.length === 1 ? suffixMatches[0] : null;
 }
 
 function normalizedModelIdentity(id) {
@@ -276,6 +309,7 @@ export function toCapabilityProfile(gatewayId, match, matchType, confidence) {
     weights: Array.isArray(match.weights) ? match.weights : [],
     benchmarks: Array.isArray(match.benchmarks) ? match.benchmarks : [],
     cost: match.cost && typeof match.cost === 'object' ? match.cost : null,
+    serving: match.serving && typeof match.serving === 'object' ? match.serving : null,
     metadata: {
       source: 'models.dev',
       sourceUrl: MODELS_DEV_CATALOG_URL,
@@ -302,7 +336,6 @@ export function toCapabilityProfile(gatewayId, match, matchType, confidence) {
  */
 export function enrichModelsWithCapabilities(candidates, catalog) {
   const entries = flattenModelsDevCatalog(catalog);
-  const all = [...entries.values()];
   return (Array.isArray(candidates) ? candidates : []).map((candidate) => {
     const gatewayId = candidate.id;
     const exact = entries.get(String(gatewayId).toLowerCase());
@@ -310,14 +343,9 @@ export function enrichModelsWithCapabilities(candidates, catalog) {
       const profile = toCapabilityProfile(gatewayId, exact, 'exact-id', 0.9);
       return { ...candidate, profile, contextWindow: profile.limits.contextTokens };
     }
-    const wanted = normalizedModelIdentity(gatewayId);
-    const matches = all.filter((entry) => {
-      const found = normalizedModelIdentity(entry.id);
-      if (!wanted.model || found.model !== wanted.model) return false;
-      return !wanted.provider || !found.provider || found.provider === wanted.provider;
-    });
-    if (matches.length === 1) {
-      const profile = toCapabilityProfile(gatewayId, matches[0], 'unique-normalized-id', 0.7);
+    const match = uniqueCatalogMatch(entries, gatewayId);
+    if (match) {
+      const profile = toCapabilityProfile(gatewayId, match, 'unique-normalized-id', 0.7);
       return { ...candidate, profile, contextWindow: profile.limits.contextTokens };
     }
     // Models.dev miss: if the candidate carries gateway-supplied label /
@@ -364,37 +392,47 @@ export function enrichModelsWithCapabilities(candidates, catalog) {
   });
 }
 
-/**
- * Strip a `<provider>/` prefix from a model id. Used as a last-ditch catalog
- * lookup key when the gateway reports the model under a wrapper namespace
- * (e.g. `claude-minimax/MiniMax-M3`) and the models.dev catalog uses the bare
- * form (`minimax/MiniMax-M3`).
- *
- * @param {string} id
- * @returns {string}
- */
-function stripProvider(id) {
-  const raw = String(id || '').trim();
-  const slash = raw.indexOf('/');
-  return slash >= 0 ? raw.slice(slash + 1) : raw;
+function gatewayFallbackProfile(candidate) {
+  if (!candidate?._gateway) return null;
+  return {
+    gatewayId: candidate.id,
+    baseModel: candidate.id,
+    name: candidate._gateway.name ?? candidate._gateway.display_name ?? null,
+    family: null,
+    description: candidate._gateway.description ?? null,
+    summary: null,
+    capabilities: {
+      attachment: false,
+      reasoning: false,
+      toolCall: false,
+      structuredOutput: false,
+      temperature: true,
+      inputModalities: ['text'],
+      outputModalities: ['text'],
+    },
+    limits: { contextTokens: null, inputTokens: null, outputTokens: null },
+    metadata: { source: 'gateway-fallback', matchType: 'gateway-fallback', confidence: 0 },
+  };
+}
+
+function withClearedTimeout(work, timeoutMs, label) {
+  let timer;
+  return Promise.race([
+    Promise.resolve().then(work),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 /**
- * Phase 2 lazy enrichment. The interactive picker path used to call
- * `fetchModelsDevCatalog` BEFORE the picker opened, paying the round-trip
- * on every `--list`/`--set` (which never even consulted the catalog) and
- * on every interactive session that the user then aborted.
+ * Best-effort metadata enrichment. Interactive callers pass the complete
+ * candidate set before rendering; non-interactive callers may pass only the
+ * IDs they need. Empty input is returned without contacting Models.dev.
  *
- * After Phase 2 the catalog fetch moves to AFTER picker confirmation:
- *   - `--list` and `--set` skip the fetch entirely.
- *   - The interactive path only fetches when the user actually picked
- *     one or more models, and only the picked IDs are enriched.
- *
- * Concurrency: per-id lookups run in parallel with a bounded worker pool
- * (`concurrency`, default 8) and a per-id timeout (`timeoutMs`, default
- * 3000ms). On per-id timeout or lookup failure, we fall back to the
- * candidate's Phase 1 `_gateway.name` contract (when present); when no
- * `_gateway` block is attached, the profile is `null`.
+ * The base and provider catalogs are fetched concurrently exactly once. Their
+ * timeout handles are cleared as soon as each request settles. Catalog misses
+ * fall back to the gateway's renderer-safe profile shape.
  *
  * @param {{
  *   candidates: Array<{ id: string, owned_by?: string|null, _gateway?: { name?: string|null, display_name?: string|null, description?: string|null } }>,
@@ -414,29 +452,29 @@ export async function enrichPicksByMetadata({
   timeoutMs = 3000,
   concurrency = 8,
 } = {}) {
+  const out = new Map();
+  const ids = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id) : [];
+  if (ids.length === 0) return { profiles: out, modelsDev: {}, providerCatalog: {} };
+
   // Wholesale catalog fetch — best-effort. A network failure on the
   // initial fetch degrades to an empty map; per-id timeouts on the
   // downstream enrichment path fall back to `_gateway.name`.
   // The wholesale fetch inherits `timeoutMs` so a hung stub does not
   // block the picker-confirmation step indefinitely.
-  const fetchWithTimeout = (fn, label) => Promise.race([
-    fn({}),
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`enrichPicksByMetadata: ${label} fetch timeout`)), timeoutMs)),
-  ]).catch(() => ({}));
+  const fetchWithTimeout = (fn, label) => withClearedTimeout(
+    () => fn({ timeoutMs }),
+    timeoutMs,
+    `enrichPicksByMetadata: ${label} fetch`,
+  ).catch(() => ({}));
   const [catalog, providerCatalog] = await Promise.all([
     fetchWithTimeout(fetchFn, 'base catalog'),
     typeof providerFetchFn === 'function' ? fetchWithTimeout(providerFetchFn, 'provider catalog') : Promise.resolve({}),
   ]);
   const catalogMap = flattenModelsDevCatalog(catalog);
-  const providerMap = flattenModelsDevCatalog(providerCatalog);
-
-  const out = new Map();
-  const ids = Array.isArray(pickedIds) ? pickedIds.filter((id) => typeof id === 'string' && id) : [];
+  const providerMap = flattenModelsDevCatalog(providerCatalog, { providerCatalog: true });
   // Stable order so the work array indexes are predictable for the
   // bounded runner below.
   const work = ids.map((id, index) => ({ id, index }));
-  if (work.length === 0) return { profiles: out, modelsDev: catalog };
-
   const findCandidate = (id) => (Array.isArray(candidates) ? candidates.find((c) => c && c.id === id) : null);
 
   // Bounded-concurrency worker pool. Each worker pulls jobs off the
@@ -456,19 +494,15 @@ export async function enrichPicksByMetadata({
         continue;
       }
       try {
-        await Promise.race([
-          // Each "job" resolves immediately with the profile lookup; the
-          // race is a defense-in-depth measure so a misbehaving fetchFn
-          // cannot stall the worker past `timeoutMs`.
-          Promise.resolve().then(() => {
-            const lower = String(id).toLowerCase();
-            const baseMatch = catalogMap.get(lower)
-              || catalogMap.get(stripProvider(id).toLowerCase());
-            const providerMatch = providerMap.get(lower)
-              || providerMap.get(stripProvider(id).toLowerCase());
-            const match = baseMatch && providerMatch
-              ? { ...baseMatch, ...providerMatch }
-              : (baseMatch || providerMatch);
+        await Promise.resolve().then(() => {
+            const baseMatch = uniqueCatalogMatch(catalogMap, id);
+            // Serving metadata is provider-specific. It is eligible only
+            // for an exact or normalized explicit provider match; suffix-only
+            // matching here would reintroduce cross-provider collisions.
+            const providerMatch = uniqueCatalogMatch(providerMap, id, { requireProvider: true });
+            const match = baseMatch
+              ? { ...baseMatch, ...(providerMatch ? { serving: providerMatch, cost: providerMatch.cost ?? baseMatch.cost } : {}) }
+              : providerMatch;
             let profile;
             if (match) {
               // Re-use the existing capability-profile shape; the new
@@ -477,42 +511,18 @@ export async function enrichPicksByMetadata({
               // enriched (confirmed picks only).
               profile = toCapabilityProfile(id, match, 'exact-id', 0.9);
             } else if (candidate._gateway) {
-              profile = {
-                name: candidate._gateway.name ?? candidate._gateway.display_name ?? null,
-                description: candidate._gateway.description ?? null,
-                summary: null,
-                ownedBy: candidate.owned_by ?? null,
-                supportsTools: null,
-                supportsVision: null,
-                contextWindow: null,
-                costTier: null,
-                confidence: 0,
-                metadata: { source: 'gateway-fallback' },
-              };
+              profile = gatewayFallbackProfile(candidate);
             } else {
               profile = null;
             }
             out.set(id, profile);
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('enrichPicksByMetadata: per-id timeout')), timeoutMs)),
-        ]);
+          });
       } catch {
         // Per-id failure (timeout or thrown). Fall back to `_gateway.name`
         // when present so the Phase 1 contract still surfaces a name;
         // otherwise the profile is null.
         if (candidate._gateway) {
-          out.set(id, {
-            name: candidate._gateway.name ?? candidate._gateway.display_name ?? null,
-            description: candidate._gateway.description ?? null,
-            summary: null,
-            ownedBy: candidate.owned_by ?? null,
-            supportsTools: null,
-            supportsVision: null,
-            contextWindow: null,
-            costTier: null,
-            confidence: 0,
-            metadata: { source: 'gateway-fallback' },
-          });
+          out.set(id, gatewayFallbackProfile(candidate));
         } else {
           out.set(id, null);
         }
@@ -520,7 +530,7 @@ export async function enrichPicksByMetadata({
     }
   });
   await Promise.all(workers);
-  return { profiles: out, modelsDev: catalog };
+  return { profiles: out, modelsDev: catalog, providerCatalog };
 }
 
 function capabilityLabel(profile) {
@@ -858,16 +868,19 @@ export function applyModels({ routerPath, models, tierHints = {}, profiles = {},
   const { kept: list } = filterCandidatesByDisabledProviders(incoming, disabled);
   const hints = { ...(tierHints || {}) };
   for (const id of list) if (!hints[id]) hints[id] = defaultTierHint(id);
+  const router = existsSync(routerPath)
+    ? JSON.parse(readFileSync(routerPath, 'utf8'))
+    : {};
+  const previousProfiles = router?.userSelected?.profiles || {};
   const block = {
     models: list,
     lastUpdated: new Date().toISOString(),
     source,
     tierHints: hints,
-    profiles: Object.fromEntries(list.filter((id) => profiles[id]).map((id) => [id, profiles[id]])),
+    profiles: Object.fromEntries(list
+      .filter((id) => profiles[id] || previousProfiles[id])
+      .map((id) => [id, profiles[id] || previousProfiles[id]])),
   };
-  const router = existsSync(routerPath)
-    ? JSON.parse(readFileSync(routerPath, 'utf8'))
-    : {};
   router.userSelected = block;
   if (!router.version) router.version = '13.0.0';
   // Do NOT auto-inject a default endpoint here. Operators configure the
@@ -2234,12 +2247,9 @@ export async function run(name, args, isHelpRequest, deps = {}) {
   // We do not short-circuit here — the code below falls into the
   // `wantList || isDeprecatedAlias` branch and prints candidate IDs.
 
-  // Phase 2 (10.19.8): the Models.dev catalog fetch used to happen HERE,
-  // before any flag was inspected. That paid the round-trip on every
-  // `--list`, every `--set`, every aborted picker, and every CI run that
-  // never looked at the result. Move the fetch to AFTER picker
-  // confirmation (see the interactive branch below); `--list` and
-  // `bizar model` now skip the fetch entirely.
+  // Catalog metadata is an interactive presentation dependency. `--list`,
+  // `--set`, and the deprecated list alias remain gateway-only and never
+  // contact Models.dev.
   let candidates;
   let modelsDev = { status: 'skipped', matched: 0, total: 0, source: MODELS_DEV_CATALOG_URL, note: 'lazy fetch — --list does not contact models.dev' };
   try {
@@ -2301,37 +2311,38 @@ export async function run(name, args, isHelpRequest, deps = {}) {
 
   const router = loadRouter(routerPath);
   const { models: current } = currentSelection(router);
+  const previousProfiles = router?.userSelected?.profiles || {};
   // 10.19.9 Phase 3: capture a snapshot of userSelected.models BEFORE
   // applyModels overwrites the block, so the post-confirm status screen
   // can classify re-confirmed picks as `preexisting` (⤳) instead of
   // `fresh` (✔). `current` is read once and shared with pickModelsFn;
   // we wrap it in a Set so classifyPickStatus can use `.has(id)`.
   const preExisting = new Set(current);
-  const picked = await pickModelsFn({ candidates, current });
-
-  // Phase 2 (10.19.8): the Models.dev catalog fetch moves HERE — only
-  // AFTER the operator has actually confirmed picks. Per-id enrichment
-  // runs in parallel with bounded concurrency (8 workers) and a per-id
-  // timeout (3000ms); per-id failures fall back to the Phase 1
-  // `_gateway.name` contract.
   const fetchModelsDevCatalogFn = deps.fetchModelsDevCatalog || fetchModelsDevCatalog;
-  // Test callers that inject the base fetch intentionally stay offline; the
-  // production path fetches both Models.dev datasets concurrently.
   const fetchProviderCatalogFn = deps.fetchProviderCatalog
     || (deps.fetchModelsDevCatalog ? undefined : fetchProviderCatalog);
+  // Fetch both catalogs once, concurrently, before rendering. Reuse this map
+  // after confirmation so the picker and persisted settings see identical
+  // metadata and confirmation never causes a second network round trip.
   const enrichment = await enrichPicksByMetadata({
     candidates,
-    pickedIds: picked,
+    pickedIds: candidates.map((candidate) => candidate.id),
     fetchFn: fetchModelsDevCatalogFn,
     providerFetchFn: fetchProviderCatalogFn,
   });
   const profilesMap = enrichment.profiles;
+  const enrichedCandidates = candidates.map((candidate) => {
+    const fresh = profilesMap.get(candidate.id);
+    const cached = previousProfiles[candidate.id];
+    const profile = fresh?.metadata?.source === 'models.dev' ? fresh : (cached || fresh || null);
+    return { ...candidate, profile, contextWindow: profile?.limits?.contextTokens ?? null };
+  });
+  const picked = await pickModelsFn({ candidates: enrichedCandidates, current });
   const modelsDevStatus = enrichment.modelsDev && Object.keys(enrichment.modelsDev).length > 0
-    ? { status: 'ok', source: MODELS_DEV_CATALOG_URL, matched: [...profilesMap.values()].filter((p) => p && p.metadata && p.metadata.source === 'models.dev').length, total: picked.length }
+    ? { status: 'ok', source: MODELS_DEV_CATALOG_URL, matched: picked.filter((id) => profilesMap.get(id)?.metadata?.source === 'models.dev').length, total: picked.length }
     : { status: 'unavailable', source: MODELS_DEV_CATALOG_URL, matched: 0, total: picked.length, note: 'wholesale fetch failed; per-id enrichment degraded to _gateway.name fallback' };
 
   if (picked.length === 0) {
-    const previousProfiles = loadRouter(routerPath)?.userSelected?.profiles || {};
     const block = applyModels({ routerPath, models: [], source: 'live-pick' });
     // Clear Claude Code modelOverrides + modelPicker when the picker is
     // emptied so the session no longer claims to recognise removed IDs.
@@ -2356,7 +2367,13 @@ export async function run(name, args, isHelpRequest, deps = {}) {
   const profiles = {};
   for (const id of picked) {
     tierHints[id] = defaultTierHint(id);
-    const profile = profilesMap.get(id);
+    const fresh = profilesMap.get(id);
+    // A transient catalog miss must not erase a previously good profile.
+    // Gateway fallback data remains useful for new models, but cached
+    // Models.dev/operator facts take precedence when already present.
+    const profile = fresh?.metadata?.source === 'models.dev'
+      ? fresh
+      : (previousProfiles[id] || fresh);
     if (profile) profiles[id] = profile;
   }
   // F-191 / 10.19.2 — stale-ID detection: the picker shows candidates
@@ -2366,7 +2383,6 @@ export async function run(name, args, isHelpRequest, deps = {}) {
   // Code still surfaces the unrecognized_model diagnostic.
   const liveIds = candidates.map((c) => c.id);
   const partition = partitionStalePicks({ liveIds, pickedIds: picked });
-  const previousProfiles = loadRouter(routerPath)?.userSelected?.profiles || {};
   const block = applyModels({ routerPath, models: picked, tierHints, profiles, source: 'live-pick' });
   if (partition.staleIds.length > 0) {
     block.staleIds = partition.staleIds;
@@ -2388,7 +2404,7 @@ export async function run(name, args, isHelpRequest, deps = {}) {
     // equivalent data shape.
     const statusResult = renderPickStatusScreen({
       picked,
-      profiles: profilesMap,
+      profiles,
       preExisting,
       out: { write: () => true },
       isTTY: false,
@@ -2426,7 +2442,7 @@ export async function run(name, args, isHelpRequest, deps = {}) {
     // operator feedback there.
     const statusResult = renderPickStatusScreen({
       picked,
-      profiles: profilesMap,
+      profiles,
       preExisting,
       out: process.stdout,
       isTTY: !!process.stdout.isTTY,

@@ -355,6 +355,66 @@ test('enrichPicksByMetadata: merges provider catalog envelope with base metadata
   assert.equal(profile.name, 'Base');
   assert.equal(profile.limits.contextTokens, 32000);
   assert.deepEqual(profile.cost, { input: 3, output: 4 });
+  assert.equal(profile.serving.provider, 'provider');
+});
+
+test('enrichPicksByMetadata: provider collisions preserve identity and canonical facts', async () => {
+  const providerCatalog = {
+    providers: {
+      alpha: { models: { demo: { cost: { input: 1 }, limit: { context: 111 } } } },
+      beta: { models: { demo: { cost: { input: 2 }, limit: { context: 222 } } } },
+    },
+  };
+  const baseCatalog = {
+    models: { 'canonical/demo': { name: 'Canonical Demo', reasoning: true, limit: { context: 64000 } } },
+  };
+  const { profiles } = await enrichPicksByMetadata({
+    candidates: [{ id: 'alpha/demo' }, { id: 'wrapper/demo' }],
+    pickedIds: ['alpha/demo', 'wrapper/demo'],
+    fetchFn: async () => baseCatalog,
+    providerFetchFn: async () => providerCatalog,
+  });
+  assert.equal(profiles.get('alpha/demo').name, 'Canonical Demo');
+  assert.equal(profiles.get('alpha/demo').limits.contextTokens, 64000, 'serving limits do not replace canonical capability limits');
+  assert.deepEqual(profiles.get('alpha/demo').cost, { input: 1 });
+  assert.equal(profiles.get('alpha/demo').serving.provider, 'alpha');
+  assert.equal(profiles.get('wrapper/demo').name, 'Canonical Demo');
+  assert.equal(profiles.get('wrapper/demo').cost, null, 'ambiguous serving rows are not overlaid by suffix');
+  assert.equal(profiles.get('wrapper/demo').serving, null);
+});
+
+test('enrichPicksByMetadata: unique canonical suffix matches wrapper namespaces', async () => {
+  const { profiles } = await enrichPicksByMetadata({
+    candidates: [{ id: 'cx/MiniMax-M3' }],
+    pickedIds: ['cx/MiniMax-M3'],
+    fetchFn: async () => ({ models: { 'minimax/MiniMax-M3': { name: 'MiniMax M3', tool_call: true } } }),
+  });
+  assert.equal(profiles.get('cx/MiniMax-M3').baseModel, 'minimax/MiniMax-M3');
+  assert.equal(profiles.get('cx/MiniMax-M3').capabilities.toolCall, true);
+});
+
+test('enrichPicksByMetadata: empty selection does not fetch catalogs', async () => {
+  let calls = 0;
+  const fetchFn = async () => { calls += 1; return {}; };
+  const result = await enrichPicksByMetadata({ candidates: [], pickedIds: [], fetchFn, providerFetchFn: fetchFn });
+  assert.equal(calls, 0);
+  assert.equal(result.profiles.size, 0);
+});
+
+test('enrichPicksByMetadata: immediate fetches clear timeout handles so the process exits promptly', async () => {
+  const code = `
+    import { enrichPicksByMetadata } from './cli/commands/models.mjs';
+    const fetchFn = async () => ({ models: { 'p/m': { name: 'M' } } });
+    await enrichPicksByMetadata({ candidates: [{ id: 'p/m' }], pickedIds: ['p/m'], fetchFn, providerFetchFn: fetchFn, timeoutMs: 3000 });
+  `;
+  const started = Date.now();
+  const child = spawn(process.execPath, ['--input-type=module', '--eval', code], { cwd: CWD, stdio: 'ignore' });
+  const exitCode = await new Promise((resolveP, reject) => {
+    child.once('error', reject);
+    child.once('exit', resolveP);
+  });
+  assert.equal(exitCode, 0);
+  assert.ok(Date.now() - started < 1000, 'cleared 3s timeout handles must not delay process exit');
 });
 
 test('enrichPicksByMetadata: per-id timeout falls back to _gateway.name', async () => {
@@ -381,6 +441,8 @@ test('enrichPicksByMetadata: per-id timeout falls back to _gateway.name', async 
   assert.ok(profile, 'profile is non-null even when catalog fetch hangs');
   assert.equal(profile.name, 'B', '_gateway.name preserved');
   assert.equal(profile.metadata.source, 'gateway-fallback');
+  assert.deepEqual(profile.capabilities.inputModalities, ['text']);
+  assert.deepEqual(profile.limits, { contextTokens: null, inputTokens: null, outputTokens: null });
   // Wholesale fetch rejection surfaces as an empty catalog; per-id
   // timeout falls back to the Phase 1 contract.
   assert.deepEqual(modelsDev, {});

@@ -523,6 +523,24 @@ test('applyModels: persists profiles only for selected models', () => {
   }
 });
 
+test('applyModels: preserves cached profiles for models selected without fresh metadata', () => {
+  const dir = tmpDir();
+  try {
+    const routerPath = join(dir, 'model-router.json');
+    writeFileSync(routerPath, JSON.stringify({
+      userSelected: {
+        models: ['a/one'],
+        profiles: { 'a/one': { name: 'Cached One', metadata: { source: 'models.dev' } } },
+      },
+    }));
+    const block = applyModels({ routerPath, models: ['a/one'], source: 'cli-set' });
+    assert.equal(block.profiles['a/one'].name, 'Cached One');
+    assert.equal(JSON.parse(readFileSync(routerPath, 'utf8')).userSelected.profiles['a/one'].name, 'Cached One');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ─── F-185 / IMP-019 `bizar models explain` ────────────────────────────────
 
 test('explainSelection: rejects missing role argument', () => {
@@ -612,18 +630,9 @@ test('explainSelection: missing router file degrades to empty userSelected witho
   rmSync(dir, { recursive: true, force: true });
 });
 
-// ── 10.19.8 Phase 2: lazy Models.dev fetch deferral ───────────────────────
+// ── F-196: Models.dev metadata is available while selecting ───────────────
 
-test('run(): interactive picker defers fetchModelsDevCatalog until after confirmation', async () => {
-  // Phase 2 (10.19.8) regression: `bizar models` (interactive) used to call
-  // `fetchModelsDevCatalog` BEFORE the picker opened, paying the round-trip
-  // on every `bizar models --list` and `--set` invocation that never even
-  // looked at the catalog. After Phase 2 the catalog fetch is gated behind
-  // picker confirmation.
-  //
-  // We pin the order by feeding both hooks a monotonic counter and
-  // asserting `pickerEnd <= catalogEnd` — i.e. the catalog fetch started
-  // AFTER the picker returned.
+test('run(): fetches both catalogs before the picker and reuses enriched candidates', async () => {
   const dir = tmpDir();
   const order = [];
   let orderCounter = 0;
@@ -648,9 +657,16 @@ test('run(): interactive picker defers fetchModelsDevCatalog until after confirm
       },
     };
   };
+  const stubFetchProviderCatalog = async () => {
+    order.push({ step: 'fetchProviderCatalog', n: ++orderCounter });
+    return { providers: { minimax: { models: { 'MiniMax-M3': { cost: { input: 1 } } } } } };
+  };
 
   const stubPickModels = async ({ candidates }) => {
     order.push({ step: 'pickModels:start', n: ++orderCounter });
+    assert.equal(candidates[0].profile.name, 'MiniMax M3');
+    assert.equal(candidates[0].profile.capabilities.toolCall, true);
+    assert.equal(candidates[0].profile.limits.contextTokens, 200000);
     // Yield once so the event loop has a chance to schedule any work
     // the picker would have done — keeps the counter ordering honest.
     await new Promise((resolveP) => setImmediate(resolveP));
@@ -661,42 +677,42 @@ test('run(): interactive picker defers fetchModelsDevCatalog until after confirm
   const prevRouterEnv = process.env.BIZAR_MODEL_ROUTER_CONFIG;
   const prevUrlEnv = process.env.BIZAR_MODEL_ROUTER_URL;
   const prevTokenEnv = process.env.ANTHROPIC_AUTH_TOKEN;
+  const prevClaudeConfig = process.env.CLAUDE_CONFIG_DIR;
   try {
     const routerPath = join(dir, 'model-router.json');
     writeFileSync(routerPath, JSON.stringify({ version: '13.0.0' }));
     process.env.BIZAR_MODEL_ROUTER_CONFIG = routerPath;
     process.env.BIZAR_MODEL_ROUTER_URL = 'http://stub-gw.invalid/v1';
     process.env.ANTHROPIC_AUTH_TOKEN = 'tok';
+    process.env.CLAUDE_CONFIG_DIR = join(dir, 'claude');
     await runModelsCommand('models', [], false, {
       listModels: stubListModels,
       pickModels: stubPickModels,
       fetchModelsDevCatalog: stubFetchModelsDevCatalog,
+      fetchProviderCatalog: stubFetchProviderCatalog,
     });
 
     const listStep = order.find((e) => e.step === 'listModels');
     const pickerStart = order.find((e) => e.step === 'pickModels:start');
     const pickerEnd = order.find((e) => e.step === 'pickModels:end');
     const catalogStep = order.find((e) => e.step === 'fetchModelsDevCatalog');
+    const providerStep = order.find((e) => e.step === 'fetchProviderCatalog');
     assert.ok(listStep, 'listModels was called');
     assert.ok(pickerStart, 'picker started');
     assert.ok(pickerEnd, 'picker ended');
     assert.ok(catalogStep, 'catalog fetch happened');
+    assert.ok(providerStep, 'provider catalog fetch happened');
 
-    // Phase 2 invariant: listModels runs first, picker runs second, and
-    // the catalog fetch happens AFTER the picker returns. This is the
-    // exact ordering that the deferred-fetch plan (10.19.8) requires.
     assert.ok(
-      listStep.n < pickerStart.n,
-      `listModels (n=${listStep.n}) must precede picker:start (n=${pickerStart.n})`,
+      listStep.n < catalogStep.n && listStep.n < providerStep.n,
+      'gateway discovery precedes catalog enrichment',
     );
     assert.ok(
-      pickerStart.n < pickerEnd.n,
-      `picker:start (n=${pickerStart.n}) must precede picker:end (n=${pickerEnd.n})`,
+      catalogStep.n < pickerStart.n && providerStep.n < pickerStart.n,
+      'both catalogs are available before the picker renders',
     );
-    assert.ok(
-      pickerEnd.n < catalogStep.n,
-      `catalog fetch (n=${catalogStep.n}) must run AFTER picker:end (n=${pickerEnd.n}) — that is the Phase 2 deferral`,
-    );
+    assert.equal(order.filter((entry) => entry.step === 'fetchModelsDevCatalog').length, 1);
+    assert.equal(order.filter((entry) => entry.step === 'fetchProviderCatalog').length, 1);
   } finally {
     if (prevRouterEnv === undefined) delete process.env.BIZAR_MODEL_ROUTER_CONFIG;
     else process.env.BIZAR_MODEL_ROUTER_CONFIG = prevRouterEnv;
@@ -704,6 +720,8 @@ test('run(): interactive picker defers fetchModelsDevCatalog until after confirm
     else process.env.BIZAR_MODEL_ROUTER_URL = prevUrlEnv;
     if (prevTokenEnv === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
     else process.env.ANTHROPIC_AUTH_TOKEN = prevTokenEnv;
+    if (prevClaudeConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = prevClaudeConfig;
     rmSync(dir, { recursive: true, force: true });
   }
 });
