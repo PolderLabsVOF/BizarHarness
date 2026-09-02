@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto'
-import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
-
 export const meta = {
   name: 'bizar-debug',
   description: 'Root-cause a bug with bounded loop-until-dry: RCA hypothesis, adversarial verification, smallest fix, regression test',
@@ -13,6 +10,9 @@ export const meta = {
     { title: 'Verify', detail: 'Re-check the fix on the regression test and adjacent paths' },
   ],
 }
+
+import { randomUUID } from 'node:crypto'
+import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
 
 const BUG_ID = typeof args === 'string'
   ? args

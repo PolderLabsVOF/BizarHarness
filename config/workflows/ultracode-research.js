@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto'
-import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
-
 export const meta = {
   name: 'ultracode-research',
   description: 'Research a technical question with independent repository, documentation, architecture, and adversarial passes',
@@ -11,6 +8,9 @@ export const meta = {
     { title: 'Synthesize', detail: 'Produce a sourced decision brief' },
   ],
 }
+
+import { randomUUID } from 'node:crypto'
+import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
 
 const QUESTION = typeof args === 'string' ? args : args?.question || JSON.stringify(args || {})
 

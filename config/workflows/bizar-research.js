@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto'
-import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
-
 export const meta = {
   name: 'bizar-research',
   description: 'Research, plan, audit, and implement a bounded task across disjoint lanes with sequential pipeline verification',
@@ -13,6 +10,9 @@ export const meta = {
     { title: 'Verify', detail: 'Sequentially review and synthesize integration evidence' },
   ],
 }
+
+import { randomUUID } from 'node:crypto'
+import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
 
 const TOPIC = typeof args === 'string'
   ? args

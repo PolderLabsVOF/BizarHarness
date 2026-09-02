@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto'
-import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
-
 export const meta = {
   name: 'ultracode-review',
   description: 'Review a change across independent dimensions and adversarially verify every finding',
@@ -10,6 +7,9 @@ export const meta = {
     { title: 'Verify', detail: 'Try to refute every proposed finding before reporting it' },
   ],
 }
+
+import { randomUUID } from 'node:crypto'
+import { dispatchAgent, writeArtifact, barrierRef } from './lib/dispatch.js'
 
 const TARGET = typeof args === 'string' ? args : args?.target || 'the current working diff'
 

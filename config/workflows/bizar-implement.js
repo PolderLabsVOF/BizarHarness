@@ -1,5 +1,3 @@
-import { dispatchAgent } from './lib/dispatch.js'
-
 export const meta = {
   name: 'bizar-implement',
   description: 'Implement one bounded change in one worktree, or run explicitly supplied disjoint lanes concurrently',
@@ -8,6 +6,8 @@ export const meta = {
     { title: 'Implement', detail: 'Run one isolated writer, or explicit disjoint writers concurrently' },
   ],
 }
+
+import { dispatchAgent } from './lib/dispatch.js'
 
 const TOPIC = typeof args === 'string'
   ? args
