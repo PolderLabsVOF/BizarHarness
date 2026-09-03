@@ -995,6 +995,9 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
   const generatedAgents = syncGeneratedModelAgents(synced, {
     agentsDir: settingsJsonPath === undefined ? undefined : join(dirname(path), 'agents', 'bizar-models'),
   });
+  const stableRoleAgents = syncStableRoleModelAgents(synced, {
+    agentsDir: settingsJsonPath === undefined ? undefined : join(dirname(path), 'agents'),
+  });
   if (requiresGatewayModelDiscovery(synced)) {
     settings.env = {
       ...(settings.env || {}),
@@ -1026,6 +1029,7 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
     skippedDisabled,
     nativeAgentAliases,
     generatedAgents,
+    stableRoleAgents,
     settingsPath: path,
   };
 }
@@ -1100,6 +1104,38 @@ export function syncGeneratedModelAgents(modelIds, opts = {}) {
     writeFileSync(join(agentsDir, `${name}.md`), `---\nname: ${name}\ndescription: Bizar ${role} role on a configured gateway model.\nmodel: ${id}\n---\n\nYou are the Bizar ${role} role. Follow the assigned task, preserve your role boundary, and report concise evidence to the coordinator.\n`, { mode: 0o600 });
   }));
   return { agentsDir, names };
+}
+
+/**
+ * Bind the ordinary, recognizable Bizar role definitions to the default
+ * operator-selected model. Claude Code watches definition edits, so future
+ * `subagent_type: greg` calls use the chosen full ID without a restart or an
+ * alias-only native `model` parameter. Generated per-model definitions remain
+ * available for explicitly requested advanced routing.
+ */
+export function syncStableRoleModelAgents(modelIds, opts = {}) {
+  const agentsDir = opts.agentsDir || join(resolveClaudeConfigDir(), 'agents');
+  const defaultModel = (Array.isArray(modelIds) ? modelIds : []).find((id) => typeof id === 'string' && id.trim())?.trim() || null;
+  const names = [];
+  for (const role of BIZAR_AGENT_ROLES) {
+    const path = join(agentsDir, `${role}.md`);
+    if (!existsSync(path)) continue;
+    const source = readFileSync(path, 'utf8');
+    if (!source.startsWith('---\n')) continue;
+    const end = source.indexOf('\n---', 4);
+    if (end < 0) continue;
+    const frontmatter = source.slice(4, end);
+    const body = source.slice(end + 4);
+    const nextFrontmatter = defaultModel
+      ? (/^model:\s*.*$/m.test(frontmatter)
+        ? frontmatter.replace(/^model:\s*.*$/m, `model: ${defaultModel}`)
+        : `${frontmatter}\nmodel: ${defaultModel}`)
+      : frontmatter.replace(/^model:\s*.*\n?/m, '');
+    const next = `---\n${nextFrontmatter}\n---${body}`;
+    if (next !== source) writeFileSync(path, next, { mode: 0o600 });
+    names.push(role);
+  }
+  return { agentsDir, names, defaultModel };
 }
 
 const NATIVE_AGENT_OVERRIDE_KEYS = Object.freeze({
@@ -2364,9 +2400,20 @@ export async function run(name, args, isHelpRequest, deps = {}) {
     const router = loadRouter(routerPath);
     const models = configuredEnabledModels(router);
     const agentTypes = Object.fromEntries(models.map((id) => [id, Object.fromEntries(BIZAR_AGENT_ROLES.map((role) => [role, modelAgentName(id, role)]))]));
-    const payload = { routerPath, models, agentTypes, agentsDir: join(resolveClaudeConfigDir(), 'agents', 'bizar-models') };
+    const stableRoleTypes = Object.fromEntries(BIZAR_AGENT_ROLES.map((role) => [role, role]));
+    const payload = {
+      routerPath,
+      models,
+      defaultModel: models[0] || null,
+      stableRoleTypes,
+      agentTypes,
+      agentsDir: join(resolveClaudeConfigDir(), 'agents', 'bizar-models'),
+    };
     if (wantJson) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
-    else for (const id of models) process.stdout.write(`${id}\t${JSON.stringify(agentTypes[id])}\n`);
+    else {
+      process.stdout.write(`default\t${JSON.stringify(stableRoleTypes)}\n`);
+      for (const id of models) process.stdout.write(`${id}\t${JSON.stringify(agentTypes[id])}\n`);
+    }
     return true;
   }
 

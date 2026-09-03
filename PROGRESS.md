@@ -24,6 +24,25 @@ environment leakage from polluting test isolation.
 
 ### Terminal subagent-result integrity (active)
 
+### Stable role-model projection (active)
+
+Current Claude Code documentation confirms that a custom definition's
+frontmatter `model:` is live-reloaded for new spawns and takes precedence when
+the native Agent `model` field is omitted. Bizar's normal path will therefore
+project the first enabled operator selection into the stable global Bizar role
+files (`greg`, `todd`, and peers). Normal dispatches use the short stable role
+name; the per-model generated definitions are retained only for explicit
+advanced selection. The Agent guard must accept an omitted native model for a
+stable Bizar role rather than compare it to the parent session model.
+
+Completed 2026-09-03: standard dispatch now uses the short stable Bizar role
+name, with `bizar models` writing the first enabled operator-selected full ID
+into every installed stable role definition. Generated definitions remain an
+advanced explicit route only. All abstract workflow roles map to shipped Bizar
+roles, including architecture→Paul and adversarial/security/QA→Linda. Focused
+model, guard, workflow, and guidance coverage passes 152/152 before final
+release verification.
+
 Live Claude transcript evidence showed that the MiniMax replacement agents did
 produce their requested infrastructure, firmware, and web reports.  Later
 terminal/liveness notifications elicited short acknowledgements (for example

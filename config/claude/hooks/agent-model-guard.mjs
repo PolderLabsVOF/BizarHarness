@@ -49,7 +49,7 @@ import { pathToFileURL } from 'node:url';
 
 import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
 import { resolveClaudeConfigDir } from '../../../cli/config-paths.mjs';
-import { isGeneratedModelAgentName } from '../../../cli/commands/models.mjs';
+import { BIZAR_AGENT_ROLES, isGeneratedModelAgentName } from '../../../cli/commands/models.mjs';
 
 function deny(reason) {
   return {
@@ -223,11 +223,14 @@ export async function guardAgentModel(input, options = {}) {
     : '';
 
   // The native Agent tool rejects arbitrary gateway IDs in its `model` enum.
-  // Inheritance is safe only when the auditable Bizar selection equals the
-  // actual global Claude parent model and is a selected, enabled user pick.
+  // Stable Bizar definitions own their selected full ID in frontmatter, so an
+  // omitted native model is correct and must not be coupled to the parent
+  // session model. Generated per-model definitions remain valid too.
   if (!requested || requested === 'inherit') {
     const generated = isGeneratedModelAgentName(toolInput.subagent_type, [...userPicks]);
+    const stable = BIZAR_AGENT_ROLES.includes(String(toolInput.subagent_type || '').trim());
     if (generated && !requested) return {};
+    if (stable && !requested && userPicks.size > 0) return {};
     const configured = configuredContext;
     const parent = readConfiguredParentModel(options);
     if (!configured || configured !== parent || !userPicks.has(configured)) {
@@ -252,7 +255,7 @@ export async function guardAgentModel(input, options = {}) {
   // a gateway accepts arbitrary IDs for the main conversation. Full IDs belong
   // in Bizar's generated subagent frontmatter, not in this enum-shaped field.
   if (userPicks.has(requested)) {
-    return deny('Bizar Agent dispatch blocked: native Agent model accepts aliases only. Use the role-specific generated subagent_type from `bizar models --agent-types --json` and omit model; re-run `bizar models` if it is missing.');
+    return deny('Bizar Agent dispatch blocked: native Agent model accepts aliases only. Use the stable Bizar role as subagent_type (for example `greg` or `todd`) and omit model; run `bizar models` if the role definition is missing.');
   }
 
   // F-185 contract: when the orchestrator passes both `routingDecisionId`

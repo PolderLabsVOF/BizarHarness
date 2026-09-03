@@ -37,6 +37,7 @@ import {
   configuredEnabledModels,
   requiresGatewayModelDiscovery,
   syncGeneratedModelAgents,
+  syncStableRoleModelAgents,
 } from './commands/models.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
 
@@ -514,7 +515,8 @@ export function syncConfiguredModelAgents({ dryRun = false } = {}) {
   const models = configuredEnabledModels(router);
   if (dryRun) return { ok: true, message: `[dry-run] would sync ${models.length} generated model agent(s)`, models };
   const generated = syncGeneratedModelAgents(models, { agentsDir: join(resolveClaudeDir(), 'agents', 'bizar-models') });
-  return { ok: true, message: `${generated.names.length} generated model agent(s) synced`, ...generated };
+  const stable = syncStableRoleModelAgents(models, { agentsDir: join(resolveClaudeDir(), 'agents') });
+  return { ok: true, message: `${stable.names.length} stable role model(s) and ${generated.names.length} generated model agent(s) synced`, ...generated, stableRoleAgents: stable };
 }
 
 export async function syncSkillFiles({ dryRun = false, force = false } = {}) {

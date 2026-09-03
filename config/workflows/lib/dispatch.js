@@ -33,15 +33,14 @@ import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, ren
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-const MODEL_AGENT_WORDS = { a:'alpha', b:'bravo', c:'charlie', d:'delta', e:'echo', f:'foxtrot', g:'golf', h:'hotel', i:'india', j:'juliet', k:'kilo', l:'lima', m:'mike', n:'november', o:'oscar', p:'papa', q:'quebec', r:'romeo', s:'sierra', t:'tango', u:'uniform', v:'victor', w:'whiskey', x:'xray', y:'yankee', z:'zulu', 0:'zero', 1:'one', 2:'two', 3:'three', 4:'four', 5:'five', 6:'six', 7:'seven', 8:'eight', 9:'nine', '/':'slash', '.':'dot', '-':'dash', '_':'under' };
 const ROLE_TO_BIZAR_AGENT = Object.freeze({
-  'research-analyst': 'greg', planner: 'paul', implementer: 'todd',
-  'qa-reviewer': 'linda', reviewer: 'linda', 'debug-specialist': 'carl',
+  'research-analyst': 'greg', planner: 'paul', architect: 'paul', implementer: 'todd',
+  'qa-reviewer': 'linda', reviewer: 'linda', adversarial: 'linda', security: 'linda', qa: 'linda', 'debug-specialist': 'carl',
   'principal-engineer': 'karen', 'ui-designer': 'ria', 'it-lead': 'steve',
   'knowledge-manager': 'oscar', 'support-tech': 'kevin', 'exec-assistant': 'pam',
   'office-coordinator': 'brenda', 'office-greeter': 'janet', 'brand-designer': 'brad',
 });
-function modelAgentName(modelId, role = 'todd') { return `${ROLE_TO_BIZAR_AGENT[role] || (Object.values(ROLE_TO_BIZAR_AGENT).includes(role) ? role : 'todd')}-bizar-${[...String(modelId || '').toLowerCase()].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-')}`; }
+function stableAgentName(role = 'todd') { return ROLE_TO_BIZAR_AGENT[role] || (Object.values(ROLE_TO_BIZAR_AGENT).includes(role) ? role : 'todd'); }
 
 const { O_APPEND, O_CREAT, O_WRONLY } = fsConstants;
 
@@ -806,12 +805,14 @@ export function classifyDispatchOutcome(result, error, startMs) {
 }
 
 /**
- * Build an Agent payload that selects a generated full-ID model definition.
+ * Build an Agent payload that selects a stable Bizar role definition. Its
+ * frontmatter is refreshed by `bizar models` with the default selected full
+ * gateway ID, avoiding the alias-only native `model` transport.
  */
 export function augmentPayload(opts, decision, agentName, context = {}) {
   return {
     ...opts,
-    subagent_type: modelAgentName(decision.modelId, opts.role),
+    subagent_type: stableAgentName(opts.role),
     additionalContext: {
       ...(opts.additionalContext && typeof opts.additionalContext === 'object' ? opts.additionalContext : {}),
       bizarConfiguredModel: decision.modelId ?? null,

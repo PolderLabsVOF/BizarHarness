@@ -287,7 +287,7 @@ test('bizar-implement: visible scope, plan, implementation, and review phases', 
   assert.ok(agentCalls.length >= 5, 'scope, plan, writer, and review must use separate workers');
   const writers = agentCalls.filter((call) => String(call.label || '').startsWith('implement:'));
   assert.equal(writers.length, result.implementations.length);
-  assert.ok(writers.every((call) => call.subagentType === 'todd-mid' && call.isolation === 'worktree'));
+  assert.ok(writers.every((call) => call.subagentType === 'todd' && call.isolation === 'worktree'));
   const parallelCalls = calls.filter((c) => c.primitive === 'parallel');
   assert.ok(parallelCalls.some((call) => call.count === 2), 'independent scope checks must run concurrently');
   const phases = calls.filter((c) => c.primitive === 'phase').map((c) => c.name);
@@ -331,6 +331,6 @@ test('all workflows: phase() calls fire in declared order', async () => {
     const minPhases = script.minPhases ?? 3;
     assert.ok(phases.length >= minPhases, `${script.name}: expected >=${minPhases} phase() calls, saw ${phases.length}`);
     const agentCalls = calls.filter((call) => call.primitive === 'agent');
-    assert.ok(agentCalls.every((call) => /^(greg|paul|todd|linda)-(mid|high)$/.test(call.subagentType)), `${script.name}: every Agent call needs an explicit role-specific generated model agent`);
+    assert.ok(agentCalls.every((call) => /^(greg|paul|todd|linda)$/.test(call.subagentType)), `${script.name}: every Agent call needs a stable Bizar role definition`);
   }
 });

@@ -192,7 +192,7 @@ test('dispatchAgent: with selectedProfiles + risk=high -> additionalContext.biza
     FIXTURE_CONTEXT,
   );
   assert.ok(capturedOpts, 'agentFn must be invoked');
-  assert.match(capturedOpts.subagent_type, /^(greg|paul|todd|linda)-bizar-/, 'native Agent receives a role-specific generated model definition');
+  assert.match(capturedOpts.subagent_type, /^(greg|paul|todd|linda)$/, 'native Agent receives a stable Bizar role definition');
   assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/strong');
   assert.ok(UUID_RE.test(capturedOpts.routingDecisionId));
   assert.equal(capturedOpts.tier, 'high');
@@ -209,7 +209,7 @@ test('dispatchAgent: risk=low returns the cheapest healthy selected', async () =
     { role: 'generic', risk: 'low', label: 'cheap' },
     FIXTURE_CONTEXT,
   );
-  assert.match(capturedOpts.subagent_type, /^(greg|paul|todd|linda)-bizar-/);
+  assert.match(capturedOpts.subagent_type, /^(greg|paul|todd|linda)$/);
   assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/cheap');
   assert.equal(capturedOpts.tier, 'budget');
   assert.equal(capturedOpts.selectorReason, dispatch.REASON.CHEAPEST_RISK_LOW);
@@ -228,7 +228,7 @@ test('dispatchAgent: dryRun=true returns decision without invoking agentFn', asy
   assert.equal(invoked, false, 'agentFn must NOT be invoked when dryRun=true');
   assert.ok(result.__dispatchDecision, 'result carries the decision');
   assert.ok(UUID_RE.test(result.__dispatchDecision.routingDecisionId));
-  assert.match(result.payload.subagent_type, /^(greg|paul|todd|linda)-bizar-/);
+  assert.match(result.payload.subagent_type, /^(greg|paul|todd|linda)$/);
   assert.equal(result.payload.additionalContext?.bizarConfiguredModel, 'provider/strong');
 });
 
@@ -253,7 +253,7 @@ test('dispatchAgent: caller cannot bypass the configured pool with forceModel', 
     { role: 'security', risk: 'high', forceModel: 'claude-sonnet-5' },
     FIXTURE_CONTEXT,
   );
-  assert.match(capturedOpts.subagent_type, /^(greg|paul|todd|linda)-bizar-/);
+  assert.match(capturedOpts.subagent_type, /^(greg|paul|todd|linda)$/);
   assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/strong');
 });
 
@@ -277,7 +277,7 @@ test('dispatchAgent: capture hook receives the augmented payload', async () => {
     assert.equal(captured.length, 1);
     assert.equal(captured[0].agentName, 'mike');
     assert.ok(captured[0].opts.routingDecisionId);
-    assert.match(captured[0].opts.subagent_type, /^(greg|paul|todd|linda)-bizar-/);
+    assert.match(captured[0].opts.subagent_type, /^(greg|paul|todd|linda)$/);
     assert.equal(captured[0].opts.additionalContext?.bizarConfiguredModel, 'provider/strong');
   } finally {
     dispatch.resetCaptureFn();
@@ -367,7 +367,7 @@ test('dispatch: captured payloads from a synthetic dispatch contain model + rout
 /*          augmentPayload: F-201 transport-compatibility shape                */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-test('dispatch.augmentPayload: selects a generated full-ID model definition', () => {
+test('dispatch.augmentPayload: selects a stable role definition', () => {
   const decision = {
     modelId: 'claude-qwen/qwen3.8-max',
     routingDecisionId: 'r-2026-09-02-001',
@@ -376,7 +376,7 @@ test('dispatch.augmentPayload: selects a generated full-ID model definition', ()
     fallbackChain: [],
   };
   const payload = dispatch.augmentPayload({ role: 'generic', risk: 'low' }, decision, 'mike', { selectedProfiles: [{ id: 'claude-qwen/qwen3.8-max' }] });
-  assert.match(payload.subagent_type, /^(greg|paul|todd|linda)-bizar-/);
+  assert.match(payload.subagent_type, /^(greg|paul|todd|linda)$/);
   assert.equal(payload.additionalContext?.bizarConfiguredModel, 'claude-qwen/qwen3.8-max');
   assert.equal(payload.routingDecisionId, 'r-2026-09-02-001');
   assert.equal(payload.tier, 'premium');
@@ -400,7 +400,7 @@ test('dispatch.augmentPayload: accepts an exact model beyond four alias slots', 
   const payload = dispatch.augmentPayload({}, { modelId: 'provider/five', routingDecisionId: 'r1', tier: 'x', reason: 'r', fallbackChain: [] }, 'a', {
     selectedProfiles: [{ id: 'provider/one' }, { id: 'provider/two' }, { id: 'provider/three' }, { id: 'provider/four' }, { id: 'provider/five' }],
   });
-  assert.match(payload.subagent_type, /^(greg|paul|todd|linda)-bizar-/);
+  assert.match(payload.subagent_type, /^(greg|paul|todd|linda)$/);
 });
 
 /* ────────────────────────────────────────────────────────────────────────── */

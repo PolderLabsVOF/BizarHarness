@@ -32,6 +32,7 @@ import {
   buildClaudeModelOverrides,
   modelAgentName,
   syncGeneratedModelAgents,
+  syncStableRoleModelAgents,
   requiresGatewayModelDiscovery,
   configuredFallbackModels,
   currentSelection,
@@ -57,6 +58,25 @@ test('generated model agents use a Claude-safe name and preserve the full gatewa
     assert.ok(result.names.includes(name));
     const definition = readFileSync(join(agentsDir, `${name}.md`), 'utf8');
     assert.match(definition, new RegExp(`model: ${id.replace(/[./-]/g, '\\$&')}`));
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('stable Bizar roles receive the default selected full gateway model', () => {
+  const cwd = makeCwd();
+  try {
+    const agentsDir = join(cwd, 'agents');
+    mkdirSync(agentsDir, { recursive: true });
+    writeFileSync(join(agentsDir, 'greg.md'), '---\nname: greg\ndescription: researcher\n---\n\n# Greg\n');
+    writeFileSync(join(agentsDir, 'todd.md'), '---\nname: todd\nmodel: old/model\n---\n\n# Todd\n');
+    const result = syncStableRoleModelAgents(['minimax/MiniMax-M3', 'glm/glm-5.3'], { agentsDir });
+    assert.equal(result.defaultModel, 'minimax/MiniMax-M3');
+    assert.deepEqual(result.names.sort(), ['greg', 'todd']);
+    assert.match(readFileSync(join(agentsDir, 'greg.md'), 'utf8'), /^model: minimax\/MiniMax-M3$/m);
+    assert.match(readFileSync(join(agentsDir, 'todd.md'), 'utf8'), /^model: minimax\/MiniMax-M3$/m);
+    syncStableRoleModelAgents([], { agentsDir });
+    assert.doesNotMatch(readFileSync(join(agentsDir, 'greg.md'), 'utf8'), /^model:/m);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

@@ -23,7 +23,7 @@ const routeModel = (risk) => {
   const selected = candidate.trim()
   return selected
 }
-const routeAgentType = (risk, role = 'todd') => WORKFLOW_ROUTING.agentTypes?.[routeModel(risk)]?.[({ 'research-analyst': 'greg', planner: 'paul', implementer: 'todd', 'qa-reviewer': 'linda', reviewer: 'linda' }[role] || role)] || ''
+const routeAgentType = (_risk, role = 'todd') => ({ 'research-analyst': 'greg', planner: 'paul', architect: 'paul', implementer: 'todd', 'qa-reviewer': 'linda', reviewer: 'linda', adversarial: 'linda', security: 'linda', qa: 'linda' }[role] || role)
 if (!routeModel('medium') || !routeModel('high') || !routeAgentType('medium') || !routeAgentType('high')) {
   return {
     status: 'blocked',

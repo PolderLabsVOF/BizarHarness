@@ -1,5 +1,17 @@
 # Changelog
 
+## [10.23.21] - 2026-09-03
+
+### Fixed
+
+- **Stable Bizar roles** — `bizar models` now writes the default selected
+  gateway model into the global `greg`, `todd`, `linda`, and other Bizar role
+  definitions. Normal subagents, workflows, and teams dispatch with these
+  short role names and omit the alias-only native `model` field.
+- **Parent-model false block** — an omitted model on a stable Bizar role no
+  longer has to match the parent session model. Per-model generated definitions
+  remain available only for explicit advanced routing.
+
 ## [10.23.20] - 2026-09-03
 
 ### Fixed

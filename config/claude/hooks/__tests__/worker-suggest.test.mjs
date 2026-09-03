@@ -108,8 +108,8 @@ for (const prompt of [
     assert.match(context, /Adaptive Bizar routing policy/);
     assert.match(context, /clarification question/);
     assert.match(context, /coordination mode/i);
-    assert.match(context, /enabled `bizar models` user selection/);
-    assert.match(context, /generated definition name/);
+    assert.match(context, /default enabled operator-selected gateway ID/);
+    assert.match(context, /stable Bizar role name/);
     assert.match(context, /OMIT the native `model` field/);
     assert.match(context, /isolation: "worktree"/);
   });

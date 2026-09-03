@@ -44,8 +44,8 @@ That definition's frontmatter owns the full-ID selection for ordinary agents,
 workflows, and teams. Include the raw ID in `additionalContext.bizarConfiguredModel`
 for audit telemetry. Never use `inherit` or an unconfigured provider default.
 `sonnet`, `opus`, `haiku`, and `fable` are compatibility aliases only. If no
-generated configured definition exists, stop and ask the operator to run
-`bizar models`; never omit the generated agent type or cycle providers.
+stable Bizar role definition exists, stop and ask the operator to run
+`bizar models`; never omit the stable role type or cycle providers.
 
 Invoke the selected workflow by `name` first. If Claude reports that the Bizar
 name is unavailable, resolve the active Claude config directory and retry once
@@ -59,21 +59,20 @@ implementation around a broken workflow installation.
 ## Models
 
 For every dispatch, select the cheapest sufficient enabled configured model
-from the global Bizar router. User-selected models take precedence over tier
-candidates; `disabledProviders` excludes both. Native aliases are compatibility
-transport labels bound by `bizar models`, not Anthropic selections. Native
-Agent/Task calls accept only those aliases, so do not pass a full gateway ID in
-`model`. Run `bizar models --agent-types --json`, look up the selected ID and
-Bizar role, pass its role-specific generated name (for example `greg-*` or
-`todd-*`) as `subagent_type`, and omit `model`; the generated global
+from the global Bizar router. The default selected model is written into each
+stable global Bizar role definition by `bizar models`; `disabledProviders`
+excludes invalid selections. Native aliases are compatibility transport labels
+bound by `bizar models`, not Anthropic selections. Pass the stable role name
+(for example `greg` or `todd`) as `subagent_type` and omit native `model`; the
 definition's `model:` frontmatter selects the full gateway ID. This is the
-default for individual subagents, workflows, and agent-team teammates. For
-teams, do not name a competing model in the spawn prompt. Use `bizar worker`
-only when a separately launched process worktree is useful. If no enabled
-configured candidate or generated definition exists, stop with the
+default for individual subagents, workflows, and agent-team teammates. Use
+`bizar models --agent-types --json` only for an explicit advanced per-model
+choice. For teams, do not name a competing model in the spawn prompt. Use
+`bizar worker` only when a separately launched process worktree is useful. If
+no enabled configured candidate or stable definition exists, stop with the
 configuration error and run `bizar models`. Never let Claude choose an
-unconfigured default, inherit the session model, use an unmapped alias, or
-retry by cycling models, providers, or tiers.
+unconfigured default, use an unmapped alias, or retry by cycling models,
+providers, or tiers.
 
 ## Worktree Discipline and integration
 

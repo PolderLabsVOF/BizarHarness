@@ -23,9 +23,14 @@ const input = {
   tool_input: { subagent_type: 'greg' },
 };
 
-test('Agent model guard denies omitted and inherited models', async () => {
-  assert.equal(decision(await guardAgentModel(input)), 'deny');
-  assert.equal(decision(await guardAgentModel({ ...input, tool_input: { ...input.tool_input, model: 'inherit' } })), 'deny');
+test('Agent model guard denies stable-role omission without a selected model and explicit inherit', async () => {
+  assert.equal(decision(await guardAgentModel(input, { registry: configuredRegistry() })), 'deny');
+  assert.equal(decision(await guardAgentModel({ ...input, tool_input: { ...input.tool_input, model: 'inherit' } }, { registry: configuredRegistry() })), 'deny');
+});
+
+test('Agent model guard accepts a stable Bizar role with an omitted native model and selected model', async () => {
+  const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['minimax/MiniMax-M3'] } };
+  assert.deepEqual(await guardAgentModel(input, { registry, parentModel: 'some-other-parent-model' }), {});
 });
 
 test('Agent model guard allows one configured live tier candidate', async () => {
@@ -60,7 +65,7 @@ test('Agent model guard rejects a raw custom ID and directs dispatch through its
     tool_input: { ...input.tool_input, model: 'codex/gpt-5.6-sol' },
   }, { registry });
   assert.equal(decision(denied), 'deny');
-  assert.match(denied.hookSpecificOutput.permissionDecisionReason, /generated subagent_type/);
+  assert.match(denied.hookSpecificOutput.permissionDecisionReason, /stable Bizar role/);
 });
 
 test('Agent model guard accepts a valid native alias when optional audit context is absent or differs', async () => {
@@ -223,6 +228,7 @@ test('Agent model guard denies inherit when configured ID differs from the globa
     ...input,
     tool_input: {
       ...input.tool_input,
+      model: 'inherit',
       additionalContext: { bizarConfiguredModel: 'bizar-pick' },
     },
   }, { registry, parentModel: 'configured-parent-model' });
@@ -259,6 +265,7 @@ test('Agent model guard fails closed when global settings.json cannot be read an
     ...input,
     tool_input: {
       ...input.tool_input,
+      model: 'inherit',
       additionalContext: { bizarConfiguredModel: 'configured-parent-model' },
     },
   }, { registry, settingsPath: '/nonexistent/settings.json' });
