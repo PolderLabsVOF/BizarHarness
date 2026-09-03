@@ -39,6 +39,16 @@ root-package publish: `packages/sdk/package.json` and `SDK_VERSION` still said
 10.23.13.  Keep the SDK and root package versions aligned before the next
 release gate.
 
+Completed 2026-09-03: terminal lifecycle completion no longer emits prompt
+context; explicit coordinator and shared-tool guidance preserves the original
+result and forbids completion follow-ups/re-dispatch summaries. Focused hook
+coverage passes 31/31, `make check`, repository-structure verification, and
+`make e2e` (13/13) pass. Release `@polderlabs/bizar-sdk@10.23.20` and
+`@polderlabs/bizar@10.23.20` are published and commit `30ba024` is on master.
+The operator-global installation was refreshed successfully: `bizar doctor`
+passes 13/13; a terminal hook smoke returns `{}`; and the preserved selection
+projects 9 models into 144 role-specific generated definitions.
+
 The generic `flash` heuristic incorrectly put `glm/glm-5.3-flash` in the
 budget tier. It is explicitly classified as `high` before the generic match in
 the picker, SDK router, workflow mirror, and failover mirror. Re-running
