@@ -8,6 +8,8 @@
  *   - Every typed schema in the SDK (name + version + file path)
  *   - Every canonical policy doc (path + owner + review cadence)
  *   - Every mirror file (path + canonical source + sync status)
+ *   - Every deep-interview spec artifact under docs/specs/ with its
+ *     embedded `## Ambiguity breakdown` summary row (Phase 3 OMX).
  *
  * Output is JSON by default; `--format=human` for an aligned table.
  *
@@ -18,9 +20,13 @@
  * machine-readable answer — it surfaces every schema and doc,
  * with owner + version, in one place. Operators can grep it to
  * find drift; tests can assert the canonical mapping is intact.
+ *
+ * Phase 3 OMX adoption extends the inventory with a "deepInterviewSpecs"
+ * row per docs/specs/deep-interview-*.md artifact so operators can
+ * audit the ambiguity scores across the corpus from one place.
  */
 
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const REPO_ROOT = process.cwd();
@@ -102,6 +108,103 @@ function readPolicyDocs() {
 }
 
 /**
+ * Extract the embedded `## Ambiguity breakdown` summary from a
+ * deep-interview spec file. The spec author writes either a JSON
+ * code block (preferred) or a markdown table; we surface whichever
+ * is present plus the kind, the spec-stored score, and the file
+ * mtime so operators can audit the corpus.
+ *
+ * Returns `null` when the spec does not contain a parseable
+ * breakdown (e.g. an open interview that has not yet crystallized).
+ * Per the deep-interview skill, closure requires
+ * `AmbiguityScore ≤ 0.10`; an unparseable breakdown therefore means
+ * the spec is either incomplete or malformed, both of which surface
+ * here as a missing-row signal in the spec-list output.
+ *
+ * This is the read-only mirror of the `## Ambiguity breakdown`
+ * parser inside `cli/commands/ambiguity.mjs`. We intentionally
+ * duplicate the format-detection logic rather than importing from
+ * `ambiguity.mjs` because (a) spec-list is a JSON inventory that
+ * MUST NOT fail when a single spec is malformed, and (b) importing
+ * `computeAmbiguity` from the SDK dist would add a heavy dependency
+ * for what is a single-row summary.
+ */
+function readAmbiguityBreakdownFromSpec(absPath) {
+  const specText = readFileSync(absPath, 'utf8');
+  const headingRe = /^#{1,6}\s*Ambiguity breakdown\s*$/im;
+  const headingMatch = specText.match(headingRe);
+  if (!headingMatch) return null;
+  const sectionStart = headingMatch.index + headingMatch[0].length;
+  const restOfDoc = specText.slice(sectionStart);
+  const nextHeading = restOfDoc.match(/^#{1,6}\s/m);
+  const sectionText = nextHeading ? restOfDoc.slice(0, nextHeading.index) : restOfDoc;
+
+  // Preferred: JSON code block.
+  const jsonMatch = sectionText.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          kind: parsed.kind ?? null,
+          score: typeof parsed.score === 'number' ? parsed.score : null,
+          format: 'json',
+        };
+      }
+    } catch {
+      // Fall through to table parsing.
+    }
+  }
+  // Fallback: markdown table — first row after the header.
+  const scoreMatch = sectionText.match(/\*\*AmbiguityScore:\*\*\s*([0-9.]+)/i);
+  const kindMatch = sectionText.match(/\*\*Kind:\*\*\s*`?([a-z]+)`?/i);
+  if (scoreMatch) {
+    return {
+      kind: kindMatch ? kindMatch[1].toLowerCase() : null,
+      score: Number(scoreMatch[1]),
+      format: 'markdown',
+    };
+  }
+  return null;
+}
+
+/**
+ * Scan the canonical deep-interview spec location (DEC-022:
+ * `docs/specs/deep-interview-*.md`) and return one summary row per
+ * artifact. Each row records the file path, the embedded breakdown
+ * summary (or `null` when unparseable), the spec's own `kind`
+ * (greenfield | brownfield), the spec-stored score, and the file
+ * mtime so the human table renders chronologically.
+ *
+ * Returns an empty array when the docs/specs/ directory does not
+ * exist yet (e.g. fresh repo with no deep-interview runs).
+ */
+function readDeepInterviewSpecs() {
+  const specsDir = join(REPO_ROOT, 'docs', 'specs');
+  if (!existsSync(specsDir)) {
+    return [];
+  }
+  const entries = readdirSync(specsDir)
+    .filter((name) => name.startsWith('deep-interview-') && name.endsWith('.md'))
+    .map((name) => {
+      const abs = join(specsDir, name);
+      const breakdown = readAmbiguityBreakdownFromSpec(abs);
+      const stat = statSync(abs);
+      return {
+        path: `docs/specs/${name}`,
+        slug: name.replace(/^deep-interview-/, '').replace(/\.md$/, ''),
+        kind: breakdown?.kind ?? null,
+        score: breakdown?.score ?? null,
+        breakdownFormat: breakdown?.format ?? null,
+        breakdownPresent: breakdown !== null,
+        mtime: stat.mtime.toISOString(),
+      };
+    })
+    .sort((a, b) => (a.mtime < b.mtime ? 1 : a.mtime > b.mtime ? -1 : 0));
+  return entries;
+}
+
+/**
  * Inspect the mirror pair (AGENTS.md → CLAUDE.md + config/claude/CLAUDE.md)
  * and report sync status. `in_sync` is true when both mirrors are
  * byte-identical to the canonical source (modulo the banner header).
@@ -145,6 +248,7 @@ export function buildSpecList() {
     schemas: readSchemaVersions(),
     policyDocs: readPolicyDocs(),
     mirrors: readMirrorStatus(),
+    deepInterviewSpecs: readDeepInterviewSpecs(),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -156,9 +260,11 @@ export const USAGE = `
     bizar spec-list [--format=json|human]
 
   Output (json by default):
-    schemas     SDK schemas + versions + source file paths
-    policyDocs  canonical docs + owner + review cadence
-    mirrors     AGENTS.md mirror pair sync status
+    schemas            SDK schemas + versions + source file paths
+    policyDocs         canonical docs + owner + review cadence
+    mirrors            AGENTS.md mirror pair sync status
+    deepInterviewSpecs Phase 3 OMX: one row per docs/specs/deep-interview-*.md
+                       with its embedded "## Ambiguity breakdown" summary
 `;
 
 function parseFlags(args) {
@@ -216,6 +322,18 @@ export async function run(subargs) {
   }
   if (doc.mirrors.innerMirrorContainsCanonical !== undefined) {
     console.log(`    inner-mirror-contains-canonical: ${doc.mirrors.innerMirrorContainsCanonical}`);
+  }
+  console.log('');
+  console.log('  Deep-interview specs (Phase 3 OMX):');
+  if (!doc.deepInterviewSpecs || doc.deepInterviewSpecs.length === 0) {
+    console.log('    (no docs/specs/deep-interview-*.md artifacts present)');
+  } else {
+    for (const s of doc.deepInterviewSpecs) {
+      const breakdown = s.breakdownPresent
+        ? `${s.kind ?? '?'} score=${s.score?.toFixed?.(4) ?? s.score} (${s.breakdownFormat})`
+        : 'unparseable';
+      console.log(`    ${s.path.padEnd(52)} ${breakdown}`);
+    }
   }
   return 0;
 }
