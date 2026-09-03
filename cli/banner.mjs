@@ -14,7 +14,7 @@ export function showBanner() {
   console.log(chalk.hex('#6366f1').bold(RUNE_HELM));
   console.log(chalk.hex('#a855f7')('    Guarded autonomous agent system for Claude Code'));
   console.log();
-  console.log(chalk.dim('    16 agents · guarded autonomy · human approval gates · MCP · Skills CLI'));
+  console.log(chalk.dim('    84 agents · guarded autonomy · human approval gates · MCP · Skills CLI'));
   console.log();
 }
 

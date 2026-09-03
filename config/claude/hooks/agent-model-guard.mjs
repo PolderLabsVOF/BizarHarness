@@ -49,7 +49,7 @@ import { pathToFileURL } from 'node:url';
 
 import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
 import { resolveClaudeConfigDir } from '../../../cli/config-paths.mjs';
-import { BIZAR_AGENT_ROLES, isGeneratedModelAgentName } from '../../../cli/commands/models.mjs';
+import { isGeneratedModelAgentName, isStableManagedAgentName } from '../../../cli/commands/models.mjs';
 
 function deny(reason) {
   return {
@@ -228,7 +228,7 @@ export async function guardAgentModel(input, options = {}) {
   // session model. Generated per-model definitions remain valid too.
   if (!requested || requested === 'inherit') {
     const generated = isGeneratedModelAgentName(toolInput.subagent_type, [...userPicks]);
-    const stable = BIZAR_AGENT_ROLES.includes(String(toolInput.subagent_type || '').trim());
+    const stable = isStableManagedAgentName(toolInput.subagent_type);
     if (generated && !requested) return {};
     if (stable && !requested && userPicks.size > 0) return {};
     const configured = configuredContext;

@@ -1,5 +1,25 @@
 # Changelog
 
+## [10.23.22] - 2026-09-03
+
+### Added
+
+- **Bizar specialist agents** — added 68 Bizar-native specialist definitions
+  spanning architecture, language/framework review, build repair, security,
+  accessibility, testing, documentation, operations, and evaluation. Every
+  specialist uses portable tools, the shared Bizar baseline, and the selected
+  global model projection.
+- **Integrated workflow skills** — added 14 Bizar-compatible skills for
+  ideation, planning, parallel work, debugging, test-driven development,
+  verification, review, worktrees, and skill authoring; all mirror to the
+  global Claude Code skill directory during installation.
+
+### Fixed
+
+- **Specialist model routing** — `bizar models` now discovers and binds every
+  native `bizar-*` specialist definition alongside Bizar's core roles, and
+  exposes the installed specialist types through `bizar models --agent-types`.
+
 ## [10.23.21] - 2026-09-03
 
 ### Fixed

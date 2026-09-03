@@ -43,6 +43,29 @@ roles, including architecture→Paul and adversarial/security/QA→Linda. Focuse
 model, guard, workflow, and guidance coverage passes 152/152 before final
 release verification.
 
+### Third-party specialist imports (active)
+
+Integrate all 68 imported specialist agents directly into the native
+`bizar-` stable-agent namespace and all 14 imported skill directories into
+canonical Bizar source. Preserve required MIT attribution and source commits,
+remove upstream hard-coded Anthropic model aliases and upstream branding, add
+Bizar compatibility policy, and bind specialist agents to the same
+operator-selected default full ID as ordinary Bizar roles. Extend installer,
+guard, architecture, and mirror coverage so the assets are shipped globally
+without bypassing Bizar routing or safety constraints.
+
+Completed 2026-09-03: 68 Bizar-native specialist definitions now use
+lowercase-hyphen-only names, concise valid descriptions, portable tool
+frontmatter, the shared `AGENT_BASELINE`, and no hard-coded model. The
+installer binds them to the first enabled global operator selection just like
+the core roles. `bizar models --agent-types --json` exposes installed
+specialist definitions for explicit use, while default routing keeps its stable
+core roles. Fourteen compatible workflow skills were added to the canonical
+skill source and verified mirror. Focused model/guard/provision/prompt tests
+pass 102/102; `make test` (SDK 513/513), `make e2e` (13/13), `make check`,
+`make check-arch`, removed-surface, repository-structure, and clean-state
+checks pass. Release metadata is prepared as 10.23.22.
+
 Live Claude transcript evidence showed that the MiniMax replacement agents did
 produce their requested infrastructure, firmware, and web reports.  Later
 terminal/liveness notifications elicited short acknowledgements (for example

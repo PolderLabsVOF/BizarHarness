@@ -33,6 +33,11 @@ test('Agent model guard accepts a stable Bizar role with an omitted native model
   assert.deepEqual(await guardAgentModel(input, { registry, parentModel: 'some-other-parent-model' }), {});
 });
 
+test('Agent model guard accepts a stable Bizar specialist role with an omitted native model', async () => {
+  const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['minimax/MiniMax-M3'] } };
+  assert.deepEqual(await guardAgentModel({ ...input, tool_input: { subagent_type: 'bizar-code-reviewer' } }, { registry }), {});
+});
+
 test('Agent model guard allows one configured live tier candidate', async () => {
   const registry = configuredRegistry();
   const model = registry.tiers.mid.models[0];

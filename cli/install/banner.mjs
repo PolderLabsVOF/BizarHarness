@@ -15,7 +15,7 @@ const RUNE_HELM = `
     ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝
 `;
 
-const TAGLINE = '16 agents · guarded autonomy · human approval gates · MCP · Skills CLI';
+const TAGLINE = '84 agents · guarded autonomy · human approval gates · MCP · Skills CLI';
 
 export const palette = {
   primary: chalk.hex('#6366f1'),

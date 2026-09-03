@@ -1,7 +1,7 @@
 {
   "$schema": "./trigger-patterns.v1.schema.json",
   "version": 2,
-  "description": "Prompt-trigger table for Bizar skill and agent suggestions. The UserPromptSubmit dispatcher emits ranked, non-blocking context hints. v2 extends coverage from 11 to 27 workers to cover the full Bizar agent + skill surface (16 agents + skill-specific workers).",
+  "description": "Prompt-trigger table for Bizar skill and agent suggestions. The UserPromptSubmit dispatcher emits ranked, non-blocking context hints across Bizar's core roles, specialist agents, and skills.",
   "workers": [
     {
       "id": "testgaps",

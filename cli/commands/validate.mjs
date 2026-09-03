@@ -434,7 +434,7 @@ export function showValidateHelp() {
       • permissions follow the current hook-enforced policy
       • hook-enforced approval and destructive-action floor
       • all 14 Claude Code lifecycle events wired in settings.json
-      • all 16 agent files installed with unique Claude Code names
+      • all shipped agent files installed with unique Claude Code names
       • all shipped slash commands
       • all skills / rules / hooks mirrored to ~/.claude/
       • ~/.config/bizar/ runtime state ready

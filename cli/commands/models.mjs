@@ -18,7 +18,7 @@
  * reject user-selected IDs.
  */
 import chalk from 'chalk';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import readline from 'node:readline';
 
@@ -1055,6 +1055,7 @@ export const CLAUDE_MODEL_OVERRIDE_KEYS = Object.freeze([
   'claude-sonnet-5',
   'claude-opus-5',
   'claude-haiku-4-5-20251001',
+  'claude-fable-5',
   'claude-opus-4-8',
   'claude-opus-4-7',
   'claude-opus-4-6',
@@ -1080,6 +1081,24 @@ const MODEL_AGENT_WORDS = Object.freeze({ a:'alpha', b:'bravo', c:'charlie', d:'
 // projected per role so Claude Code's task UI retains a meaningful Bizar agent
 // identity instead of displaying an opaque model-only worker.
 export const BIZAR_AGENT_ROLES = Object.freeze(['mike', 'paul', 'karen', 'linda', 'ria', 'greg', 'steve', 'oscar', 'todd', 'susan', 'pam', 'brenda', 'janet', 'kevin', 'brad', 'carl']);
+
+/** Imported specialist definitions use the native Bizar namespace. They are
+ * stable model-bound definitions just like the named Bizar roles, but are
+ * never selected by Bizar's default workflow router. */
+export const BIZAR_SPECIALIST_AGENT_PREFIX = 'bizar-';
+
+export function isStableManagedAgentName(name) {
+  const value = String(name || '').trim();
+  return BIZAR_AGENT_ROLES.includes(value) || /^bizar-[a-z-]+$/.test(value);
+}
+
+export function stableSpecialistAgentNames(agentsDir = join(resolveClaudeConfigDir(), 'agents')) {
+  if (!existsSync(agentsDir)) return [];
+  return readdirSync(agentsDir)
+    .filter((name) => /^bizar-[a-z-]+\.md$/.test(name))
+    .map((name) => name.slice(0, -3))
+    .sort();
+}
 
 export function modelAgentName(modelId, role = 'worker') {
   const safeRole = BIZAR_AGENT_ROLES.includes(role) ? role : 'worker';
@@ -1117,7 +1136,8 @@ export function syncStableRoleModelAgents(modelIds, opts = {}) {
   const agentsDir = opts.agentsDir || join(resolveClaudeConfigDir(), 'agents');
   const defaultModel = (Array.isArray(modelIds) ? modelIds : []).find((id) => typeof id === 'string' && id.trim())?.trim() || null;
   const names = [];
-  for (const role of BIZAR_AGENT_ROLES) {
+  const managedNames = [...new Set([...BIZAR_AGENT_ROLES, ...stableSpecialistAgentNames(agentsDir)])];
+  for (const role of managedNames) {
     const path = join(agentsDir, `${role}.md`);
     if (!existsSync(path)) continue;
     const source = readFileSync(path, 'utf8');
@@ -2401,17 +2421,20 @@ export async function run(name, args, isHelpRequest, deps = {}) {
     const models = configuredEnabledModels(router);
     const agentTypes = Object.fromEntries(models.map((id) => [id, Object.fromEntries(BIZAR_AGENT_ROLES.map((role) => [role, modelAgentName(id, role)]))]));
     const stableRoleTypes = Object.fromEntries(BIZAR_AGENT_ROLES.map((role) => [role, role]));
+    const stableSpecialistTypes = Object.fromEntries(stableSpecialistAgentNames().map((role) => [role, role]));
     const payload = {
       routerPath,
       models,
       defaultModel: models[0] || null,
       stableRoleTypes,
+      stableSpecialistTypes,
       agentTypes,
       agentsDir: join(resolveClaudeConfigDir(), 'agents', 'bizar-models'),
     };
     if (wantJson) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
     else {
       process.stdout.write(`default\t${JSON.stringify(stableRoleTypes)}\n`);
+      process.stdout.write(`specialists\t${JSON.stringify(stableSpecialistTypes)}\n`);
       for (const id of models) process.stdout.write(`${id}\t${JSON.stringify(agentTypes[id])}\n`);
     }
     return true;

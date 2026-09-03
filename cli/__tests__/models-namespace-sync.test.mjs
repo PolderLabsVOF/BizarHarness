@@ -33,6 +33,7 @@ import {
   modelAgentName,
   syncGeneratedModelAgents,
   syncStableRoleModelAgents,
+  stableSpecialistAgentNames,
   requiresGatewayModelDiscovery,
   configuredFallbackModels,
   currentSelection,
@@ -70,13 +71,29 @@ test('stable Bizar roles receive the default selected full gateway model', () =>
     mkdirSync(agentsDir, { recursive: true });
     writeFileSync(join(agentsDir, 'greg.md'), '---\nname: greg\ndescription: researcher\n---\n\n# Greg\n');
     writeFileSync(join(agentsDir, 'todd.md'), '---\nname: todd\nmodel: old/model\n---\n\n# Todd\n');
+    writeFileSync(join(agentsDir, 'bizar-code-reviewer.md'), '---\nname: bizar-code-reviewer\ndescription: review\n---\n\n# Bizar specialist\n');
     const result = syncStableRoleModelAgents(['minimax/MiniMax-M3', 'glm/glm-5.3'], { agentsDir });
     assert.equal(result.defaultModel, 'minimax/MiniMax-M3');
-    assert.deepEqual(result.names.sort(), ['greg', 'todd']);
+    assert.deepEqual(result.names.sort(), ['bizar-code-reviewer', 'greg', 'todd']);
     assert.match(readFileSync(join(agentsDir, 'greg.md'), 'utf8'), /^model: minimax\/MiniMax-M3$/m);
     assert.match(readFileSync(join(agentsDir, 'todd.md'), 'utf8'), /^model: minimax\/MiniMax-M3$/m);
+    assert.match(readFileSync(join(agentsDir, 'bizar-code-reviewer.md'), 'utf8'), /^model: minimax\/MiniMax-M3$/m);
     syncStableRoleModelAgents([], { agentsDir });
     assert.doesNotMatch(readFileSync(join(agentsDir, 'greg.md'), 'utf8'), /^model:/m);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('stable specialist discovery accepts only Claude-safe native Bizar names', () => {
+  const cwd = makeCwd();
+  try {
+    const agentsDir = join(cwd, 'agents');
+    mkdirSync(agentsDir, { recursive: true });
+    writeFileSync(join(agentsDir, 'bizar-code-reviewer.md'), '---\nname: bizar-code-reviewer\n---\n');
+    writeFileSync(join(agentsDir, 'bizar-end-to-end-runner.md'), '---\nname: bizar-end-to-end-runner\n---\n');
+    writeFileSync(join(agentsDir, 'bizar-e2e-runner.md'), '---\nname: bizar-e2e-runner\n---\n');
+    assert.deepEqual(stableSpecialistAgentNames(agentsDir), ['bizar-code-reviewer', 'bizar-end-to-end-runner']);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
