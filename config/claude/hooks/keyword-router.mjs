@@ -14,9 +14,11 @@ import { pathToFileURL } from 'node:url';
 export const EXPLICIT_COMMANDS = Object.freeze(new Map([
   ['autopilot', 'autopilot'],
   ['cancel', 'cancel'],
+  ['deep-interview', 'deep-interview'],
   ['ralph', 'ralph'],
   ['ultrawork', 'ultrawork'],
   ['ultraqa', 'ultraqa'],
+  ['ultragoal', 'ultragoal'],
   ['ralplan', 'ralplan'],
 ]));
 
@@ -35,7 +37,7 @@ export function parseExplicitCommand(prompt) {
   if (/^(?:```|~~~|`|>|["']|@@|\+\+\+|---|<)/.test(leadingTrimmed)) return null;
 
   const firstLine = leadingTrimmed.split('\n', 1)[0];
-  const match = /^\/(autopilot|cancel|ralph|ultrawork|ultraqa|ralplan)(?=\s|$)([^\n]*)$/i.exec(firstLine);
+  const match = /^\/(autopilot|cancel|deep-interview|ralph|ultrawork|ultraqa|ultragoal|ralplan)(?=\s|$)([^\n]*)$/i.exec(firstLine);
   if (!match) return null;
 
   const command = match[1].toLowerCase();
