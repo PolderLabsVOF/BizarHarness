@@ -44,6 +44,7 @@ const DIRECT_COMMANDS = [
   { cmd: 'verify-release', expect: 'bizar verify-release — Verify a release artifact' },
   { cmd: 'spec-list', expect: 'bizar spec-list — audit #84 schema' },
   { cmd: 'ambiguity', expect: 'bizar ambiguity — score a deep-interview' },
+  { cmd: 'guard', expect: 'bizar guard — F-206 progress-guarding loop' },
 ];
 
 // Util-routed commands: still go through the help dispatcher and
