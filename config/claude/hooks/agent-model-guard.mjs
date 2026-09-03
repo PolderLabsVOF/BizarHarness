@@ -224,8 +224,12 @@ export async function guardAgentModel(input, options = {}) {
 
   const transportTarget = readTransportTarget(requested, options);
   if (transportTarget) {
-    if (configuredContext !== transportTarget || !userPicks.has(transportTarget)) {
-      return deny(`Bizar Agent dispatch blocked: native alias ${requested} does not map to the audited enabled Bizar selection. Re-run \`bizar models\` and restart Claude Code.`);
+    // `modelOverrides` is the native Agent transport contract: Claude Code
+    // invokes this alias with the mapped gateway ID. The optional context is
+    // useful for telemetry, but must not make a valid configured alias fail
+    // when Mike's prompt carries a different (also selected) planning pick.
+    if (!userPicks.has(transportTarget)) {
+      return deny(`Bizar Agent dispatch blocked: native alias ${requested} does not map to an enabled Bizar selection. Re-run \`bizar models\` and restart Claude Code.`);
     }
     return {};
   }

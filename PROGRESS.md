@@ -20,19 +20,26 @@ environment leakage from polluting test isolation.
 
 ### F-201 transport compatibility
 
-Updated 2026-09-03: `bizar models` now maps operator-selected custom gateway
-IDs to the valid non-Fable native Agent aliases (`sonnet`, `opus`, `haiku`) in
-the global Claude settings. Workflows, teams, and direct Agent calls send that
-alias together with `additionalContext.bizarConfiguredModel`; the guard proves
-the current alias maps to that enabled selection and rejects stale/mismatched
-maps. This replaces the earlier inheritance-only design.
+Corrected 2026-09-03: current Claude Code gateway configuration passes an
+explicit custom `model` value directly to the endpoint. Bizar therefore must
+not reduce the operator's `bizar models` selection to Claude-family aliases.
+Workflows, teams, and direct Agent calls now pass the exact selected raw model
+ID; the guard validates that it is an enabled `userSelected` model and refuses
+omitted/inherited or out-of-pool values. Native aliases remain accepted only as
+backward-compatible mappings, never as Bizar's required dispatch mechanism.
+This preserves every configured custom model for subagent dispatch and keeps
+the Anthropic provider opt-out intact.
 
 Fresh evidence: focused model/router/guard/workflow coverage 110/110; all hook
 tests 294/294; `make test` (SDK 513/513 plus retained Node/harness suite),
 `make e2e` 13/13, and `make check` pass. The workflow helper resolves the same
 global `CLAUDE_CONFIG_DIR/model-router.json` path that `bizar models` writes,
-including from an unrelated working directory. Release 10.23.13 packages this
-fix; F-201 remains in progress for its broader orchestration scope.
+including from an unrelated working directory. The direct custom-model repair
+adds 126 focused CLI/workflow/guard/model-sync/guidance checks; `make check`,
+`make e2e` (13/13), and direct validation of the operator's
+`codex/gpt-5.6-sol` selection against the guard pass. Release 10.23.13
+predates this repair; F-201 remains in progress for its broader orchestration
+scope.
 
 Remove the hard native-workflow tool gate that deadlocked ordinary project
 orientation. Mike must first gather bounded read-only context, ask one concise

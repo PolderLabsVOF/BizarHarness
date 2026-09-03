@@ -1021,7 +1021,6 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
     skippedStale: skipped,
     skippedDisabled,
     settingsPath: path,
-    agentAliases: resolveNativeAgentAliases(settings.modelOverrides),
   };
 }
 
@@ -1061,35 +1060,13 @@ export const CLAUDE_MODEL_OVERRIDE_KEYS = Object.freeze([
   'claude-3-5-sonnet-20241022',
 ]);
 
-// These are Claude Code transport aliases, not model choices. Gateway model
-// IDs remain entirely operator-selected in the global Bizar router. Do not
-// use `fable`: its Claude-branded label is misleading for opted-out users.
-export const NATIVE_AGENT_TRANSPORT_KEYS = Object.freeze({
-  sonnet: 'claude-sonnet-5',
-  opus: 'claude-opus-5',
-  haiku: 'claude-haiku-4-5-20251001',
-});
-
-export function resolveNativeAgentAliases(modelOverrides) {
-  const overrides = modelOverrides && typeof modelOverrides === 'object' ? modelOverrides : {};
-  return Object.fromEntries(Object.entries(NATIVE_AGENT_TRANSPORT_KEYS)
-    .filter(([, key]) => typeof overrides[key] === 'string' && overrides[key].trim())
-    .map(([alias, key]) => [overrides[key].trim(), alias]));
-}
-
 export function buildClaudeModelOverrides(modelIds) {
   const unique = [...new Set((Array.isArray(modelIds) ? modelIds : [])
     .filter((id) => typeof id === 'string' && id.trim())
     .map((id) => id.trim()))];
   if (unique.length === 0) return {};
-  // Reserve accepted native Agent aliases first so custom gateway IDs have a
-  // valid transport without putting the raw ID into Agent.model.
-  const transportIndex = new Map(Object.values(NATIVE_AGENT_TRANSPORT_KEYS)
-    .map((key, index) => [key, index]));
-  return Object.fromEntries(CLAUDE_MODEL_OVERRIDE_KEYS.map((key, index) => [
-    key,
-    unique[(transportIndex.get(key) ?? index) % unique.length],
-  ]));
+  return Object.fromEntries(CLAUDE_MODEL_OVERRIDE_KEYS
+    .map((key, index) => [key, unique[index % unique.length]]));
 }
 
 /** Custom gateway IDs must be discoverable to Claude's SDK/subagent path. */

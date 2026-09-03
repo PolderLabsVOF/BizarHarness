@@ -1455,7 +1455,7 @@
         "feature_list.json"
       ],
       "created": "2026-09-02",
-    "evidence": "In progress. 2026-09-03 native Agent transport correction: `bizar models` synchronizes each operator-selected custom gateway model to a valid non-Fable native Agent alias (`sonnet`, `opus`, or `haiku`) in global Claude settings. Workflow, Agent-team, and direct Agent dispatches pass that alias plus additionalContext.bizarConfiguredModel; the guard verifies the alias maps to the exact enabled selection and rejects stale/mismatched mappings. The copied workflow helper reads that same global CLAUDE_CONFIG_DIR/model-router.json path, including from an unrelated cwd. Focused coverage 110/110, hook tests 294/294, make test (SDK 513/513 plus retained Node/harness suite), make e2e 13/13, and make check pass."
+  "evidence": "In progress. 2026-09-03 custom-model dispatch correction: `bizar models` remains the sole global user-selected source, and workflows, Agent teams, and direct Agent calls pass the exact selected raw gateway model ID directly to Claude Code. The guard permits only enabled userSelected IDs and rejects omitted/inherited or out-of-pool models. Native aliases are backward-compatible only and are not required for dispatch. The workflow helper reads the same global CLAUDE_CONFIG_DIR/model-router.json path from any cwd. Focused CLI/workflow/guard/model-sync/guidance coverage 126/126, make e2e 13/13, make check, diff hygiene, and direct validation of the operator's codex/gpt-5.6-sol global selection pass."
     }
   ],
   "vcr": {

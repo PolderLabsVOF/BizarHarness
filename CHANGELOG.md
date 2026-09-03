@@ -1,5 +1,15 @@
 # Changelog
 
+## [10.23.14] - 2026-09-03
+
+### Fixed
+
+- **Direct custom-model subagents** — workflows, Agent teams, and direct
+  Agent calls now pass the exact global `bizar models` selection directly to
+  Claude Code. The guard accepts only enabled `userSelected` IDs and rejects
+  omitted, inherited, and out-of-pool models. Native aliases remain
+  backward-compatible only; they no longer limit custom gateway dispatches.
+
 ## [10.23.13] - 2026-09-03
 
 ### Fixed

@@ -108,8 +108,8 @@ for (const prompt of [
     assert.match(context, /Adaptive Bizar routing policy/);
     assert.match(context, /clarification question/);
     assert.match(context, /coordination mode/i);
-    assert.match(context, /enabled configured Bizar selection/);
-    assert.match(context, /sonnet\/opus\/haiku transport alias/);
+    assert.match(context, /enabled `bizar models` user selection/);
+    assert.match(context, /raw model ID/);
     assert.match(context, /isolation: "worktree"/);
   });
 }

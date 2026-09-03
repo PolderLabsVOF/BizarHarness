@@ -30,20 +30,16 @@ import {
   partitionStalePicks,
   classifyKind,
   buildClaudeModelOverrides,
-  resolveNativeAgentAliases,
   requiresGatewayModelDiscovery,
   configuredFallbackModels,
   currentSelection,
 } from '../commands/models.mjs';
 
-test('custom gateway picks receive only non-Fable native Agent transport aliases', () => {
+test('custom gateway picks populate standard Claude override keys without constraining direct Agent dispatch', () => {
   const overrides = buildClaudeModelOverrides(['glm/glm-5.3', 'codex/gpt-5.6', 'minimax/MiniMax-M3']);
-  assert.deepEqual(resolveNativeAgentAliases(overrides), {
-    'glm/glm-5.3': 'sonnet',
-    'codex/gpt-5.6': 'opus',
-    'minimax/MiniMax-M3': 'haiku',
-  });
-  assert.equal(resolveNativeAgentAliases(overrides)['glm/glm-5.3'], 'sonnet');
+  assert.equal(overrides['claude-fable-5'], 'glm/glm-5.3');
+  assert.equal(overrides['claude-opus-5'], 'codex/gpt-5.6');
+  assert.equal(overrides['claude-sonnet-5'], 'minimax/MiniMax-M3');
 });
 
 const CWD = process.cwd();

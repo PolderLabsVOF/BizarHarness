@@ -36,12 +36,30 @@ test('Agent model guard allows one configured live tier candidate', async () => 
   }, { registry, availableModelIds: [model] }), {});
 });
 
-test('Agent model guard accepts a synchronized native alias for its audited custom gateway ID', async () => {
+test('Agent model guard accepts a synchronized native alias for its enabled custom gateway ID', async () => {
   const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['glm/glm-5.3'] } };
   assert.deepEqual(await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model: 'sonnet', additionalContext: { bizarConfiguredModel: 'glm/glm-5.3' } },
   }, { registry, modelOverrides: { 'claude-sonnet-5': 'glm/glm-5.3' } }), {});
+});
+
+test('Agent model guard accepts a raw custom model selected through bizar models', async () => {
+  const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['codex/gpt-5.6-sol'] } };
+  assert.deepEqual(await guardAgentModel({
+    ...input,
+    tool_input: { ...input.tool_input, model: 'codex/gpt-5.6-sol' },
+  }, { registry }), {});
+});
+
+test('Agent model guard accepts a valid native alias when optional audit context is absent or differs', async () => {
+  const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['glm/glm-5.3', 'minimax/MiniMax-M3'] } };
+  for (const additionalContext of [undefined, { bizarConfiguredModel: 'minimax/MiniMax-M3' }]) {
+    assert.deepEqual(await guardAgentModel({
+      ...input,
+      tool_input: { ...input.tool_input, model: 'sonnet', ...(additionalContext ? { additionalContext } : {}) },
+    }, { registry, modelOverrides: { 'claude-sonnet-5': 'glm/glm-5.3' } }), {});
+  }
 });
 
 test('Agent model guard rejects a stale or mismatched native alias mapping', async () => {
