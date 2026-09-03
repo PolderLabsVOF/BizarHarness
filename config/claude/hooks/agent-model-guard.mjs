@@ -165,6 +165,22 @@ function readConfiguredParentModel(options = {}) {
   }
 }
 
+const NATIVE_AGENT_TRANSPORT_KEYS = Object.freeze({
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5',
+  haiku: 'claude-haiku-4-5-20251001',
+});
+
+function readTransportTarget(alias, options = {}) {
+  const key = NATIVE_AGENT_TRANSPORT_KEYS[alias];
+  if (!key) return '';
+  const overrides = options.modelOverrides || (() => {
+    const settingsPath = options.settingsPath || join(resolveClaudeConfigDir(), 'settings.json');
+    try { return JSON.parse(readFileSync(settingsPath, 'utf8'))?.modelOverrides; } catch { return null; }
+  })();
+  return typeof overrides?.[key] === 'string' ? overrides[key].trim() : '';
+}
+
 export async function guardAgentModel(input, options = {}) {
   if (!input || typeof input !== 'object') return {};
   if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Agent') return {};
@@ -190,16 +206,26 @@ export async function guardAgentModel(input, options = {}) {
   const allowed = configuredModels(registry);
   const userPicks = userSelectedModels(registry);
 
+  const configuredContext = typeof toolInput.additionalContext?.bizarConfiguredModel === 'string'
+    ? toolInput.additionalContext.bizarConfiguredModel.trim()
+    : '';
+
   // The native Agent tool rejects arbitrary gateway IDs in its `model` enum.
   // Inheritance is safe only when the auditable Bizar selection equals the
   // actual global Claude parent model and is a selected, enabled user pick.
   if (!requested || requested === 'inherit') {
-    const configured = typeof toolInput.additionalContext?.bizarConfiguredModel === 'string'
-      ? toolInput.additionalContext.bizarConfiguredModel.trim()
-      : '';
+    const configured = configuredContext;
     const parent = readConfiguredParentModel(options);
     if (!configured || configured !== parent || !userPicks.has(configured)) {
       return deny('Bizar Agent dispatch blocked: native Agent inheritance requires the global Claude parent model to exactly match an enabled Bizar user selection. Run `bizar models` and restart Claude Code.');
+    }
+    return {};
+  }
+
+  const transportTarget = readTransportTarget(requested, options);
+  if (transportTarget) {
+    if (configuredContext !== transportTarget || !userPicks.has(transportTarget)) {
+      return deny(`Bizar Agent dispatch blocked: native alias ${requested} does not map to the audited enabled Bizar selection. Re-run \`bizar models\` and restart Claude Code.`);
     }
     return {};
   }

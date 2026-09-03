@@ -178,6 +178,7 @@ const FIXTURE_CONTEXT = {
   activeSessionModel: 'session/inherit',
   budget: {},
   health: {},
+  agentAliases: { 'provider/cheap': 'sonnet', 'provider/strong': 'opus' },
   history: undefined,
 };
 
@@ -192,10 +193,7 @@ test('dispatchAgent: with selectedProfiles + risk=high -> additionalContext.biza
     FIXTURE_CONTEXT,
   );
   assert.ok(capturedOpts, 'agentFn must be invoked');
-  // F-201 transport compatibility: the native Agent tool rejects raw gateway
-  // IDs in its enum-limited `model` field, so the Bizar-selected ID is
-  // carried as auditable additionalContext instead.
-  assert.equal(capturedOpts.model, undefined, 'model field must be omitted (native Agent tool rejects gateway IDs)');
+  assert.equal(capturedOpts.model, 'opus', 'native alias must transport the selected custom gateway ID');
   assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/strong');
   assert.ok(UUID_RE.test(capturedOpts.routingDecisionId));
   assert.equal(capturedOpts.tier, 'high');
@@ -212,7 +210,7 @@ test('dispatchAgent: risk=low returns the cheapest healthy selected', async () =
     { role: 'generic', risk: 'low', label: 'cheap' },
     FIXTURE_CONTEXT,
   );
-  assert.equal(capturedOpts.model, undefined);
+  assert.equal(capturedOpts.model, 'sonnet');
   assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/cheap');
   assert.equal(capturedOpts.tier, 'budget');
   assert.equal(capturedOpts.selectorReason, dispatch.REASON.CHEAPEST_RISK_LOW);
@@ -231,10 +229,7 @@ test('dispatchAgent: dryRun=true returns decision without invoking agentFn', asy
   assert.equal(invoked, false, 'agentFn must NOT be invoked when dryRun=true');
   assert.ok(result.__dispatchDecision, 'result carries the decision');
   assert.ok(UUID_RE.test(result.__dispatchDecision.routingDecisionId));
-  // F-201 transport compatibility: dryRun surfaces the Bizar-selected ID
-  // through additionalContext (matching augmentPayload's shape) rather than
-  // the native-Agent-incompatible `model` field.
-  assert.equal(result.payload.model, undefined);
+  assert.equal(result.payload.model, 'opus');
   assert.equal(result.payload.additionalContext?.bizarConfiguredModel, 'provider/strong');
 });
 
@@ -259,7 +254,7 @@ test('dispatchAgent: caller cannot bypass the configured pool with forceModel', 
     { role: 'security', risk: 'high', forceModel: 'claude-sonnet-5' },
     FIXTURE_CONTEXT,
   );
-  assert.equal(capturedOpts.model, undefined);
+  assert.equal(capturedOpts.model, 'opus');
   assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/strong');
 });
 
@@ -283,7 +278,7 @@ test('dispatchAgent: capture hook receives the augmented payload', async () => {
     assert.equal(captured.length, 1);
     assert.equal(captured[0].agentName, 'mike');
     assert.ok(captured[0].opts.routingDecisionId);
-    assert.equal(captured[0].opts.model, undefined);
+    assert.equal(captured[0].opts.model, 'opus');
     assert.equal(captured[0].opts.additionalContext?.bizarConfiguredModel, 'provider/strong');
   } finally {
     dispatch.resetCaptureFn();
@@ -373,7 +368,7 @@ test('dispatch: captured payloads from a synthetic dispatch contain model + rout
 /*          augmentPayload: F-201 transport-compatibility shape                */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-test('dispatch.augmentPayload: model is omitted; additionalContext.bizarConfiguredModel carries the Bizar selection', () => {
+test('dispatch.augmentPayload: native alias transports the audited Bizar selection', () => {
   const decision = {
     modelId: 'claude-qwen/qwen3.8-max',
     routingDecisionId: 'r-2026-09-02-001',
@@ -381,11 +376,8 @@ test('dispatch.augmentPayload: model is omitted; additionalContext.bizarConfigur
     reason: 'strongest',
     fallbackChain: [],
   };
-  const payload = dispatch.augmentPayload({ role: 'generic', risk: 'low' }, decision, 'mike');
-  // F-201 transport compatibility: Claude Code's native Agent tool rejects
-  // raw gateway IDs in its enum-limited `model` field, so the Bizar
-  // selection must NOT be placed under `model`.
-  assert.equal(payload.model, undefined, 'model must be omitted (native Agent tool rejects gateway IDs)');
+  const payload = dispatch.augmentPayload({ role: 'generic', risk: 'low' }, decision, 'mike', 'sonnet');
+  assert.equal(payload.model, 'sonnet');
   assert.equal(payload.additionalContext?.bizarConfiguredModel, 'claude-qwen/qwen3.8-max');
   assert.equal(payload.routingDecisionId, 'r-2026-09-02-001');
   assert.equal(payload.tier, 'premium');
@@ -398,6 +390,7 @@ test('dispatch.augmentPayload: preserves caller-provided additionalContext and m
     { additionalContext: { existing: 'value', otherKey: 42 } },
     decision,
     'todd',
+    'opus',
   );
   assert.equal(payload.additionalContext.existing, 'value');
   assert.equal(payload.additionalContext.otherKey, 42);
@@ -408,7 +401,7 @@ test('dispatch.augmentPayload: null decision.modelId renders as null additionalC
   // computeDecision() throws when modelId is missing, but augmentPayload
   // is the lower-level shape — it must tolerate null and produce a
   // deterministic additionalContext value the guard can match against.
-  const payload = dispatch.augmentPayload({}, { modelId: null, routingDecisionId: 'r1', tier: 'x', reason: 'r', fallbackChain: [] }, 'a');
+  const payload = dispatch.augmentPayload({}, { modelId: null, routingDecisionId: 'r1', tier: 'x', reason: 'r', fallbackChain: [] }, 'a', undefined);
   assert.equal(payload.model, undefined);
   assert.equal(payload.additionalContext?.bizarConfiguredModel, null);
 });
@@ -506,18 +499,39 @@ test('dispatch: loadDispatchContext uses enabled configured tier candidates and 
 test('dispatch: loadDispatchContext reads the same global router from unrelated cwd values', () => {
   const fixture = mkdtempSync(join(tmpdir(), 'bizar-global-router-'));
   try {
-    const routerDir = join(fixture, 'config', 'claude');
-    mkdirSync(routerDir, { recursive: true });
-    writeFileSync(join(routerDir, 'model-router.json'), JSON.stringify({
+    mkdirSync(fixture, { recursive: true });
+    writeFileSync(join(fixture, 'model-router.json'), JSON.stringify({
       disabledProviders: [],
       userSelected: { models: ['provider/global-pick'], tierHints: { 'provider/global-pick': 'default' } },
       tiers: {},
     }));
     const ctx = dispatch.loadDispatchContext({
       cwd: join(fixture, 'unrelated-project'),
-      env: { BIZAR_HOME: fixture },
+      env: { CLAUDE_CONFIG_DIR: fixture },
     });
     assert.equal(ctx.selectedProfiles[0]?.id, 'provider/global-pick');
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('dispatch: global router selections become native Agent aliases through global Claude settings', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'bizar-agent-aliases-'));
+  try {
+    const claudeDir = join(fixture, 'claude');
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, 'model-router.json'), JSON.stringify({
+      userSelected: { models: ['glm/glm-5.3'], tierHints: { 'glm/glm-5.3': 'high' } },
+      tiers: {},
+    }));
+    writeFileSync(join(claudeDir, 'settings.json'), JSON.stringify({
+      modelOverrides: { 'claude-sonnet-5': 'glm/glm-5.3' },
+    }));
+    const ctx = dispatch.loadDispatchContext({
+      cwd: join(fixture, 'unrelated-project'),
+      env: { CLAUDE_CONFIG_DIR: claudeDir },
+    });
+    assert.deepEqual(ctx.agentAliases, { 'glm/glm-5.3': 'sonnet' });
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

@@ -377,14 +377,32 @@ function defaultConfigPaths({ cwd = process.cwd(), env = process.env } = {}) {
   const configuredRouter = typeof env.BIZAR_MODEL_ROUTER_CONFIG === 'string'
     ? env.BIZAR_MODEL_ROUTER_CONFIG.trim()
     : '';
+  const claudeDir = typeof env.CLAUDE_CONFIG_DIR === 'string' && env.CLAUDE_CONFIG_DIR.trim()
+    ? (isAbsolute(env.CLAUDE_CONFIG_DIR.trim()) ? env.CLAUDE_CONFIG_DIR.trim() : resolve(cwd, env.CLAUDE_CONFIG_DIR.trim()))
+    : join(userHome, '.claude');
   return {
     modelRouter: configuredRouter
       ? (isAbsolute(configuredRouter) ? configuredRouter : resolve(cwd, configuredRouter))
-      : join(home, 'config', 'claude', 'model-router.json'),
+      : join(claudeDir, 'model-router.json'),
     health: join(home, 'health.json'),
     budget: join(home, 'budget.json'),
     userSelected: join(home, 'userSelected.json'),
+    claudeSettings: join(claudeDir, 'settings.json'),
   };
+}
+
+const NATIVE_AGENT_TRANSPORT_KEYS = Object.freeze({
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5',
+  haiku: 'claude-haiku-4-5-20251001',
+});
+
+function loadAgentTransportAliases(settingsPath) {
+  const overrides = readJson(settingsPath)?.modelOverrides;
+  if (!overrides || typeof overrides !== 'object') return {};
+  return Object.fromEntries(Object.entries(NATIVE_AGENT_TRANSPORT_KEYS)
+    .filter(([, key]) => typeof overrides[key] === 'string' && overrides[key].trim())
+    .map(([alias, key]) => [overrides[key].trim(), alias]));
 }
 
 function readJson(path) {
@@ -461,7 +479,8 @@ export function loadDispatchContext({ cwd = process.cwd(), env = process.env } =
   const healthRaw = readJson(paths.health) ?? {};
   const health = (healthRaw && typeof healthRaw === 'object' && healthRaw.models) || {};
   const activeSessionModel = env.BIZAR_ACTIVE_SESSION_MODEL ?? loadActiveSessionModel();
-  return { selectedProfiles, staticProfiles, activeSessionModel, budget, health, evidenceDir: resolveEvidenceDir() };
+  const agentAliases = loadAgentTransportAliases(paths.claudeSettings);
+  return { selectedProfiles, staticProfiles, activeSessionModel, budget, health, agentAliases, evidenceDir: resolveEvidenceDir() };
 }
 
 function resolveEvidenceDir({ cwd = process.cwd(), env = process.env } = {}) {
@@ -797,9 +816,10 @@ export function classifyDispatchOutcome(result, error, startMs) {
  * carry arbitrary gateway IDs, so the selected Bizar ID is audit context and
  * the guard permits inheritance only from an identical configured parent.
  */
-export function augmentPayload(opts, decision, agentName) {
+export function augmentPayload(opts, decision, agentName, transportAlias) {
   return {
     ...opts,
+    model: transportAlias,
     additionalContext: {
       ...(opts.additionalContext && typeof opts.additionalContext === 'object' ? opts.additionalContext : {}),
       bizarConfiguredModel: decision.modelId ?? null,
@@ -860,7 +880,14 @@ export async function dispatchAgent(agentFn, agentName, prompt, opts = {}, conte
       'No enabled configured model is available for this Agent dispatch. Configure a model tier or user selection with `bizar models`; refusing to inherit an unconfigured provider default.',
     );
   }
-  const augmented = augmentPayload(opts, decision, agentName);
+  const ctx = context ?? loadDispatchContext();
+  const transportAlias = ctx.agentAliases?.[decision.modelId];
+  if (!transportAlias) {
+    throw new ModelRoutingError(
+      `No native Agent transport alias maps to ${decision.modelId}. Re-run \`bizar models\` to synchronize global Claude settings, then restart Claude Code.`,
+    );
+  }
+  const augmented = augmentPayload(opts, decision, agentName, transportAlias);
 
   // F-191 / IMP-018 audit trail — persist the decision before invoking
   // the agent. Best-effort: telemetry failures MUST NOT abort the

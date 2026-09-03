@@ -1,5 +1,20 @@
 # Changelog
 
+## [10.23.13] - 2026-09-03
+
+### Fixed
+
+- **Gateway model dispatch** — `bizar models` now maps selected custom gateway
+  IDs through global Claude `modelOverrides` to supported native Agent aliases
+  (`sonnet`, `opus`, or `haiku`) without selecting Fable. Workflow, team, and
+  direct-Agent guidance carries the selected ID as verified context; the guard
+  rejects stale or mismatched alias mappings.
+- **Workflow router visibility** — native workflow dispatch resolves the same
+  user-global `CLAUDE_CONFIG_DIR/model-router.json` as `bizar models`, rather
+  than the retired project/Bizar-home router path.
+- **SDK test isolation** — registry parity coverage uses its explicit fixture
+  and no longer reads an operator's global model-router configuration.
+
 ## [10.23.12] - 2026-09-03
 
 ### Fixed

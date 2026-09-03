@@ -20,19 +20,19 @@ environment leakage from polluting test isolation.
 
 ### F-201 transport compatibility
 
-Workflow dispatch now omits `model` from Agent tool input and carries the
-Bizar-selected ID as `additionalContext.bizarConfiguredModel`. The Agent guard
-permits this inheritance only when the configured ID equals the global parent
-model AND is in `userSelected`. Payload-capture tests updated to assert on
-`additionalContext.bizarConfiguredModel` instead of `payload.model`.
+Updated 2026-09-03: `bizar models` now maps operator-selected custom gateway
+IDs to the valid non-Fable native Agent aliases (`sonnet`, `opus`, `haiku`) in
+the global Claude settings. Workflows, teams, and direct Agent calls send that
+alias together with `additionalContext.bizarConfiguredModel`; the guard proves
+the current alias maps to that enabled selection and rejects stale/mismatched
+maps. This replaces the earlier inheritance-only design.
 
-Evidence: 27/27 dispatch tests, 7/7 payload-capture tests, 24/24 workflow-state
-tests, 6/6 merge-settings tests, 23/23 provision tests, 513/513 core suite pass.
-`make check`, `make verify-repo-structure`, `make check-arch`, `make
-verify-removed-surfaces` all pass.
-
-Known: 7 pre-existing failures in interactive picker and SessionStart tests
-are unrelated to these path/compatibility changes.
+Fresh evidence: focused model/router/guard/workflow coverage 110/110; all hook
+tests 294/294; `make test` (SDK 513/513 plus retained Node/harness suite),
+`make e2e` 13/13, and `make check` pass. The workflow helper resolves the same
+global `CLAUDE_CONFIG_DIR/model-router.json` path that `bizar models` writes,
+including from an unrelated working directory. Release 10.23.13 packages this
+fix; F-201 remains in progress for its broader orchestration scope.
 
 Remove the hard native-workflow tool gate that deadlocked ordinary project
 orientation. Mike must first gather bounded read-only context, ask one concise

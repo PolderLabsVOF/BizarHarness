@@ -116,7 +116,7 @@ test('SessionStart: startup source emits structured briefing', () => {
     assert.match(ctx, /WIP=1/);
     assert.match(ctx, /You are @mike/);
     assert.match(ctx, /External\/version-sensitive work requires current official docs via WebSearch\/WebFetch/);
-    assert.match(ctx, /every other change enters the matching native workflow/);
+    assert.match(ctx, /choose a single isolated worker, native workflow, parallel workers, or an Agent team/);
     assert.doesNotMatch(ctx, /Direct small known local fixes|direct work or bounded delegation/);
   } finally {
     rmSync(dir, { recursive: true, force: true });

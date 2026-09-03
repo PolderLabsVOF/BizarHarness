@@ -116,17 +116,10 @@ describe('dynamic model registry', () => {
     assert.equal(verifyRunAssignmentSnapshot(tampered), false);
   });
 
-  it('matches the CLI snapshot contract for the canonical router', () => {
-    const cliRegistry = loadModelRouter();
+  it('matches the CLI snapshot contract for the same global-router fixture', () => {
+    const cliRegistry = loadModelRouter(configPath);
     const sdkRegistry = loadModelRegistry({ data: cliRegistry });
-    // The canonical template ships empty tier model lists by design (F-201
-    // follow-up: remove every shipped provider/model default). The
-    // operator's authoritative pool is `userSelected.models`; both the
-    // CLI and SDK snapshot generators honour it as the preferred pick
-    // path. Deriving `availableModelIds` from there exercises parity on
-    // the real canonical router rather than on a synthetic tier-only
-    // fixture that contradicts the shipped shape.
-    const availableModelIds = cliRegistry.userSelected?.models ?? [];
+    const availableModelIds = Object.values(cliRegistry.tiers).flatMap((tier) => tier.models);
     const input = { runId: 'parity-run', agentNames: ['mike', 'todd'], availableModelIds, createdAt: '2026-08-25T00:00:00.000Z' };
     const cli = createCliRunAssignmentSnapshot({ ...input, registry: cliRegistry });
     const sdk = createRunAssignmentSnapshot({ ...input, registry: sdkRegistry });

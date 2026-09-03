@@ -38,9 +38,11 @@ Before every Workflow, Agent, or Agent-team call, read the global Bizar model ro
 small `args.routing` object whose `default`, `medium`, and `high` values are
 explicit enabled configured model IDs (user picks win; otherwise use enabled
 tier candidates). Include the user's task in the same args object under the
-workflow's documented task field. Never pass only a string and never use
-`inherit`, `sonnet`, `opus`, or another provider default. If no configured ID
-exists, stop and ask the operator to run `bizar models`.
+workflow's documented task field. Native Agent accepts only its transport
+aliases (`sonnet`, `opus`, or `haiku`), never a raw gateway ID. Use the alias
+that `bizar models` synchronized for the selected ID, and include the selected
+ID in `additionalContext.bizarConfiguredModel` for guard verification. If no
+configured ID exists, stop and ask the operator to run `bizar models`.
 
 Invoke the selected workflow by `name` first. If Claude reports that the Bizar
 name is unavailable, resolve the active Claude config directory and retry once
@@ -55,11 +57,12 @@ implementation around a broken workflow installation.
 
 For every Agent call, select the cheapest sufficient enabled configured model
 from the global Bizar router. User-selected models take precedence over tier
-candidates; `disabledProviders` excludes both. Always pass `model`. If no
-enabled configured candidate exists, stop with the configuration error. Never
-let Claude choose an unconfigured default and never retry by cycling models,
-aliases, providers, or tiers. A single configured transport failover is allowed
-only when the router explicitly supplies it.
+candidates; `disabledProviders` excludes both. Pass only the synchronized
+native transport alias, never a raw gateway ID; the guard verifies its mapping
+to the selected custom ID. If no enabled configured candidate exists, stop
+with the configuration error. Never let Claude choose an unconfigured default
+or retry by cycling aliases, providers, or tiers. A single configured transport
+failover is allowed only when the router explicitly supplies it.
 
 ## Worktree Discipline and integration
 

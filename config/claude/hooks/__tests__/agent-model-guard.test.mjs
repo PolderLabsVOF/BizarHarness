@@ -36,6 +36,23 @@ test('Agent model guard allows one configured live tier candidate', async () => 
   }, { registry, availableModelIds: [model] }), {});
 });
 
+test('Agent model guard accepts a synchronized native alias for its audited custom gateway ID', async () => {
+  const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['glm/glm-5.3'] } };
+  assert.deepEqual(await guardAgentModel({
+    ...input,
+    tool_input: { ...input.tool_input, model: 'sonnet', additionalContext: { bizarConfiguredModel: 'glm/glm-5.3' } },
+  }, { registry, modelOverrides: { 'claude-sonnet-5': 'glm/glm-5.3' } }), {});
+});
+
+test('Agent model guard rejects a stale or mismatched native alias mapping', async () => {
+  const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['glm/glm-5.3'] } };
+  const denied = await guardAgentModel({
+    ...input,
+    tool_input: { ...input.tool_input, model: 'sonnet', additionalContext: { bizarConfiguredModel: 'glm/glm-5.3' } },
+  }, { registry, modelOverrides: { 'claude-sonnet-5': 'minimax/MiniMax-M3' } });
+  assert.equal(decision(denied), 'deny');
+});
+
 test('Agent model guard rejects policy-forbidden and unavailable overrides without retrying', async () => {
   const registry = configuredRegistry();
   const denied = await guardAgentModel({
