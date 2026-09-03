@@ -125,6 +125,22 @@ describe('interactive installer provider setup', () => {
     assert.match(io.read(), /bizar setup-provider/);
   });
 
+  test('non-interactive mode emits a grep-friendly provider-config warning', async () => {
+    const io = terminal();
+    await runInteractiveSetup({
+      env: {},
+      input: io.input,
+      output: io.output,
+      enabled: false,
+      readSettings: () => ({}),
+      askText: async () => '',
+      askHidden: async () => '',
+    });
+    const text = io.read();
+    assert.match(text, /\[BIZAR_PROVIDER_CONFIG_MISSING\]/);
+    assert.match(text, /Set ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN/);
+  });
+
   test('prompted values reach the global provisioned settings file', () => {
     const home = mkdtempSync(join(tmpdir(), 'bizar-interactive-persist-'));
     const repo = resolve(import.meta.dirname, '../..');
