@@ -116,15 +116,21 @@ export async function probeAvailableModels({
 function parseFlags(args) {
   const flags = { _: [] };
   const values = new Set([
-    '--profile', '--workflow', '--project', '--session', '--session-id', '--run', '--run-id',
-    '--revision', '--expected-revision', '--stage', '--expected-stage', '--reason',
-    '--goal', '--evidence', '--router',
+    '--profile', '--workflow', '--mode', '--project', '--session', '--session-id',
+    '--run', '--run-id', '--revision', '--expected-revision', '--stage', '--expected-stage',
+    '--reason', '--goal', '--evidence', '--router',
   ]);
+  // Boolean flags take no value. Long flags use the kebab->camel key;
+  // short flags carry an explicit key mapping.
+  const booleans = new Set(['--json', '--help', '--deliberate', '--advisory']);
+  const shortBooleans = new Map([['-h', 'help']]);
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
-    if (arg === '--json') flags.json = true;
-    else if (arg === '--help' || arg === '-h') flags.help = true;
-    else if (values.has(arg)) {
+    if (booleans.has(arg)) {
+      flags[arg.slice(2).replaceAll('-', '')] = true;
+    } else if (shortBooleans.has(arg)) {
+      flags[shortBooleans.get(arg)] = true;
+    } else if (values.has(arg)) {
       if (index + 1 >= args.length) throw new WorkflowStateError('USAGE', `${arg} requires a value`);
       flags[arg.slice(2).replaceAll('-', '')] = args[++index];
     } else if (arg.startsWith('--') && arg.includes('=')) {
@@ -146,6 +152,7 @@ function showHelp() {
 
   Usage:
     bizar workflow start --goal <text> [--profile default|plan-build-qa] [--session <id>]
+    bizar workflow start --mode ralplan [--deliberate] [--advisory] --goal <text>
     bizar workflow status [--session <id>]
     bizar workflow resume [--session <id>]
     bizar workflow advance --run <uuid> --revision <n> --stage <stage> --evidence <text>
@@ -156,11 +163,16 @@ function showHelp() {
     --project <path>    Project root (defaults to the current directory)
     --session <id>      Claude session id (defaults to CLAUDE_SESSION_ID)
     --router <path>     Strict model router registry (defaults to the shipped registry)
+    --mode <name>       Routing hint for start (ralplan routes to the 8-step consensus protocol)
+    --deliberate        Force the pre-mortem round on a ralplan-shaped workflow
+    --advisory          Run the protocol without enforced gates (observability only)
     --json              Emit machine-readable JSON
 
   Profiles:
     ${Object.keys(WORKFLOW_PROFILES).join(' | ')}
     --workflow is accepted as an alias for --profile on start.
+    --mode ralplan is accepted on start and routes to plan-shaped execution;
+    it does not alter the persisted profile (the skill layer consumes the hint).
 
   Mutations require the expected run, revision, and stage. This prevents stale
   agents from advancing or terminating a newer workflow state.
@@ -193,6 +205,56 @@ function printState(state, flags) {
   console.log(chalk.dim(`    run ${state.runId}`));
 }
 
+/**
+ * Resolve the routing hint from the new --mode / --deliberate / --advisory
+ * flags. Pure: takes a flags object and returns a routing decision without
+ * mutating any external state.
+ *
+ * The ralplan-shaped 8-step protocol is engaged when the user passes
+ * `--mode ralplan`. The workflow state still uses an underlying
+ * WORKFLOW_PROFILES entry; we map `ralplan` to `plan-build-qa` because
+ * that profile is the closest existing plan-led shape. The deliberate
+ * and advisory flags are pure hints that downstream skill / agent
+ * consumers read from the returned routing object.
+ *
+ * @param {Record<string, unknown>} flags — parsed flags from parseFlags()
+ * @returns {{ profile: string, deliberate: boolean, advisory: boolean,
+ *             routing: { mode: string|null, deliberate: boolean,
+ *                        advisory: boolean } }}
+ */
+export function resolveStartRouting(flags) {
+  const mode = typeof flags.mode === 'string' && flags.mode !== '' ? flags.mode : null;
+  if (mode !== null && mode !== 'ralplan') {
+    throw new WorkflowStateError(
+      'USAGE',
+      `unknown --mode value: ${mode} (expected: ralplan)`,
+    );
+  }
+  const deliberate = flags.deliberate === true;
+  const advisory = flags.advisory === true;
+
+  if (mode === 'ralplan') {
+    // ralplan routes through the existing plan-build-qa profile — the
+    // closest WORKFLOW_PROFILES entry to the 8-step shape — without
+    // modifying workflow-state.mjs's frozen profile table.
+    return {
+      profile: 'plan-build-qa',
+      deliberate,
+      advisory,
+      routing: { mode, deliberate, advisory },
+    };
+  }
+  const explicitProfile = typeof flags.profile === 'string' && flags.profile !== ''
+    ? flags.profile
+    : (typeof flags.workflow === 'string' && flags.workflow !== '' ? flags.workflow : 'default');
+  return {
+    profile: explicitProfile,
+    deliberate,
+    advisory,
+    routing: { mode: null, deliberate, advisory },
+  };
+}
+
 export async function run(name, args, isHelpRequest) {
   if (name !== 'workflow') return false;
   let flags;
@@ -217,6 +279,13 @@ export async function run(name, args, isHelpRequest) {
           '--profile and --workflow cannot specify different profiles',
         );
       }
+      const routing = resolveStartRouting(flags);
+      if (routing.routing.mode !== null && (flags.profile || flags.workflow)) {
+        throw new WorkflowStateError(
+          'USAGE',
+          '--mode cannot be combined with --profile or --workflow; --mode owns the routing hint',
+        );
+      }
       const registry = loadModelRouter(
         flags.router || process.env.BIZAR_MODEL_ROUTER_PATH || resolveGlobalModelRouter(),
       );
@@ -231,11 +300,19 @@ export async function run(name, args, isHelpRequest) {
       }
       state = startWorkflow({
         ...ctx,
-        profile: flags.profile || flags.workflow || 'default',
+        profile: routing.profile,
         goal: flags.goal,
         registry,
         availableModelIds,
       });
+      if (routing.routing.mode !== null && !flags.json) {
+        // Surface the routing hint in human mode. In JSON mode the
+        // routing is implicit in the persisted profile (ralplan → plan-build-qa)
+        // and downstream consumers read it via `bizar workflow status --json`.
+        console.log(chalk.cyan(`    routing: ${routing.routing.mode}`));
+        if (routing.routing.deliberate) console.log(chalk.cyan('    deliberate: pre-mortem round enabled'));
+        if (routing.routing.advisory) console.log(chalk.cyan('    advisory: gates not enforced (observability only)'));
+      }
     } else if (subcommand === 'status') {
       state = getWorkflowState(ctx);
     } else if (subcommand === 'resume') {
