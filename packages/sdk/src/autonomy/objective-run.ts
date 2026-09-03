@@ -36,16 +36,27 @@ import { randomUUID } from "node:crypto";
  * bump the minor version. The factory and verifier both consult this
  * constant so a single source of truth exists.
  */
-export const OBJECTIVE_RUN_SCHEMA_VERSION = "1.0.0";
+export const OBJECTIVE_RUN_SCHEMA_VERSION = "1.1.0";
 
 /** Lifecycle phases of an `ObjectiveRun`. */
 export type ObjectiveRunPhase =
   | "planning"
   | "executing"
   | "verifying"
+  | "reviewing"
+  | "checkpointing"
   | "done"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  /**
+   * `blocked` is NON-TERMINAL. It signals "cannot proceed without
+   * external input" (matches OMX `$ultragoal` semantics). A blocked
+   * run transitions back to `executing` on resume, not to `done` or
+   * `failed`. Phase 1 OMX adoption (F-202) adds this value
+   * additively; older deserializers reject it when the
+   * `schemaVersion` mismatch is detected.
+   */
+  | "blocked";
 
 /** Runtime array of `ObjectiveRunPhase` values — kept in lock-step with the
  * type union above so JS callers and drift-guard tests can compare against
@@ -55,9 +66,12 @@ export const OBJECTIVE_PHASES = Object.freeze([
   "planning",
   "executing",
   "verifying",
+  "reviewing",
+  "checkpointing",
   "done",
   "failed",
   "cancelled",
+  "blocked",
 ] as const) satisfies ReadonlyArray<ObjectiveRunPhase>;
 
 /** Terminal vs. in-flight status of an `ObjectiveRun`. */

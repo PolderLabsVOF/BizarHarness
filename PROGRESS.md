@@ -57,6 +57,111 @@ Adopt four canonical OMX features into Bizar as planned in
   to source control when this objective is `Complete`).
 - Phase 1 dispatch in flight.
 
+### Phase 1 — Scaffolding (2026-09-03, wt/karen-f202-omx-phase1)
+
+#### Files touched (one PR boundary, atomic per `git.md`)
+
+NEW (8):
+- `packages/sdk/src/ambiguity/score.ts`
+- `packages/sdk/src/ambiguity/index.ts`
+- `packages/sdk/src/handoff/ralplan.ts`
+- `packages/sdk/src/specs/deep-interview.ts`
+- `packages/sdk/tests/ambiguity/score.test.ts`
+- `packages/sdk/tests/handoff/ralplan.test.ts`
+- `packages/sdk/tests/specs/deep-interview.test.ts`
+- `cli/core/ultragoal-state.mjs`
+- `cli/core/__tests__/ultragoal-state.test.mjs`
+- `scripts/__tests__/ambiguity-weights.test.mjs`
+
+EXTENDED (5):
+- `packages/sdk/src/autonomy/objective-run.ts` — additive `reviewing |
+  checkpointing | blocked` to `ObjectiveRunPhase`; `OBJECTIVE_PHASES`
+  widened; `OBJECTIVE_RUN_SCHEMA_VERSION` bumped `1.0.0 → 1.1.0`.
+- `packages/sdk/src/index.ts` — re-export `ambiguity/*`, `handoff/ralplan`,
+  `specs/deep-interview`.
+- `packages/sdk/src/mcp/server.ts` — append 5 tools to `BIZAR_TOOLS`:
+  `ambiguity_score`, `deep_interview_status`, `ultragoal_status`,
+  `ultragoal_steer`, `ralplan_handoff_validate`.
+- `cli/commands/objective-scheduler.mjs` — `OBJECTIVE_PHASES`
+  widened in lock-step with the SDK enum; `ACTIVE_PHASES` widened to
+  include `reviewing`/`checkpointing`; SQLite `phase` CHECK constraint
+  widened so newly created schemas accept the new values.
+- `packages/sdk/tests/sdk.test.mjs` — expected `BIZAR_TOOLS.length`
+  raised from 14 to 19 with the 5 new tools enumerated.
+
+#### Schema versions shipped
+
+- `AMBIGUITY_SCHEMA_VERSION = "1.0.0"`
+- `RALPLAN_HANDOFF_SCHEMA_VERSION = "1.0.0"`
+- `DEEP_INTERVIEW_SCHEMA_VERSION = "1.0.0"`
+- `OBJECTIVE_RUN_SCHEMA_VERSION = "1.1.0"` (additive, minor bump)
+- Ultragoal state uses `SCHEMA_VERSION = "1.0.0"`, `MODE = "ultragoal"`.
+
+#### Test counts added
+
+- SDK (vitest): 27 + 19 + 23 = **69** new test cases.
+- `scripts/__tests__/ambiguity-weights.test.mjs`: **4** new test cases.
+- `cli/core/__tests__/ultragoal-state.test.mjs`: **18** new test cases.
+- **Total new: 91 test cases.**
+
+#### Gate results (this phase, on `wt/karen-f202-omx-phase1`)
+
+- `npm run typecheck`: passed.
+- `npx vitest run --root packages/sdk`: 582/582 tests passed (45 files).
+- `node --test cli/core/__tests__/ultragoal-state.test.mjs`:
+  18/18 passed.
+- `node --test scripts/__tests__/ambiguity-weights.test.mjs`:
+  4/4 passed.
+- `npm test` (full suite): 1135/1135 passed (was 1113/1113 — +22
+  node-test cases; +69 SDK cases consolidated into the 582/582 SDK
+  vitest run). Counted including 14 pre-existing SDK test files and
+  the 3 new ones.
+- `npm run build:sdk`: clean; `packages/sdk/dist/{ambiguity, handoff,
+  specs}/*.js` + `.d.ts` produced.
+- `make check`: pass (TypeScript 0 errors; eval gate skipped per
+  policy — `make eval-gate` opt-in).
+- `make verify-removed-surfaces`: pass (removed dashboard + Bizar
+  Memory surfaces absent).
+- `make verify-repo-structure`: pass (clean tracked paths and package
+  boundary).
+- `make check-arch`: pass (architectural and removed-surface checks).
+- `make vcr`: 81/81 = 1.000 (carried over; F-202/203/204 stay
+  `not_started` per Phase 1 boundary).
+- `make e2e`: 13/13 pass (real SDK/MCP/Claude Code integration). The
+  e2e check counts required (legacy) tools as a floor, so the
+  OMX Phase 1 tools pass without changing the floor.
+- `git diff --check`: zero whitespace errors.
+
+#### Deviations / notes
+
+- `make clean-check` reports a pre-existing `Feature ledger integrity`
+  failure on **F-201** ("commit hash is empty"). This is unrelated to
+  Phase 1: F-201 is `@mike`'s adaptive orchestration feature, its
+  `feature_list.json` entry was opened in `c9172a3` alongside the
+  four OMX F-IDs but without the `commit` field that the
+  feature-state-machine checks expect on `state: "passing"`. Per the
+  Phase 1 contract ("Do NOT touch `feature_list.json` — that's a
+  coordinator-level operation"), this is left for the coordinator to
+  resolve when transitioning F-201.
+- The CLI scheduler's `OBJECTIVE_PHASES` had to be widened in this
+  commit because `scripts/__tests__/objective-scheduler.test.mjs:51`
+  deep-equals the SDK and CLI enums; failing to widen would have
+  broken this drift guard. The SQLite `phase` CHECK constraint was
+  widened in lockstep so newly created schemas accept the new values;
+  no migration is required because no live data file currently
+  contains the new values.
+- `transitionUltragoal` originally had an in-function
+  `stateHash`-equality check. It was removed (the lock + `readState`'s
+  hash validation already catch tampering) because it produced
+  spurious failures when `mutator` mutated the spread `state` object
+  in place.
+
+#### Status
+
+- Phase 1 complete on `wt/karen-f202-omx-phase1`. The coordinator
+  (`@mike`) merges with the documented
+  `merge-archive/<branch>-<sha>` tag pattern before Phase 2 begins.
+
 ## Complete — 10.23.23 patch release (2026-09-03)
 
 ### Objective

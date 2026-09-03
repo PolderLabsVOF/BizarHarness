@@ -38,6 +38,13 @@ import { spawnSync } from "node:child_process";
 
 import { listInstincts } from "../learning/instincts.js";
 import { listDecisions } from "../learning/decisions.js";
+import {
+  computeAmbiguity,
+  type AmbiguityInput,
+  type AmbiguityKind,
+} from "../ambiguity/score.js";
+import { validateRalplanHandoff, type RalplanHandoff } from "../handoff/ralplan.js";
+import { DEEP_INTERVIEW_SCHEMA_VERSION } from "../specs/deep-interview.js";
 
 // We don't import from @anthropic-ai/claude-agent-sdk as a hard dep —
 // the package is optional. Callers pass the result of `tool()` and
@@ -460,6 +467,110 @@ const bizarModelListTool = defineTool<Record<string, string>>(
 );
 
 // ---------------------------------------------------------------------------
+// F-202 Phase 1 — OMX adoption scaffolding tools.
+//
+// These tools expose the new SDK primitives (ambiguity math, deep-
+// interview spec status, ultragoal state, and the ralplan handoff
+// contract) over MCP so downstream phases (2–5) can plug into a
+// stable surface. They are read-only / forward-only and never
+// mutate user-visible state on their own; persistence is delegated
+// to the SDK + CLI primitives they wrap.
+// ---------------------------------------------------------------------------
+
+const ambiguityScoreTool = defineTool<{ input: string; kind?: string }>(
+  "ambiguity_score",
+  "Compute the weighted ambiguity score for a JSON-encoded clarity dimensions object. Pass `input` as a JSON object literal with dimension keys matching the chosen `kind` (`greenfield` or `brownfield`); values must be finite numbers in [0, 1]. Returns `{ score, breakdown, schemaVersion, kind }`.",
+  { input: "string", kind: "string" },
+  async ({ input, kind }) => {
+    try {
+      const parsed = JSON.parse(input) as AmbiguityInput;
+      const resolvedKind: AmbiguityKind = kind === "brownfield" ? "brownfield" : "greenfield";
+      const result = computeAmbiguity(parsed, resolvedKind);
+      return ok(JSON.stringify({
+        score: result.score,
+        breakdown: result.breakdown,
+        schemaVersion: result.schemaVersion,
+        kind: result.kind,
+      }));
+    } catch (e) { return err(`ambiguity_score: ${e instanceof Error ? e.message : String(e)}`); }
+  },
+  { readOnlyHint: true },
+);
+
+// `deep_interview_status` — Phase 2 will replace the body with a real
+// artifact lookup; the shape contract is locked here so downstream
+// callers can build against the schema today. For Phase 1, the tool
+// validates the slug and reports "no_spec" so it is observable from
+// any session without fabricating fake artifacts.
+const deepInterviewStatusTool = defineTool<{ slug: string }>(
+  "deep_interview_status",
+  `Look up a deep-interview spec by slug. Phase 1 returns the validation echo (\`{ spec: null, schemaVersion: "${DEEP_INTERVIEW_SCHEMA_VERSION}" }\`) when no spec artifact has been recorded yet; Phase 2 will hydrate the \`spec\` field from the persistent artifact at \`docs/specs/deep-interview-<slug>.md\`.`,
+  { slug: "string" },
+  async ({ slug }) => {
+    try {
+      if (typeof slug !== "string" || slug.trim().length === 0) {
+        return err("deep_interview_status: slug must be a non-empty string");
+      }
+      return ok(JSON.stringify({
+        spec: null,
+        schemaVersion: DEEP_INTERVIEW_SCHEMA_VERSION,
+      }));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+const ultragoalStatusTool = defineTool<{ id: string }>(
+  "ultragoal_status",
+  "Look up the persistent ultragoal state for `id`. Phase 1 returns `{ state: null }` until the CLI command lands in Phase 4; the surface is reserved.",
+  { id: "string" },
+  async ({ id }) => {
+    try {
+      if (typeof id !== "string" || id.trim().length === 0) {
+        return err("ultragoal_status: id must be a non-empty string");
+      }
+      return ok(JSON.stringify({ state: null }));
+    } catch (e) { return err(String(e)); }
+  },
+  { readOnlyHint: true },
+);
+
+const ultragoalSteerTool = defineTool<{ id: string; action: string; payload: string }>(
+  "ultragoal_steer",
+  "Apply a steer action (`add_subgoal` or `split_subgoal`) to an ultragoal. Pass `payload` as a JSON object literal describing the change. Phase 1 reserves the surface; the response is `{ ok: true, deferred: true }` until the CLI lands in Phase 4.",
+  { id: "string", action: "string", payload: "string" },
+  async ({ id, action, payload }) => {
+    try {
+      if (typeof id !== "string" || id.trim().length === 0) {
+        return err("ultragoal_steer: id must be a non-empty string");
+      }
+      if (action !== "add_subgoal" && action !== "split_subgoal") {
+        return err(`ultragoal_steer: unknown action "${action}"`);
+      }
+      if (typeof payload !== "string") {
+        return err("ultragoal_steer: payload must be a JSON string");
+      }
+      // Phase 1 reserves the surface; Phase 4 wires the real mutation.
+      return ok(JSON.stringify({ ok: true, deferred: true }));
+    } catch (e) { return err(String(e)); }
+  },
+);
+
+const ralplanHandoffValidateTool = defineTool<{ input: string }>(
+  "ralplan_handoff_validate",
+  "Validate a Ralplan handoff payload. Pass `input` as a JSON object literal matching `RalplanHandoff`. Returns `{ ok: true }` or `{ ok: false, missing: [...] }` so callers can fix all required fields at once.",
+  { input: "string" },
+  async ({ input }) => {
+    try {
+      const parsed = JSON.parse(input) as RalplanHandoff;
+      const result = validateRalplanHandoff(parsed);
+      return ok(JSON.stringify(result));
+    } catch (e) { return err(`ralplan_handoff_validate: ${e instanceof Error ? e.message : String(e)}`); }
+  },
+  { readOnlyHint: true },
+);
+
+// ---------------------------------------------------------------------------
 // Factory — wire all tools into an MCP server
 // ---------------------------------------------------------------------------
 
@@ -479,6 +590,12 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   bizarControlTool,
   bizarAuditTool,
   bizarModelListTool,
+  // F-202 Phase 1 — OMX adoption scaffolding tools.
+  ambiguityScoreTool,
+  deepInterviewStatusTool,
+  ultragoalStatusTool,
+  ultragoalSteerTool,
+  ralplanHandoffValidateTool,
 ];
 
 /**
