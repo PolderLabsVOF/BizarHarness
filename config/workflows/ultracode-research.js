@@ -24,10 +24,11 @@ const routeModel = (risk) => {
   const selected = candidate.trim()
   return selected
 }
-if (!routeModel('medium') || !routeModel('high')) {
+const routeAgentType = (risk) => WORKFLOW_ROUTING.agentTypes?.[routeModel(risk)] || ''
+if (!routeModel('medium') || !routeModel('high') || !routeAgentType('medium') || !routeAgentType('high')) {
   return {
     status: 'blocked',
-    reason: 'No explicit enabled Bizar model was supplied for workflow routing. Read the global model router and retry with args.routing; provider defaults are prohibited.',
+    reason: 'No generated Bizar model-agent mapping was supplied for workflow routing. Run bizar models and retry; provider defaults are prohibited.',
   }
 }
 let WORKFLOW_DISPATCH_SEQUENCE = 0
@@ -35,7 +36,7 @@ const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
   const sequence = ++WORKFLOW_DISPATCH_SEQUENCE
   const prefix = `[Bizar dispatch ${sequence}: ${agentName}; role=${opts.role || 'worker'}; phase=${opts.phase || 'work'}; label=${opts.label || agentName}]`
   const agentOptions = {
-    model: routeModel(opts.risk || 'medium'),
+    subagent_type: routeAgentType(opts.risk || 'medium'),
     effort: opts.risk === 'high' ? 'high' : 'medium',
   }
   if (opts.schema) agentOptions.schema = opts.schema

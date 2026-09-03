@@ -38,16 +38,14 @@ Before every Workflow, Agent, or Agent-team call, read the global Bizar model
 router and construct a small `args.routing` object whose `default`, `medium`,
 and `high` values are explicit enabled configured gateway IDs. Include the
 user's task in the same args object under the workflow's documented task field.
-Pass the chosen full gateway ID directly in every native Agent `model` field;
-current Claude Code supports full model IDs there. Include that same ID in
-`additionalContext.bizarConfiguredModel` for audit telemetry. Never use
-`inherit` or an unconfigured provider default. `bizar models` additionally
-maintains `sonnet`, `opus`, `haiku`, and `fable` aliases as compatibility
-shortcuts, but aliases must not limit dispatch to four selected models. The
-exact-model `bizar worker` command remains available where a separate top-level
-Claude process is useful, not as a fallback for normal native dispatch. If no
-configured model exists, stop and ask the operator to run `bizar models`; never
-omit model selection or cycle providers.
+Use the generated `bizar-models` user agent matching the chosen full gateway
+ID as `subagent_type`, and omit the native Agent `model` parameter entirely.
+That definition's frontmatter owns the full-ID selection for ordinary agents,
+workflows, and teams. Include the raw ID in `additionalContext.bizarConfiguredModel`
+for audit telemetry. Never use `inherit` or an unconfigured provider default.
+`sonnet`, `opus`, `haiku`, and `fable` are compatibility aliases only. If no
+generated configured definition exists, stop and ask the operator to run
+`bizar models`; never omit the generated agent type or cycle providers.
 
 Invoke the selected workflow by `name` first. If Claude reports that the Bizar
 name is unavailable, resolve the active Claude config directory and retry once

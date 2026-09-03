@@ -18,7 +18,7 @@
  * reject user-selected IDs.
  */
 import chalk from 'chalk';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import readline from 'node:readline';
 
@@ -992,6 +992,9 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
   // print-mode `[claude-code:unrecognized_model]` diagnostics for Agent SDK calls.
   settings.modelOverrides = buildClaudeModelOverrides(synced);
   const nativeAgentAliases = applyNativeAgentAliasTargets(settings, synced);
+  const generatedAgents = syncGeneratedModelAgents(synced, {
+    agentsDir: settingsJsonPath === undefined ? undefined : join(dirname(path), 'agents', 'bizar-models'),
+  });
   if (requiresGatewayModelDiscovery(synced)) {
     settings.env = {
       ...(settings.env || {}),
@@ -1022,6 +1025,7 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
     skippedStale: skipped,
     skippedDisabled,
     nativeAgentAliases,
+    generatedAgents,
     settingsPath: path,
   };
 }
@@ -1065,6 +1069,23 @@ export const CLAUDE_MODEL_OVERRIDE_KEYS = Object.freeze([
 // installed runtime. They are labels only: Bizar binds them to the operator's
 // gateway IDs below; they never select an Anthropic provider by themselves.
 export const NATIVE_AGENT_ALIASES = Object.freeze(['sonnet', 'opus', 'haiku', 'fable']);
+
+const MODEL_AGENT_WORDS = Object.freeze({ a:'alpha', b:'bravo', c:'charlie', d:'delta', e:'echo', f:'foxtrot', g:'golf', h:'hotel', i:'india', j:'juliet', k:'kilo', l:'lima', m:'mike', n:'november', o:'oscar', p:'papa', q:'quebec', r:'romeo', s:'sierra', t:'tango', u:'uniform', v:'victor', w:'whiskey', x:'xray', y:'yankee', z:'zulu', 0:'zero', 1:'one', 2:'two', 3:'three', 4:'four', 5:'five', 6:'six', 7:'seven', 8:'eight', 9:'nine', '/':'slash', '.':'dot', '-':'dash', '_':'under' });
+
+export function modelAgentName(modelId) {
+  return `bizar-model-${[...String(modelId || '').toLowerCase()].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-')}`;
+}
+
+export function syncGeneratedModelAgents(modelIds, opts = {}) {
+  const agentsDir = opts.agentsDir || join(resolveClaudeConfigDir(), 'agents', 'bizar-models');
+  const ids = [...new Set((Array.isArray(modelIds) ? modelIds : []).filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim()))];
+  if (existsSync(agentsDir)) rmSync(agentsDir, { recursive: true, force: true });
+  if (!ids.length) return { agentsDir, names: [] };
+  mkdirSync(agentsDir, { recursive: true, mode: 0o700 });
+  const names = ids.map((id) => modelAgentName(id));
+  ids.forEach((id, index) => writeFileSync(join(agentsDir, `${names[index]}.md`), `---\nname: ${names[index]}\ndescription: Bizar configured gateway model worker.\nmodel: ${id}\n---\n\nFollow the assigned Bizar role and task. Report concise evidence to the coordinator.\n`, { mode: 0o600 }));
+  return { agentsDir, names };
+}
 
 const NATIVE_AGENT_OVERRIDE_KEYS = Object.freeze({
   sonnet: 'claude-sonnet-5',

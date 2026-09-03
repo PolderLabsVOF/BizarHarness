@@ -33,6 +33,9 @@ import { existsSync, readFileSync, appendFileSync, mkdirSync, writeFileSync, ren
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
+const MODEL_AGENT_WORDS = { a:'alpha', b:'bravo', c:'charlie', d:'delta', e:'echo', f:'foxtrot', g:'golf', h:'hotel', i:'india', j:'juliet', k:'kilo', l:'lima', m:'mike', n:'november', o:'oscar', p:'papa', q:'quebec', r:'romeo', s:'sierra', t:'tango', u:'uniform', v:'victor', w:'whiskey', x:'xray', y:'yankee', z:'zulu', 0:'zero', 1:'one', 2:'two', 3:'three', 4:'four', 5:'five', 6:'six', 7:'seven', 8:'eight', 9:'nine', '/':'slash', '.':'dot', '-':'dash', '_':'under' };
+function modelAgentName(modelId) { return `bizar-model-${[...String(modelId || '').toLowerCase()].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-')}`; }
+
 const { O_APPEND, O_CREAT, O_WRONLY } = fsConstants;
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -796,15 +799,12 @@ export function classifyDispatchOutcome(result, error, startMs) {
 }
 
 /**
- * Build the augmented native-Agent payload. Claude Code supports an explicit
- * full model ID in an Agent invocation; use the selected gateway ID directly
- * so every configured selection is usable by native agents and teams. The
- * transport aliases remain a compatibility option for callers that need them.
+ * Build an Agent payload that selects a generated full-ID model definition.
  */
 export function augmentPayload(opts, decision, agentName, context = {}) {
   return {
     ...opts,
-    model: decision.modelId,
+    subagent_type: modelAgentName(decision.modelId),
     additionalContext: {
       ...(opts.additionalContext && typeof opts.additionalContext === 'object' ? opts.additionalContext : {}),
       bizarConfiguredModel: decision.modelId ?? null,

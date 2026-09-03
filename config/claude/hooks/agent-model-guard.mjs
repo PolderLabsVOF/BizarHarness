@@ -49,6 +49,7 @@ import { pathToFileURL } from 'node:url';
 
 import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
 import { resolveClaudeConfigDir } from '../../../cli/config-paths.mjs';
+import { modelAgentName } from '../../../cli/commands/models.mjs';
 
 function deny(reason) {
   return {
@@ -194,7 +195,7 @@ function readTransportTarget(alias, options = {}) {
 
 export async function guardAgentModel(input, options = {}) {
   if (!input || typeof input !== 'object') return {};
-  if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Agent') return {};
+  if (input.hook_event_name !== 'PreToolUse' || !['Agent', 'Task'].includes(input.tool_name)) return {};
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
   const requested = typeof toolInput.model === 'string' ? toolInput.model.trim() : '';
   const failoverBlock = readFailoverBlock(toolInput);
@@ -225,6 +226,8 @@ export async function guardAgentModel(input, options = {}) {
   // Inheritance is safe only when the auditable Bizar selection equals the
   // actual global Claude parent model and is a selected, enabled user pick.
   if (!requested || requested === 'inherit') {
+    const generated = typeof toolInput.subagent_type === 'string' && [...userPicks].some((id) => toolInput.subagent_type === modelAgentName(id));
+    if (generated && !requested) return {};
     const configured = configuredContext;
     const parent = readConfiguredParentModel(options);
     if (!configured || configured !== parent || !userPicks.has(configured)) {

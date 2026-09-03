@@ -173,7 +173,7 @@ function makeRuntime(args) {
   const agent = async (prompt, opts) => {
     const header = typeof prompt === 'string' ? prompt.match(/^\[Bizar dispatch \d+: [^;]+; role=([^;]+); phase=([^;]+); label=([^\]]+)\]/) : null;
     const dispatchMeta = { role: header?.[1], phase: header?.[2], label: header?.[3] };
-    calls.push({ primitive: 'agent', ...dispatchMeta, model: opts?.model, isolation: opts?.isolation });
+    calls.push({ primitive: 'agent', ...dispatchMeta, subagentType: opts?.subagent_type, isolation: opts?.isolation });
     return buildStub(dispatchMeta, prompt);
   };
   const parallel = async (fns) => {
@@ -219,7 +219,7 @@ async function runWorkflow(file, args) {
     ...(args && typeof args === 'object' ? args : {}),
     routing: {
       default: 'provider/default', medium: 'provider/mid', high: 'provider/high',
-      nativeAliases: { sonnet: 'provider/default', opus: 'provider/mid', haiku: 'provider/high', fable: 'provider/default' },
+      agentTypes: { 'provider/default': 'bizar-default', 'provider/mid': 'bizar-mid', 'provider/high': 'bizar-high' },
     },
   };
   const runtime = makeRuntime(routedArgs);
@@ -287,7 +287,7 @@ test('bizar-implement: visible scope, plan, implementation, and review phases', 
   assert.ok(agentCalls.length >= 5, 'scope, plan, writer, and review must use separate workers');
   const writers = agentCalls.filter((call) => String(call.label || '').startsWith('implement:'));
   assert.equal(writers.length, result.implementations.length);
-  assert.ok(writers.every((call) => call.model === 'provider/mid' && call.isolation === 'worktree'));
+  assert.ok(writers.every((call) => call.subagentType === 'bizar-mid' && call.isolation === 'worktree'));
   const parallelCalls = calls.filter((c) => c.primitive === 'parallel');
   assert.ok(parallelCalls.some((call) => call.count === 2), 'independent scope checks must run concurrently');
   const phases = calls.filter((c) => c.primitive === 'phase').map((c) => c.name);
@@ -331,6 +331,6 @@ test('all workflows: phase() calls fire in declared order', async () => {
     const minPhases = script.minPhases ?? 3;
     assert.ok(phases.length >= minPhases, `${script.name}: expected >=${minPhases} phase() calls, saw ${phases.length}`);
     const agentCalls = calls.filter((call) => call.primitive === 'agent');
-    assert.ok(agentCalls.every((call) => ['provider/mid', 'provider/high'].includes(call.model)), `${script.name}: every Agent call needs an explicit routed model`);
+    assert.ok(agentCalls.every((call) => ['bizar-mid', 'bizar-high'].includes(call.subagentType)), `${script.name}: every Agent call needs an explicit generated model agent`);
   }
 });

@@ -1,5 +1,16 @@
 # Changelog
 
+## [10.23.16] - 2026-09-03
+
+### Fixed
+
+- **Full-ID generated agents** — `bizar models` creates managed user-global
+  model definitions for every enabled selection. Native agents, workflows, and
+  teams select those definitions by `subagent_type` and omit the alias-only
+  native `model` parameter.
+- **Task transport guard** — validates generated definitions for both Claude
+  Code `Agent` and `Task` subagent transport events.
+
 ## [10.23.15] - 2026-09-03
 
 ### Fixed
