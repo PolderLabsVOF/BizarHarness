@@ -5,6 +5,8 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { PATHS, printInstallLocations, resolveClaudeDir } from './paths.mjs';
 
 describe('PATHS', () => {
@@ -48,6 +50,18 @@ describe('resolveClaudeDir()', () => {
     try {
       const dir = resolveClaudeDir();
       assert.equal(dir, '/tmp/my-claude-dir');
+    } finally {
+      if (orig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = orig;
+    }
+  });
+
+  test('defaults to Claude home config directory', () => {
+    const orig = process.env.CLAUDE_CONFIG_DIR;
+    delete process.env.CLAUDE_CONFIG_DIR;
+    try {
+      const home = process.env.HOME?.trim() || homedir();
+      assert.equal(resolveClaudeDir(), join(home, '.claude'));
     } finally {
       if (orig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = orig;

@@ -31,7 +31,11 @@ import {
 import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveBizarHome, resolveGlobalModelRouter } from './config-paths.mjs';
+import {
+  resolveBizarHome,
+  resolveClaudeConfigDir,
+  resolveGlobalModelRouter,
+} from './config-paths.mjs';
 import {
   buildClaudeModelOverrides,
   configuredEnabledModels,
@@ -64,15 +68,7 @@ export const BIZAR_VERSION = (() => {
  *   2. `$HOME/.claude`
  */
 export function resolveClaudeDir() {
-  if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {
-    return process.env.CLAUDE_CONFIG_DIR.trim();
-  }
-  if (process.platform === 'win32') {
-    return process.env.APPDATA
-      ? join(process.env.APPDATA, 'Claude')
-      : join(HOME, '.claude');
-  }
-  return join(HOME, '.claude');
+  return resolveClaudeConfigDir();
 }
 
 export const CLAUDE_DIR = resolveClaudeDir();
