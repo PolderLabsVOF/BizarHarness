@@ -1492,7 +1492,7 @@
       "description": "Adopt the OMX ambiguity score into Bizar with `AMBIGUITY_WEIGHTS.greenfield` and `AMBIGUITY_WEIGHTS.brownfield` (each summing to exactly `1.00`), `AMBIGUITY_SCHEMA_VERSION`, and `computeAmbiguity(input) -> number`. Render as a weighted breakdown table via `bizar ambiguity` CLI and persist with every emitted spec artifact.",
       "behavior": "`computeAmbiguity` returns a value in `[0, 1]`; the weight-set invariants are pinned by `scripts/__tests__/ambiguity-weights.test.mjs`; the schema version is exported and the CLI table renders both greenfield and brownfield variants; persisted specs carry `ambiguity: { score, breakdown, schemaVersion }`.",
       "verification": "SDK unit tests covering boundary, weight-sum, closure, variant, invalid inputs, and determinism (≥ 20 cases); scripts/__tests__/ambiguity-weights.test.mjs pinning weight-sum invariants; CLI table-rendering snapshot; MCP round-trip; make check; make test; make check-arch.",
-      "state": "not_started",
+      "state": "passing",
       "category": "scoring",
       "layer": "harness",
       "owner": "@karen",
@@ -1506,7 +1506,10 @@
         "PROGRESS.md",
         "feature_list.json"
       ],
-      "created": "2026-09-03"
+      "created": "2026-09-03",
+      "commit": "1b4068d",
+      "passed": "2026-09-03",
+      "evidence": "2026-09-03 ambiguity CLI: bizar ambiguity <spec-path> with --format json|human, --breakdown, --allow-high, --kind greenfield|brownfield; closure threshold 0.10; does NOT write to docs/specs/ per DEC-022. spec-list extended with embedded ambiguity breakdown row. Targeted tests 21/21 + 8/8 bin-help-dispatch + 4/4 weights regression; typecheck clean; make check-arch 0 failed."
     },
     {
       "id": "F-204",
@@ -1567,8 +1570,8 @@
     }
   ],
   "vcr": {
-    "passing": 84,
-    "activated": 84,
+    "passing": 85,
+    "activated": 85,
     "ratio": 1
   }
 }

@@ -286,6 +286,84 @@ EXTENDED (5):
 - Feature ledger updates (F-201 commit field, F-202/F-204/F-205
   transitions) committed alongside this record.
 
+### Phase 3 — Ambiguity score CLI (F-203)
+
+- Branch: `wt/todd-f203-omx-phase3` (worktree `agent-a4676ce87904bc0ce`).
+- Feature commit: `1b4068d`. Merge commit: `07a89b8`. Merge-archive tag:
+  `merge-archive/worktree-agent-a4676ce87904bc0ce-1b4068d…`.
+- Files (6): `cli/commands/ambiguity.mjs` (NEW, 462 lines — `bizar
+  ambiguity <spec-path>` with `--format json|human`, `--breakdown`,
+  `--allow-high`, `--kind greenfield|brownfield`; defaults to the
+  most recent `docs/specs/deep-interview-*.md`; exits 1 when score
+  exceeds the 0.10 closure threshold unless `--allow-high` is passed;
+  does NOT write to `docs/specs/` per DEC-022), `cli/commands/spec-list.mjs`
+  (EXTEND — `Ambiguity breakdown` row per deep-interview spec, reading
+  the embedded breakdown from the spec itself), `cli/bin.mjs` (EXTEND —
+  wire ambiguity case into the command registry), `cli/__tests__/bin-help-dispatch.test.mjs`
+  (EXTEND — dispatch test), `cli/__tests__/ambiguity.test.mjs` (NEW, 21
+  cases — parseFlags, run() exit codes, --allow-high override,
+  --breakdown, --format json, missing-spec error, binar end-to-end),
+  `cli/__tests__/ambiguity-debug.mjs` (NEW — debug helper).
+- Verification: `node --test cli/__tests__/ambiguity.test.mjs` 21/21,
+  `node --test cli/__tests__/bin-help-dispatch.test.mjs` 8/8,
+  `node --test scripts/__tests__/ambiguity-weights.test.mjs` 4/4 (no
+  regression on the Phase 1 weights test), `npm run typecheck` clean,
+  `make check-arch` 0 failed, `make verify-repo-structure` clean,
+  `git diff --check` 0 errors. End-to-end smoke: `node cli/bin.mjs
+  ambiguity --help` prints a clean usage table.
+
+### Phase 6 — Mike lifecycle integration
+
+- Branch: `wt/karen-f201-omx-phase6` (worktree `agent-a9422f7bf6e07eea0`).
+- Feature commit: `2c72821`. Merge commit: `df41e01`. Merge-archive tag:
+  `merge-archive/worktree-agent-a9422f7bf6e07eea0-2c72821…`.
+- Files (5): `config/claude/agents/office-manager.md` (EXTEND — four
+  new routing rows for the OMX primitives plus a new `OMX-derived
+  primitive gates` section with destructive/HITL and ambiguity-floor
+  gates; existing rows preserved unchanged), `config/claude/hooks/worker-suggest.mjs`
+  (EXTEND — `OMX_PRIMITIVE_HINTS` constant, four lexical predicates,
+  `buildOmxPrimitiveHints` builder, append point in dispatcher path;
+  dispatcher logic, import path, and existing `recordSuggestion` flow
+  untouched), `config/claude/hooks/__tests__/worker-suggest.test.mjs`
+  (EXTEND — 6 new tests covering pivot block presence on substantive
+  prompts and absence on the tiny direct path), `config/skills/autopilot/SKILL.md`
+  (EXTEND — one cross-reference section listing the four OMX-derived
+  primitives the operator can pivot to; autopilot lifecycle stays
+  intact), `config/claude/skills/autopilot/SKILL.md` (auto-mirror).
+- Verification: `node --test config/claude/hooks/__tests__/worker-suggest.test.mjs`
+  38/38 (was 32, +6 Phase 6 tests), `make sync-skills-mirror` 82 in
+  sync, `make verify-thinking-skills` 40 pass, `npm run typecheck`
+  clean, `make check-arch` 0 failed, `make verify-repo-structure`
+  clean, `git diff --check` 0 errors.
+
+#### Status (final)
+
+- **All six OMX phases + DEC-022 + keyword-router are integrated on
+  master at `df41e01`.** Feature ledger: F-201, F-202, F-203, F-204,
+  F-205 all `passing`. VCR: 85/85 = 1.000.
+- Final gates on master: `make e2e` 13/13, `make vcr` 85/85 = 1.000,
+  `make clean-check` 5/5, `npm run typecheck` clean, `npm test`
+  1139/1139 pass, SDK tests 582/582 pass, `make sync-skills-mirror`
+  82 canonical skills in sync, `make verify-thinking-skills` 40 pass,
+  `make check-arch` 0 failed, `make verify-repo-structure` clean.
+- Targeted OMX test totals: 12 (check-arch) + 4 (keyword-router) + 9
+  (workflow) + 2 (claude-cmd) + 4 (ambiguity-weights) + 18
+  (ultragoal-state) + 21 (ambiguity CLI) + 38 (worker-suggest
+  including 6 Phase 6 OMX primitives) = 108 cases. All green.
+- Phase 6 noted the `bh-full-e2e.mjs` shipped-agents count drift
+  (84 -> 85) and the `feature_list.json` F-201 missing-commit issue;
+  both were fixed in commit `334212e` so `make clean-check` is fully
+  green.
+- Eight merge-archive tags preserved for audit: keyword-router,
+  Phase 1 SDK, Phase 5 ralplan surfaces, Phase 2 deep-interview,
+  Phase 4 ultragoal, DEC-022 check-arch, Phase 3 ambiguity CLI,
+  Phase 6 Mike lifecycle.
+- Next: decide whether to ship a 10.24.0 release rolling up all six
+  OMX features + DEC-022 enforcement, or hold for additional audit
+  cycles (Linda on each phase's coverage, Todd on the worker-suggest
+  pivots). Both are reversible; the merge state is fully audit-able
+  via the merge-archive tags.
+
 ## Complete — 10.23.23 patch release (2026-09-03)
 
 ### Objective
