@@ -162,6 +162,130 @@ EXTENDED (5):
   (`@mike`) merges with the documented
   `merge-archive/<branch>-<sha>` tag pattern before Phase 2 begins.
 
+### Phase 2 — Deep-interview surface (F-202)
+
+- Branch: `wt/todd-f202-omx-phase2` (worktree `agent-a18b8f0ce002baeda`).
+- Feature commit: `8dc8d3b`. Merge commit: `a46df54`. Merge-archive tag:
+  `merge-archive/worktree-agent-a18b8f0ce002baeda-8dc8d3b…`.
+- Files: `config/skills/deep-interview/SKILL.md` (canonical, 11 557 bytes),
+  `config/claude/skills/deep-interview/SKILL.md` (auto-mirror, byte-identical),
+  `config/claude/commands/deep-interview.md` (Skill-tool wrapper),
+  `config/claude/agents/office-greeter.md` (cross-ref paragraph appended,
+  janet's one-question policy preserved), `cli/commands/validate.mjs`
+  (REQUIRED_COMMANDS registration alongside ralph/ralplan),
+  `cli/__tests__/claude-cmd.test.mjs` (registration test).
+- Verification: `make sync-skills-mirror` 81 skills, `node --test
+  cli/__tests__/claude-cmd.test.mjs` 2/2, `make verify-thinking-skills` 40
+  pass, `npm run typecheck` clean, `make check-arch` 0 failed,
+  `make verify-repo-structure` clean, `git diff --check` 0 errors,
+  `diff -q` byte-identical canonical vs mirror, `npm test` 1114/1114
+  from the worktree.
+- Deviation: namespace registration landed in `cli/commands/validate.mjs`
+  (REQUIRED_COMMANDS) rather than `cli/commands/claude-cmd.mjs`. The
+  literal allowlist where ralph / ralplan already live is
+  `validate.mjs:46-54`; `claude-cmd.mjs` is only the dispatcher for
+  `team | subagent | run` and does not host the registration.
+
+### Phase 3 — Ambiguity score CLI (F-203)
+
+- Status: implementation in flight. Todd dispatched in
+  `agent-a4676ce87904bc0ce`. Branch to merge on completion.
+- Builds on Phase 1 SDK (`packages/sdk/src/ambiguity/score.ts`) +
+  Phase 2 SKILL.md closure threshold (AmbiguityScore <= 0.10).
+- Scope: `cli/commands/ambiguity.mjs` (NEW), `cli/commands/spec-list.mjs`
+  (EXTEND), CLI-surface tests, command-registry wiring.
+- Gate: does NOT write to `docs/specs/` per DEC-022.
+
+### Phase 4 — Ultragoal surface (F-204)
+
+- Branch: `wt/karen-f204-omx-phase4` (worktree `agent-a0f74e3858d93ae6e`).
+- Feature commit: `7e06aa1`. Merge commit: `641798b`. Merge-archive tag:
+  `merge-archive/worktree-agent-a0f74e3858d93ae6e-7e06aa1…`.
+- Files: `config/skills/ultragoal/SKILL.md` (canonical, 12 658 bytes),
+  `config/claude/skills/ultragoal/SKILL.md` (auto-mirror, byte-identical),
+  `config/claude/commands/ultragoal.md` (Skill-tool wrapper, 526 bytes).
+- SKILL.md covers: lifecycle `planning -> executing -> verifying ->
+  reviewing -> checkpointing -> done` (with `blocked` non-terminal),
+  `--mode aggregate` (single weighted ledger) vs `--mode per-story` (one
+  subledger per story), steer surface
+  `add_subgoal | split_subgoal | checkpoint | update | fail | cancel |
+  complete`, four-lane quality-gate completion fence
+  `{cleaner, verification, review, architecture_invariant}`, seven-category
+  HITL floor mirrored from `permission-request.mjs`.
+- Verification: `diff -q` mirror byte-identical, `make sync-skills-mirror`
+  82 skills in sync, `make verify-thinking-skills` 40 pass, `npm run
+  typecheck` clean, `make check-arch` 0 failed, `git diff --check` 0 errors.
+
+### Phase 5 — Ralplan consensus gate surface (F-205)
+
+- Branch: `wt/todd-f205-omx-phase5` (worktree `agent-a0266f549317fabfb`).
+- Feature commit: `a80211c`. Merge commit: `baf282f`. Merge-archive tag:
+  `merge-archive/worktree-agent-a0266f549317fabfb-a80211c…`.
+- Files (7): `config/claude/agents/plan-architect.md` (NEW, 7 628 bytes —
+  Architect pass emits strongest steelman antithesis + tradeoff tension
+  + synthesis), `config/skills/ralplan/references/pre-mortem.md` (NEW,
+  pointer to canonical `thinking-pre-mortem/SKILL.md`),
+  `config/skills/ralplan/SKILL.md` (EXTEND — 8-step protocol section,
+  deliberate-mode auto-detection, pre-execution gate, handoff JSON
+  contract reference, handoff path `docs/specs/ralplan/<slug>.handoff.json`
+  per DEC-022), `config/claude/agents/qa-reviewer.md` (EXTEND — new
+  RALPLAN-Critic sub-mode, iteration cap 5), `cli/commands/workflow.mjs`
+  (EXTEND — `--mode ralplan`, `--deliberate`, `--advisory` flags via
+  new `resolveStartRouting(flags)` helper that maps `--mode ralplan` to
+  the existing `plan-build-qa` profile without disturbing
+  `WORKFLOW_PROFILES`), `cli/__tests__/workflow.test.mjs` (NEW, 9 cases),
+  `config/claude/skills/ralplan/SKILL.md` (auto-mirror).
+- Verification: `node --test cli/__tests__/workflow.test.mjs` 9/9,
+  `make verify-thinking-skills` 40 pass, `npm run typecheck` clean,
+  `make check-arch` 0 failed, `git diff --check` 0 errors.
+
+### DEC-022 check-arch enforcement
+
+- Branch: `wt/brenda-dec-022-check-arch` (worktree `agent-aeefe06ae25d05d64`).
+- Feature commit: `4f9bb96`. Merge commit: `77bb9f5`. Merge-archive tag:
+  `merge-archive/worktree-agent-aeefe06ae25d05d64-4f9bb96…`.
+- Files (2): `.harness/arch-rules.json` (+9 lines — new
+  `omx-canonical-location` rule appended after `workflow-bloat-pin`),
+  `cli/__tests__/check-arch.test.mjs` (NEW, 189 lines, 12 cases).
+- Rule prunes `docs/specs/`, `node_modules/`, `.git/`, `.omc/`,
+  `.test-bizar-home/` from the search; matches
+  `deep-interview-*.md`, `ultragoal-*.md`, `ultragoal-*.jsonl`,
+  `ralplan-*.md`, `ralplan-*.handoff.json` outside the canonical sink;
+  non-zero exit on hit with a message pointing at
+  `docs/decisions/DEC-022-omx-canonical-artifact-location.md`.
+- Verification: `bash scripts/check-arch.sh` 0 failed, `node --test
+  cli/__tests__/check-arch.test.mjs` 12/12, `npm run typecheck` clean,
+  `make check-arch` 0 failed, `git diff --check` 0 errors.
+
+### Shared `keyword-router.mjs` extension
+
+- Branch: `wt/brenda-omx-keyword-router` (worktree `agent-a2d93a7488b1cf9e0`).
+- Feature commit: `9652a8c`. Merge commit: `0d70c72`. Merge-archive tag:
+  `merge-archive/worktree-agent-a2d93a7488b1cf9e0-9652a8c…`.
+- Files (2): `config/claude/hooks/keyword-router.mjs` (3 inserts, 1 delete
+  — `deep-interview` and `ultragoal` added to `EXPLICIT_COMMANDS` after
+  `cancel` and `ultraqa` respectively, and parse regex widened to match
+  the new commands), `config/claude/hooks/__tests__/keyword-router.test.mjs`
+  (NEW, 4 cases — parse + denylist per command, mirroring
+  `ralph` / `ralplan` shape).
+- Verification: `node --test config/claude/hooks/__tests__/keyword-router.test.mjs`
+  4/4, `node --test config/claude/hooks/__tests__/workflow-lifecycle.test.mjs`
+  6/6 (no regression on shared exports), `npm run typecheck` clean,
+  `make check-arch` 0 failed, `make verify-repo-structure` clean,
+  `git diff --check` 0 errors.
+
+#### Status
+
+- Phase 1, 2, 4, 5 + DEC-022 + keyword-router: integrated on master at
+  `77bb9f5`. Phase 3 (Todd) and Phase 6 (Karen) are still in flight.
+- Final verification on master: `npm test` 1139/1139 pass; targeted tests
+  on each new test file all pass (12 + 4 + 9 + 2 + 4 + 18 = 49 cases);
+  SDK tests 582/582 pass; `make sync-skills-mirror` 82 canonical skills
+  in sync; `make verify-thinking-skills` 40 pass; `make check-arch`
+  0 failed; `make verify-repo-structure` clean; `npm run typecheck` clean.
+- Feature ledger updates (F-201 commit field, F-202/F-204/F-205
+  transitions) committed alongside this record.
+
 ## Complete — 10.23.23 patch release (2026-09-03)
 
 ### Objective

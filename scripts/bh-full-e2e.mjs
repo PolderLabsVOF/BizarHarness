@@ -118,7 +118,7 @@ const agentSources = agents.map((file) => {
 const agentNames = agentSources.map(({ name }) => name);
 check(
   'shipped agents',
-  agents.length === 84 && agentNames.every(Boolean) && new Set(agentNames).size === agents.length,
+  agents.length === 85 && agentNames.every(Boolean) && new Set(agentNames).size === agents.length,
   `${agents.length} unique agent definitions`,
 );
 const ungroundedAgents = agentSources
