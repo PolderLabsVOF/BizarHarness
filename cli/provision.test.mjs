@@ -16,7 +16,7 @@ import {
   readFileSync,
   unlinkSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -53,6 +53,19 @@ test('haveCmd detects commands using the host platform resolver', async () => {
   const { haveCmd } = await import('./provision.mjs');
   assert.equal(haveCmd('node'), true);
   assert.equal(haveCmd('bizar-command-that-does-not-exist'), false);
+});
+
+test('resolveClaudeDir defaults to Claude home config directory', async () => {
+  const { resolveClaudeDir } = await import('./provision.mjs');
+  const orig = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  try {
+    const home = process.env.HOME?.trim() || homedir();
+    assert.equal(resolveClaudeDir(), join(home, '.claude'));
+  } finally {
+    if (orig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = orig;
+  }
 });
 
 // ── Idempotency marker ────────────────────────────────────────────────────────

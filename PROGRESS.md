@@ -2,6 +2,52 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress - Windows Claude config directory alignment (2026-09-03)
+
+### Objective
+
+Make the provider settings written by Bizar load when a Windows user starts
+`claude` directly, without requiring an Anthropic `/login`.
+
+### Pre-change evidence
+
+- With `CLAUDE_CONFIG_DIR` unset, `claude auth status` reports
+  `loggedIn: false` and uses `C:\Users\Nizar\.claude\projects`.
+- Bizar wrote the configured OmniRouter URL and an auth token to
+  `C:\Users\Nizar\AppData\Roaming\Claude\settings.json`.
+- With `CLAUDE_CONFIG_DIR=C:\Users\Nizar\AppData\Roaming\Claude`, Claude
+  reports `loggedIn: true` and `claude doctor` recognizes the custom endpoint.
+- The authenticated OmniRouter `GET /v1/models` probe returns HTTP 200 with
+  108 models, so the endpoint and token are valid.
+- `cli/provision.mjs`, `cli/install/paths.mjs`, and `cli/utils.mjs` each use an
+  inconsistent Windows `%APPDATA%\\Claude` fallback instead of the canonical
+  `$HOME/.claude` fallback used elsewhere in the repository.
+
+### Implementation
+
+- `cli/provision.mjs`, `cli/install/paths.mjs`, and `cli/utils.mjs` now reuse
+  the canonical `resolveClaudeConfigDir()` implementation.
+- Windows with no explicit override now resolves to `C:\Users\<user>\.claude`,
+  matching Claude Code's direct-launch default; `CLAUDE_CONFIG_DIR` overrides
+  remain unchanged.
+- Added default-path regression tests for the provisioner and install paths.
+- The local user-level `CLAUDE_CONFIG_DIR` override points at the existing
+  Bizar settings directory so this machine keeps its configured provider key
+  without duplicating the secret.
+
+### Verification
+
+- `node --test cli/install/paths.test.mjs`: 7 passed, 0 failed.
+- `node --test --test-name-pattern='(haveCmd|resolveClaudeDir)' cli/provision.test.mjs`:
+  2 passed, 0 failed.
+- `node --test cli/install/index.test.mjs`: 4 passed, 0 failed.
+- `npm run typecheck`: passed.
+- `node cli/bin.mjs install --dry-run --yes`: passed; it now targets
+  `C:\Users\Nizar\.claude` and detects Node, npm, git, and Claude Code.
+- Authenticated OmniRouter `GET /v1/models`: HTTP 200, 108 models returned.
+
+The existing PR will be updated with this config-path fix.
+
 ## In Progress - Windows toolchain command detection (2026-09-03)
 
 ### Objective

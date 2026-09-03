@@ -4,11 +4,10 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync } from 'node:fs';
+import { resolveClaudeConfigDir } from './config-paths.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
-
-const isWin = process.platform === 'win32';
 
 export function repoPath(...parts) {
   return join(REPO_ROOT, ...parts);
@@ -21,15 +20,7 @@ export function repoPath(...parts) {
  *   2. `$HOME/.claude` (Claude Code default)
  */
 export function claudeConfigDir() {
-  if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {
-    return process.env.CLAUDE_CONFIG_DIR.trim();
-  }
-  if (isWin) {
-    return process.env.APPDATA
-      ? join(process.env.APPDATA, 'claude')
-      : join(homedir(), '.claude');
-  }
-  return join(homedir(), '.claude');
+  return resolveClaudeConfigDir();
 }
 
 export function claudeAgentsDir() {
