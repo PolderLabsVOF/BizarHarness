@@ -2,6 +2,48 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## Complete — 10.23.23 patch release (2026-09-03)
+
+### Objective
+
+Roll up the three bug-fix strands that landed on master but were not yet
+reflected in a published version:
+
+1. Windows Claude config directory alignment (PR #16).
+2. Bound generated model-agent filenames (PR #17).
+3. Installer hardening: louder non-TTY provider-config warning +
+   `syncConfiguredModelAgents` failure isolation.
+
+### Pre-change evidence
+
+- npm registry showed `@polderlabs/bizar@10.23.22` and
+  `@polderlabs/bizar-sdk@10.23.22` as latest, published from commit
+  `c7998e3` before any of the three fix strands landed on master.
+- Master carried the code without a matching publish.
+
+### Implementation
+
+- `package.json` + `packages/sdk/package.json` + `packages/sdk/src/version.ts`
+  bumped in lockstep to `10.23.23` to preserve root/SDK parity.
+- `CHANGELOG.md` entry added covering all four fixes.
+- Branch `wt/integration-todd-hardening` carried the integration commit
+  (`8d61b39`) plus the release commit (`af59b1b`) and was merged to
+  master as commit `4a9e124` via the documented `bizar worktree-merge`
+  fallback (manual `merge-archive/wt-integration-todd-hardening-af59b1b`
+  tag preserved for audit).
+- Tag `v10.23.23` created on master and pushed to origin.
+- GitHub release `v10.23.23` created against `master` with release notes
+  summarizing the four fixes.
+- `@polderlabs/bizar@10.23.23` and `@polderlabs/bizar-sdk@10.23.23`
+  published to the public npm registry.
+
+### Verification
+
+- `npm test`: 1113/1113 pass on the integration branch.
+- `npm run typecheck`: passed.
+- `npm view @polderlabs/bizar version` and `npm view @polderlabs/bizar-sdk
+  version` both return `10.23.23`.
+
 ## In Progress - Installer hardening: provider-config warning + model-agent sync guard (2026-09-03)
 
 ### Objective
