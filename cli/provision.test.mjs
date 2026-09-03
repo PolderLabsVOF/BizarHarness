@@ -49,6 +49,12 @@ after(() => {
   restoreHome();
 });
 
+test('haveCmd detects commands using the host platform resolver', async () => {
+  const { haveCmd } = await import('./provision.mjs');
+  assert.equal(haveCmd('node'), true);
+  assert.equal(haveCmd('bizar-command-that-does-not-exist'), false);
+});
+
 // ── Idempotency marker ────────────────────────────────────────────────────────
 
 describe('install marker (installed.json)', () => {

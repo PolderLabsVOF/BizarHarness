@@ -2,12 +2,63 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress - Windows toolchain command detection (2026-09-03)
+
+### Objective
+
+Make the provisioner detect `node`, `npm`, `git`, and `claude` on Windows.
+The current `cli/provision.mjs#haveCmd` uses the POSIX-only `command -v`, so
+`bizar install` incorrectly reports `node not on PATH` from PowerShell even
+when `where.exe node` resolves the installed Node executable.
+
+### Pre-change evidence
+
+- Repository cloned to `X:\vscode\BizarHarness` from
+  `PolderLabsVOF/BizarHarness`; working tree was clean on `master`.
+- Windows resolves `C:\Program Files\nodejs\node.exe` and Node reports
+  `v24.14.0`.
+- `node --test cli/install/index.test.mjs` is currently blocked before test
+  execution because `packages/sdk/dist/router/failover-mirror.mjs` is absent
+  in the fresh clone; dependencies/build have not yet been bootstrapped.
+- `make check` cannot run because GNU Make is not installed on this host.
+
+### Implementation
+
+- `cli/provision.mjs#haveCmd` now uses `where.exe <cmd>` on Windows and keeps
+  the existing `command -v` probe on POSIX hosts.
+- Added a regression test covering detection of an installed command and a
+  missing command on the host platform.
+- Kept `feature_list.json` unchanged; the existing WIP count remains `1`.
+
+### Verification
+
+- `npm install` completed with 0 vulnerabilities.
+- `npx --no-install tsc -p packages/sdk/tsconfig.json` completed to bootstrap
+  the SDK needed by installer tests. The repo's `npm run build:sdk` wrapper has
+  a separate Windows `tsc.cmd` resolution issue and is out of scope here.
+- `node --test cli/install/index.test.mjs`: 4 passed, 0 failed.
+- `node --test --test-name-pattern=haveCmd cli/provision.test.mjs`: 1 passed,
+  0 failed.
+- `npm run typecheck`: passed.
+- `node cli/bin.mjs install --dry-run --yes`: passed and detected Node
+  `v24.14.0`, npm `11.9.0`, git `2.53.0.windows.2`, and Claude Code.
+- `git diff --check`: passed.
+- Full `npm run test:node` remains red in this Windows environment (`1010`
+  passed, `96` failed) due existing POSIX-path, file-mode, shell, fixture, and
+  platform-specific assumptions outside this change; the targeted checks pass.
+- `make check` remains unavailable because GNU Make is not installed.
+
+Completed 2026-09-03: the Windows fix was reviewed, merged into `master`, and
+re-verified on the integration host with the focused provisioner test and
+`make check`.
+
 ## In Progress — F-201 adaptive orchestration and model isolation (2026-09-03)
 
-### Windows toolchain fix integration (active)
+### Windows toolchain fix integration (completed)
 
-Review and merge the requested Windows toolchain command-detection pull request
-into `master`, verify its targeted and repository checks, and push the merge.
+Reviewed and merged the requested Windows toolchain command-detection pull
+request into `master`. The focused provisioner test and `make check` pass on
+the integration host; the next action is the requested push.
 
 ### Router path finalized (10.23.11/12)
 

@@ -98,9 +98,13 @@ export const CLAUDE_RULES_DIR    = join(CLAUDE_DIR, 'rules');
 
 // ─── Tiny utilities ──────────────────────────────────────────────────────────
 
-function haveCmd(cmd) {
+export function haveCmd(cmd) {
   try {
-    execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] });
+    if (process.platform === 'win32') {
+      execFileSync('where.exe', [cmd], { stdio: ['ignore', 'pipe', 'ignore'] });
+    } else {
+      execSync(`command -v ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] });
+    }
     return true;
   } catch {
     return false;
