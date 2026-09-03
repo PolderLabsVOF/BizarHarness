@@ -8,22 +8,14 @@
 import chalk from 'chalk';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { resolveClaudeConfigDir } from '../config-paths.mjs';
 
 /** Resolve the Claude Code config directory.
  *   1. `process.env.CLAUDE_CONFIG_DIR`
  *   2. `$HOME/.claude`
  */
 export function resolveClaudeDir() {
-  const HOME = homedir();
-  if (process.env.CLAUDE_CONFIG_DIR && process.env.CLAUDE_CONFIG_DIR.trim()) {
-    return process.env.CLAUDE_CONFIG_DIR.trim();
-  }
-  if (process.platform === 'win32') {
-    return process.env.APPDATA
-      ? join(process.env.APPDATA, 'Claude')
-      : join(HOME, '.claude');
-  }
-  return join(HOME, '.claude');
+  return resolveClaudeConfigDir();
 }
 
 const HOME = homedir();
