@@ -43,6 +43,7 @@ const DIRECT_COMMANDS = [
   { cmd: 'release-provenance', expect: 'bizar release-provenance — Generate SBOM' },
   { cmd: 'verify-release', expect: 'bizar verify-release — Verify a release artifact' },
   { cmd: 'spec-list', expect: 'bizar spec-list — audit #84 schema' },
+  { cmd: 'ambiguity', expect: 'bizar ambiguity — score a deep-interview' },
 ];
 
 // Util-routed commands: still go through the help dispatcher and

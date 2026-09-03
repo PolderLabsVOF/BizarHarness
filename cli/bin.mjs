@@ -117,6 +117,7 @@ function showHelp() {
     release-provenance     Generate SBOM + provenance + minisig for a release (audit #83)
     verify-release         Verify a release artifact set against the pinned allowlist
     spec-list              List SDK schemas, policy docs, and mirror sync status (audit #84)
+    ambiguity              Score a deep-interview spec's clarity breakdown (Phase 3 OMX)
     bench                  Efficiency benchmarks + auto-fan-out rule (audit #85)
     team                   Run the office-manager orchestration agent
     subagent               Run a named agent in read-only plan mode
@@ -522,6 +523,21 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'spec-list');
+      const code = await mod.run(cmdArgs);
+      if (typeof code === 'number') process.exit(code);
+      break;
+    }
+
+    case 'ambiguity': {
+      // Phase 3 OMX adoption — score a deep-interview spec's
+      // clarity breakdown. Read-only with respect to docs/specs/.
+      const mod = await importCommand('ambiguity');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load ambiguity command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'ambiguity');
       const code = await mod.run(cmdArgs);
       if (typeof code === 'number') process.exit(code);
       break;
