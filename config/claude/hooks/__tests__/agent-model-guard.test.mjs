@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { guardAgentModel } from '../agent-model-guard.mjs';
+import { modelAgentName } from '../../../../cli/commands/models.mjs';
 import { selectEventChain } from '../../../../cli/commands/hook.mjs';
 
 function decision(output) {
@@ -52,12 +53,14 @@ test('Agent model guard accepts fable when it maps to an enabled gateway selecti
   }, { registry, modelOverrides: { 'claude-fable-5': 'ark/deepseek-v4-flash' } }), {});
 });
 
-test('Agent model guard accepts a full custom model selected through bizar models', async () => {
+test('Agent model guard rejects a raw custom ID and directs dispatch through its generated definition', async () => {
   const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['codex/gpt-5.6-sol'] } };
-  assert.deepEqual(await guardAgentModel({
+  const denied = await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model: 'codex/gpt-5.6-sol' },
-  }, { registry }), {});
+  }, { registry });
+  assert.equal(decision(denied), 'deny');
+  assert.match(denied.hookSpecificOutput.permissionDecisionReason, /generated subagent_type/);
 });
 
 test('Agent model guard accepts a valid native alias when optional audit context is absent or differs', async () => {
@@ -102,7 +105,7 @@ test('Agent model guard fails closed when the global router cannot be loaded', a
   }, { routerPath: '/definitely/missing/model-router.json' })), 'deny');
 });
 
-test('Agent model guard accepts full user-selected IDs when live discovery is unavailable', async () => {
+test('Agent model guard accepts generated definitions when live discovery is unavailable', async () => {
   // Build a synthetic registry where the only valid model comes from
   // `userSelected` — the live-discovery list is empty.
   const registry = {
@@ -114,17 +117,20 @@ test('Agent model guard accepts full user-selected IDs when live discovery is un
       tierHints: { 'claude-minimax/MiniMax-M3': 'default', 'claude-qwen/qwen3.8-max': 'premium' },
     },
   };
-  // No `availableModelIds` provided at all → picker-only path. Must allow.
+  // No `availableModelIds` provided at all → picker-only path. A generated
+  // definition owns the full ID so the native model enum is omitted.
   assert.deepEqual(await guardAgentModel({
     ...input,
-    tool_input: { ...input.tool_input, model: 'claude-minimax/MiniMax-M3' },
+    tool_name: 'Task',
+    tool_input: { ...input.tool_input, subagent_type: modelAgentName('claude-minimax/MiniMax-M3') },
   }, { registry }), {});
 
   // Even when `availableModelIds` is explicitly empty (defensive live probe),
   // userSelected bypasses the live check. The picker is the discovery.
   assert.deepEqual(await guardAgentModel({
     ...input,
-    tool_input: { ...input.tool_input, model: 'claude-qwen/qwen3.8-max' },
+    tool_name: 'Task',
+    tool_input: { ...input.tool_input, subagent_type: modelAgentName('claude-qwen/qwen3.8-max') },
   }, { registry, availableModelIds: [] }), {});
 });
 
@@ -261,10 +267,9 @@ test('Agent model guard fails closed when global settings.json cannot be read an
 
 // ─── F-185 / IMP-019 health-aware failover contract ──────────────────────
 
-test('Agent model guard accepts a raw primary when a routingDecisionId and fallback are present', async () => {
-  // Two user-selected models; the orchestrator pins a primary and a
-  // pre-computed failover. The guard must accept BOTH without re-probing
-  // the gateway, since `pickFailover` already validated the failover.
+test('Agent model guard rejects a raw primary even when a routingDecisionId and fallback are present', async () => {
+  // The failover contract preserves selection evidence, but cannot make a
+  // raw gateway ID valid for Claude Code's alias-only native model field.
   const registry = {
     tiers: {
       premium: { models: ['tier-premium/never'], purpose: 'p', effort: 'high' },
@@ -274,14 +279,15 @@ test('Agent model guard accepts a raw primary when a routingDecisionId and fallb
       tierHints: { 'claude-minimax/MiniMax-M3': 'default', 'claude-qwen/qwen3.8-max': 'premium' },
     },
   };
-  assert.deepEqual(await guardAgentModel({
+  const blocked = await guardAgentModel({
     ...input,
     tool_input: {
       ...input.tool_input,
       model: 'claude-minimax/MiniMax-M3',
       additionalContext: { routingDecisionId: 'r-2026-08-27-001', fallback: 'claude-qwen/qwen3.8-max' },
     },
-  }, { registry }), {});
+  }, { registry });
+  assert.equal(decision(blocked), 'deny');
 });
 
 test('Agent model guard rejects an out-of-pool fallback even with routingDecisionId', async () => {
@@ -318,21 +324,20 @@ test('Agent model guard still requires primary to be in the pool when routingDec
   assert.equal(decision(blocked), 'deny');
 });
 
-test('Agent model guard accepts a selected raw primary when fallback has no routingDecisionId', async () => {
-  // The contract is both-or-neither. Without routingDecisionId the
-  // contract is not active and a selected primary remains valid.
+test('Agent model guard rejects a selected raw primary when fallback has no routingDecisionId', async () => {
+  // No evidence shape can make a raw ID valid for the alias-only transport.
   const registry = {
     tiers: { premium: { models: ['tier/never'], purpose: 'p', effort: 'high' } },
     userSelected: { models: ['claude-minimax/MiniMax-M3', 'claude-qwen/qwen3.8-max'] },
   };
-  assert.deepEqual(await guardAgentModel({
+  assert.equal(decision(await guardAgentModel({
     ...input,
     tool_input: {
       ...input.tool_input,
       model: 'claude-minimax/MiniMax-M3',
       additionalContext: { fallback: 'claude-qwen/qwen3.8-max' },
     },
-  }, { registry }), {});
+  }, { registry })), 'deny');
 });
 
 // ── 10.22.0 / Phase 4: disabled-providers filter contract ─────────────
@@ -349,10 +354,10 @@ test('Agent model guard denies disabled-provider overrides', async () => {
   }, { registry });
   assert.equal(decision(out), 'deny');
   assert.match(out.hookSpecificOutput?.permissionDecisionReason || '', /disabledProviders/);
-  // A non-disabled raw user pick is valid for native Agent dispatch.
+  // A non-disabled raw user pick still cannot bypass generated definitions.
   const out2 = await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model: 'claude-minimax/MiniMax-M3' },
   }, { registry });
-  assert.deepEqual(out2, {});
+  assert.equal(decision(out2), 'deny');
 });

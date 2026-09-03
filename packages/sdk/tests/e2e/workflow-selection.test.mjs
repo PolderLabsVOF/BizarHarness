@@ -100,6 +100,7 @@ async function runCapturedWorkflow(file, args, harness) {
     ...(args && typeof args === 'object' ? args : {}),
     routing: {
       default: 'provider/cheap', medium: 'provider/cheap', high: 'provider/strong',
+      agentTypes: { 'provider/cheap': 'bizar-model-cheap', 'provider/strong': 'bizar-model-strong' },
       nativeAliases: { sonnet: 'provider/cheap', opus: 'provider/strong', haiku: 'provider/cheap', fable: 'provider/strong' },
     },
   };
@@ -219,8 +220,9 @@ describe('workflow-selection — IMP-022 workflow E2E matrix', () => {
         const highRisk = harness.agentTool.captured.filter((e) => e.payload.risk === 'high');
         if (highRisk.length > 0) {
           for (const entry of highRisk) {
-            expect(entry.payload.model).toBeTruthy();
-            expect(entry.payload.model).not.toBe(undefined);
+            expect(entry.payload.subagent_type).toBeTruthy();
+            expect(entry.payload.model).toBeUndefined();
+            expect(entry.payload.additionalContext?.bizarConfiguredModel).toBeTruthy();
             // High-risk lanes never fall through to session inherit.
             expect(entry.payload.selectorReason).not.toBe(harness.REASON.SESSION_INHERIT);
             expect(entry.payload.selectorReason).not.toBe(harness.REASON.NO_ELIGIBLE);

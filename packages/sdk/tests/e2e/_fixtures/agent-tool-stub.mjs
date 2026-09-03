@@ -10,7 +10,7 @@
  * The stub records every invocation into `captured` so tests can assert
  * on the augmented payload after the orchestrator has called
  * `dispatchAgent`. The deterministic stub result honors the payload's
- * `model` field — downstream provider stubs echo the same value, so the
+ * generated-definition context — downstream provider stubs echo the same value, so the
  * matrix test can prove `decision === resolvedModel` 100% of the time.
  *
  * IMPORTANT: this file is a TEST FIXTURE. Production code under
@@ -53,14 +53,13 @@ export function createAgentToolStub(opts = {}) {
   }
 
   /**
-   * Deterministic stub result. Honors the payload's `model` field so
-   * downstream provider stubs can echo the same value and matrix tests
-   * can prove `decision.modelId === resolvedModel`.
+   * Deterministic stub result. Honors Bizar's generated-definition context so
+   * downstream provider stubs can echo the selected full ID.
    */
   function stubResultFor(payload) {
     return {
       ok: true,
-      model: payload?.model,
+      model: payload?.additionalContext?.bizarConfiguredModel,
       decisionId: payload?.routingDecisionId,
       tier: payload?.tier,
       selectorReason: payload?.selectorReason,

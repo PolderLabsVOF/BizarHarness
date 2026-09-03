@@ -21,13 +21,15 @@ environment leakage from polluting test isolation.
 ### F-201 native Agent transport correction (active)
 
 Corrected again on 2026-09-03 after inspecting the operator's actual Claude
-Code transcript: its native `Agent` tool schema rejects raw gateway IDs and
-accepts only `sonnet`, `opus`, `haiku`, or `fable` in `model`. The previous
-raw-ID transport repair therefore caused every dispatched custom-model agent to
-finish at zero tools with an `InputValidationError`. Current Claude Code 2.1.259
-documentation confirms full IDs are supported for native Agent calls, so Bizar
-must pass the selected full gateway ID directly and retain aliases only as a
-compatibility feature. It dynamically binds each alias in the
+Code transcript: the native `Agent`/`Task` schema rejects raw gateway IDs and
+accepts only `sonnet`, `opus`, `haiku`, or `fable` in `model`. Full IDs are
+supported in persisted custom subagent `model:` frontmatter, not reliably in
+the native per-call transport. Bizar therefore projects every enabled global
+selection into `~/.claude/agents/bizar-models/*.md`, dispatches its generated
+lowercase-and-hyphen definition name as `subagent_type`, and omits native
+`model`. The frontmatter owns the exact selected gateway ID. This is the
+default for subagents, workflow workers, and agent-team teammates. It also
+dynamically binds each alias in the
 global `~/.claude/settings.json` to enabled models from `bizar models` via
 `ANTHROPIC_DEFAULT_{SONNET,OPUS,HAIKU,FABLE}_MODEL`. These labels are native API
 transport selectors, not Anthropic model selections; their targets remain the
@@ -43,21 +45,24 @@ enabled global selections into `ANTHROPIC_DEFAULT_SONNET_MODEL`,
 `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`, and
 `ANTHROPIC_DEFAULT_FABLE_MODEL`, and keeps their matching override keys aligned.
 Fable is a native transport label only; it maps to the fourth configured
-gateway selection and never enables Anthropic. Native workflows and teams emit
-the selected raw gateway IDs directly, with the same ID as audit context;
-aliases are compatibility shortcuts only. `bizar worker start --model <selected-id> --task <task>` creates a
+gateway selection and never enables Anthropic. Native workflows and teams use
+the generated definition mapping, retaining the selected ID as audit context;
+aliases are compatibility shortcuts only. `bizar models --agent-types --json`
+exposes the deterministic mapping for Mike and workflow input. `bizar worker start --model <selected-id> --task <task>` creates a
 `wt/` worktree and launches an isolated top-level Claude process with the
 literal selected model, making every selected model usable without global
 settings races. Fresh focused coverage is 101/101; SDK 513/513; `make check`;
 and `make e2e` 13/13 pass.
 
-Fresh 2026-09-03 evidence after the full-ID correction: Claude Code 2.1.259
-and the current official subagent documentation both confirm a full model ID is
-valid in a per-invocation Agent `model` field. Focused picker, alias, guard,
-workflow, and worker tests pass 134/134; `make check` is clean; and `make e2e`
-passes 13/13. The guard accepts any enabled global user selection directly,
-still denies disabled or out-of-pool IDs, and also verifies the generated
-`fable` alias against its mapped fourth selection.
+Fresh 2026-09-03 evidence after the generated-definition correction: `bizar
+install` recreates managed definitions from the preserved global router, so a
+clean Claude config or package update needs no project-local router and no
+manual remapping. The guard accepts generated definitions on both real `Task`
+and `Agent` hook transports, while raw selected IDs are denied before Claude
+Code can emit its enum error. Focused model/router/guard/workflow coverage is
+102/102; SDK coverage is 513/513; the retained Node/harness suite, `make e2e`
+(13/13), and `make check` pass. Pending before release: installed-package real
+Claude spawn smoke.
 
 Fresh evidence: focused model/router/guard/workflow coverage 110/110; all hook
 tests 294/294; `make test` (SDK 513/513 plus retained Node/harness suite),

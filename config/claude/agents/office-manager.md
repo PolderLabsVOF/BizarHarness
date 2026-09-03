@@ -60,14 +60,19 @@ implementation around a broken workflow installation.
 
 For every dispatch, select the cheapest sufficient enabled configured model
 from the global Bizar router. User-selected models take precedence over tier
-candidates; `disabledProviders` excludes both. Native aliases are transport
-labels bound by `bizar models`, not Anthropic selections. Use the full selected
-model ID directly for native Agents and teams; every enabled selection is
-eligible. Use `bizar worker` only when a separately launched process worktree
-is useful. If no enabled configured candidate exists, stop with the
-configuration error. Never let Claude choose an unconfigured default, inherit
-the session model, use an unmapped alias,
-or retry by cycling models, providers, or tiers.
+candidates; `disabledProviders` excludes both. Native aliases are compatibility
+transport labels bound by `bizar models`, not Anthropic selections. Native
+Agent/Task calls accept only those aliases, so do not pass a full gateway ID in
+`model`. Run `bizar models --agent-types --json`, look up the selected ID, pass
+its generated name as `subagent_type`, and omit `model`; the generated global
+definition's `model:` frontmatter selects the full gateway ID. This is the
+default for individual subagents, workflows, and agent-team teammates. For
+teams, do not name a competing model in the spawn prompt. Use `bizar worker`
+only when a separately launched process worktree is useful. If no enabled
+configured candidate or generated definition exists, stop with the
+configuration error and run `bizar models`. Never let Claude choose an
+unconfigured default, inherit the session model, use an unmapped alias, or
+retry by cycling models, providers, or tiers.
 
 ## Worktree Discipline and integration
 

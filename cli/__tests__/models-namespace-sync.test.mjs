@@ -30,17 +30,35 @@ import {
   partitionStalePicks,
   classifyKind,
   buildClaudeModelOverrides,
+  modelAgentName,
+  syncGeneratedModelAgents,
   requiresGatewayModelDiscovery,
   configuredFallbackModels,
   currentSelection,
 } from '../commands/models.mjs';
 
-test('custom gateway picks populate standard Claude override keys without constraining direct Agent dispatch', () => {
+test('custom gateway picks populate standard Claude override keys for alias compatibility', () => {
   const overrides = buildClaudeModelOverrides(['glm/glm-5.3', 'codex/gpt-5.6', 'minimax/MiniMax-M3']);
   assert.equal(overrides['claude-sonnet-5'], 'glm/glm-5.3');
   assert.equal(overrides['claude-opus-5'], 'codex/gpt-5.6');
   assert.equal(overrides['claude-haiku-4-5-20251001'], 'minimax/MiniMax-M3');
   assert.equal(overrides['claude-fable-5'], 'glm/glm-5.3');
+});
+
+test('generated model agents use a Claude-safe name and preserve the full gateway ID in frontmatter', () => {
+  const cwd = makeCwd();
+  try {
+    const agentsDir = join(cwd, 'agents', 'bizar-models');
+    const id = 'codex/gpt-5.6-sol';
+    const name = modelAgentName(id);
+    assert.match(name, /^[a-z-]+$/);
+    const result = syncGeneratedModelAgents([id], { agentsDir });
+    assert.deepEqual(result.names, [name]);
+    const definition = readFileSync(join(agentsDir, `${name}.md`), 'utf8');
+    assert.match(definition, new RegExp(`model: ${id.replace(/[./-]/g, '\\$&')}`));
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 const CWD = process.cwd();

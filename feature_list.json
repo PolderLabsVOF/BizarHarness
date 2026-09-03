@@ -1428,7 +1428,7 @@
       "id": "F-201",
       "title": "Adaptive orchestration, model isolation, and visible workflow phases",
       "description": "Replace the workflow-only entry gate with adaptive orchestration, prevent synthetic model tests from mutating operator settings, and make bounded implementation visibly use routed multi-agent phases.",
-      "behavior": "Mike performs bounded orientation then a clarification checkpoint before choosing a tiny direct edit, isolated Agent, native workflow, parallel agents, or an Agent team. Every dispatched worker receives an explicit enabled Bizar model and editors use worktrees. Only Bizar-selected IDs are synchronized into Claude settings, and bounded implementation shows scope, plan, implement, and review workers.",
+      "behavior": "Mike performs bounded orientation then a clarification checkpoint before choosing a tiny direct edit, isolated Agent, native workflow, parallel agents, or an Agent team. Every dispatched worker uses a generated global Bizar subagent definition whose frontmatter owns one enabled Bizar-selected gateway ID; native model is omitted and editors use worktrees. Only Bizar-selected IDs are synchronized into Claude settings, and bounded implementation shows scope, plan, implement, and review workers.",
       "verification": "targeted route, model-isolation, model-sync, and native-workflow tests; make check; make test; make e2e",
       "state": "in_progress",
       "wip_holder": "@mike",

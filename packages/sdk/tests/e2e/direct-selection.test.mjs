@@ -27,7 +27,7 @@ describe('direct-selection — IMP-022 direct Agent tool E2E matrix', () => {
     harness = createE2EHarness();
   });
 
-  it('single-tier direct dispatch mints a routingDecisionId and the captured payload carries model + tier + selectorReason', async () => {
+  it('single-tier direct dispatch mints a routingDecisionId and a generated definition payload', async () => {
     const { decision, augmented, agentResult, providerRequest } = await harness.dispatch({
       role: 'brenda',
       prompt: 'convert var to const',
@@ -44,7 +44,9 @@ describe('direct-selection — IMP-022 direct Agent tool E2E matrix', () => {
     // augmented dispatch metadata.
     expect(harness.agentTool.captured).toHaveLength(1);
     const capture = harness.agentTool.captured[0];
-    expect(capture.payload.model).toBe('provider/cheap');
+    expect(capture.payload.model).toBeUndefined();
+    expect(capture.payload.subagent_type).toContain('provider-cheap');
+    expect(capture.payload.additionalContext.bizarConfiguredModel).toBe('provider/cheap');
     expect(capture.payload.routingDecisionId).toBe(decision.routingDecisionId);
     expect(capture.payload.tier).toBe('budget');
     expect(capture.payload.selectorReason).toBe(harness.REASON.CHEAPEST_RISK_LOW);
@@ -78,8 +80,11 @@ describe('direct-selection — IMP-022 direct Agent tool E2E matrix', () => {
     expect(decision.tier).toBe('high');
     expect(decision.reason).toBe(harness.REASON.STRONGEST_NEVER_DOWNGRADE);
 
-    // Captured payload must carry a concrete model — never session-inherit.
-    expect(augmented.model).toBe('provider/strong');
+    // The generated definition, rather than the alias-only native model
+    // field, carries a concrete selected ID — never session-inherit.
+    expect(augmented.model).toBeUndefined();
+    expect(augmented.subagent_type).toContain('provider-strong');
+    expect(augmented.additionalContext.bizarConfiguredModel).toBe('provider/strong');
     expect(augmented.routingDecisionId).toBe(decision.routingDecisionId);
     expect(decision.reason).not.toBe(harness.REASON.SESSION_INHERIT);
     expect(decision.reason).not.toBe(harness.REASON.NO_ELIGIBLE);

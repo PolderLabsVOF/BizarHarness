@@ -25,7 +25,7 @@ describe('team-selection — IMP-022 team-spawn E2E matrix', () => {
     harness = createE2EHarness();
   });
 
-  it('3 teammates with distinct roles each receive their own routingDecisionId and model', async () => {
+  it('3 teammates with distinct roles each receive their own routingDecisionId and generated definition', async () => {
     const roles = ['research-analyst', 'planner', 'implementer'];
     const results = [];
     for (const role of roles) {
@@ -38,7 +38,9 @@ describe('team-selection — IMP-022 team-spawn E2E matrix', () => {
     for (const r of results) {
       expect(UUID_RE.test(r.decision.routingDecisionId)).toBe(true);
       expect(r.member.payload.routingDecisionId).toBe(r.decision.routingDecisionId);
-      expect(r.member.payload.model).toBeTruthy();
+      expect(r.member.payload.model).toBeUndefined();
+      expect(r.member.payload.subagent_type).toBeTruthy();
+      expect(r.member.payload.additionalContext.bizarConfiguredModel).toBe(r.decision.modelId);
       // Per-spawn uniqueness.
       expect(ids.has(r.decision.routingDecisionId)).toBe(false);
       ids.add(r.decision.routingDecisionId);
@@ -69,7 +71,9 @@ describe('team-selection — IMP-022 team-spawn E2E matrix', () => {
     expect(decision.modelId).toBe('provider/strong');
     expect(decision.tier).toBe('high');
     expect(decision.reason).toBe(harness.REASON.STRONGEST_NEVER_DOWNGRADE);
-    expect(member.payload.model).toBe('provider/strong');
+    expect(member.payload.model).toBeUndefined();
+    expect(member.payload.subagent_type).toContain('provider-strong');
+    expect(member.payload.additionalContext.bizarConfiguredModel).toBe('provider/strong');
     expect(member.payload.selectorReason).toBe(harness.REASON.STRONGEST_NEVER_DOWNGRADE);
   });
 

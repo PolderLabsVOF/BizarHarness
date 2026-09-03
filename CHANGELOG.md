@@ -1,5 +1,20 @@
 # Changelog
 
+## [10.23.17] - 2026-09-03
+
+### Fixed
+
+- **Installed default model projection** — `bizar install` and `bizar update`
+  now rebuild managed global subagent definitions from the preserved global
+  `model-router.json`, including after a clean Claude configuration.
+- **Orchestrator model map** — `bizar models --agent-types --json` provides the
+  selected-ID-to-generated-definition mapping used by Mike, workflows, and
+  teams. Guidance now requires this safe definition route and never asks Claude
+  Code to put a raw gateway ID into its alias-only native model field.
+- **Early transport failure** — the Agent/Task guard rejects raw selected IDs
+  with the exact generated definition to use, preventing zero-tool enum-error
+  dispatches.
+
 ## [10.23.16] - 2026-09-03
 
 ### Fixed

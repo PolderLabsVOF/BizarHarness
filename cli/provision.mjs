@@ -36,6 +36,7 @@ import {
   buildClaudeModelOverrides,
   configuredEnabledModels,
   requiresGatewayModelDiscovery,
+  syncGeneratedModelAgents,
 } from './commands/models.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
 
@@ -500,6 +501,20 @@ export async function syncModelRouter({ dryRun = false, force = false } = {}) {
   ensureDir(dirname(dest));
   writeFileSync(dest, `${JSON.stringify(EMPTY_GLOBAL_MODEL_ROUTER, null, 2)}\n`);
   return { ok: true, message: `global model-router.json → ${dest}`, path: dest };
+}
+
+// Recreate the managed definition projection on every install/update. This is
+// needed after an npm upgrade or a clean Claude directory: the router is
+// operator-owned and preserved, while generated definitions are disposable
+// installation artifacts derived exclusively from its selected IDs.
+export function syncConfiguredModelAgents({ dryRun = false } = {}) {
+  const routerPath = resolveGlobalModelRouter();
+  let router = {};
+  try { if (existsSync(routerPath)) router = JSON.parse(readFileSync(routerPath, 'utf8')); } catch { return { ok: false, message: `cannot read ${routerPath}` }; }
+  const models = configuredEnabledModels(router);
+  if (dryRun) return { ok: true, message: `[dry-run] would sync ${models.length} generated model agent(s)`, models };
+  const generated = syncGeneratedModelAgents(models, { agentsDir: join(resolveClaudeDir(), 'agents', 'bizar-models') });
+  return { ok: true, message: `${generated.names.length} generated model agent(s) synced`, ...generated };
 }
 
 export async function syncSkillFiles({ dryRun = false, force = false } = {}) {
@@ -1186,6 +1201,10 @@ export async function runProvision(opts = {}) {
   const routerStep = await syncModelRouter({ dryRun, force });
   if (routerStep.ok) logOk(routerStep.message); else logErr(routerStep.message);
   stepResults.push({ label: 'model-router', ...routerStep });
+
+  const modelAgentsStep = syncConfiguredModelAgents({ dryRun });
+  if (modelAgentsStep.ok) logOk(modelAgentsStep.message); else logErr(modelAgentsStep.message);
+  stepResults.push({ label: 'model-agents', ...modelAgentsStep });
 
   section('Writing settings.json');
   const settingsStep = writeClaudeSettings({ dryRun, force });

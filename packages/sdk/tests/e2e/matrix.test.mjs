@@ -60,7 +60,7 @@ describe('matrix — IMP-022 full E2E matrix', () => {
     expect(['provider/design', 'provider/strong']).toContain(decision.modelId);
   });
 
-  it('row: workflow nested call → expected model present (workflow-payload-capture contract)', async () => {
+  it('row: workflow nested call → generated definition present (workflow-payload-capture contract)', async () => {
     // The workflow-selection test already verifies this for every
     // shipped workflow; this matrix row is a smoke-test that pins the
     // acceptance-gate line for the matrix.
@@ -71,18 +71,22 @@ describe('matrix — IMP-022 full E2E matrix', () => {
       risk: 'medium',
       phase: 'Implement',
     });
-    expect(augmented.model).toBeTruthy();
-    expect(agentResult.model).toBe(augmented.model);
-    expect(providerRequest.resolvedModel).toBe(augmented.model);
+    expect(augmented.model).toBeUndefined();
+    expect(augmented.subagent_type).toBeTruthy();
+    expect(augmented.additionalContext.bizarConfiguredModel).toBeTruthy();
+    expect(agentResult.model).toBe(augmented.additionalContext.bizarConfiguredModel);
+    expect(providerRequest.resolvedModel).toBe(augmented.additionalContext.bizarConfiguredModel);
   });
 
-  it('row: team dispatch → expected model present', async () => {
+  it('row: team dispatch → generated definition present', async () => {
     const harness = createE2EHarness();
     const { member, decision } = await harness.spawnTeamMember('implementer', {
       prompt: 'lane work',
       risk: 'medium',
     });
-    expect(member.payload.model).toBe(decision.modelId);
+    expect(member.payload.model).toBeUndefined();
+    expect(member.payload.subagent_type).toBeTruthy();
+    expect(member.payload.additionalContext.bizarConfiguredModel).toBe(decision.modelId);
     expect(member.payload.routingDecisionId).toBe(decision.routingDecisionId);
   });
 
@@ -178,12 +182,8 @@ describe('matrix — IMP-022 full E2E matrix', () => {
     expect(a1.decision.routingDecisionId).not.toBe(a2.decision.routingDecisionId);
   });
 
-  it('row: invalid raw override — wrapper normalizes and records an audit row', async () => {
-    // The harness always normalizes `model` to the selector's
-    // resolved value (it never lets a caller override the selector).
-    // We exercise this by dispatching with `extraOpts.model =
-    // "malicious/override"` and asserting the captured payload carries
-    // the selector's value, NOT the override.
+  it('row: invalid raw override — wrapper removes it and records an audit row', async () => {
+    // A raw native model override must never bypass the generated definition.
     const harness = createE2EHarness();
     const { augmented, decision } = await harness.dispatch({
       role: 'implementer',
@@ -191,8 +191,9 @@ describe('matrix — IMP-022 full E2E matrix', () => {
       risk: 'medium',
       extraOpts: { model: 'malicious/override' },
     });
-    expect(augmented.model).toBe(decision.modelId);
-    expect(augmented.model).not.toBe('malicious/override');
+    expect(augmented.model).toBeUndefined();
+    expect(augmented.additionalContext.bizarConfiguredModel).toBe(decision.modelId);
+    expect(augmented.subagent_type).toBeTruthy();
   });
 
   it('row: high-risk → exploration disabled (deterministic selection across 100 calls)', async () => {

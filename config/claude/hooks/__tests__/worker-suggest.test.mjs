@@ -109,7 +109,8 @@ for (const prompt of [
     assert.match(context, /clarification question/);
     assert.match(context, /coordination mode/i);
     assert.match(context, /enabled `bizar models` user selection/);
-    assert.match(context, /raw model ID/);
+    assert.match(context, /generated definition name/);
+    assert.match(context, /OMIT the native `model` field/);
     assert.match(context, /isolation: "worktree"/);
   });
 }

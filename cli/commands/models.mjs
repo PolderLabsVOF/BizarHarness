@@ -2325,6 +2325,7 @@ export async function run(name, args, isHelpRequest, deps = {}) {
 
   const wantJson = args.includes('--json');
   const wantList = args.includes('--list');
+  const wantAgentTypes = args.includes('--agent-types');
   const wantClear = args.includes('--clear');
   const wantRefresh = args.includes('--refresh');
   const setFlag = args.find((a) => a.startsWith('--set='));
@@ -2340,6 +2341,19 @@ export async function run(name, args, isHelpRequest, deps = {}) {
   // relative `BIZAR_MODEL_ROUTER_CONFIG` override still resolves sensibly.
   const routerPath = resolveRouterPath(process.cwd());
   const { endpoint, authToken, source: endpointSource } = resolveEndpoint({ cwd: process.cwd() });
+
+  // This is the orchestration-safe bridge from an operator-selected gateway
+  // ID to the Claude Code definition that owns it. It is deliberately local:
+  // no gateway discovery is needed to dispatch a model the operator selected.
+  if (wantAgentTypes) {
+    const router = loadRouter(routerPath);
+    const models = configuredEnabledModels(router);
+    const agentTypes = Object.fromEntries(models.map((id) => [id, modelAgentName(id)]));
+    const payload = { routerPath, models, agentTypes, agentsDir: join(resolveClaudeConfigDir(), 'agents', 'bizar-models') };
+    if (wantJson) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+    else for (const id of models) process.stdout.write(`${id}\t${agentTypes[id]}\n`);
+    return true;
+  }
 
   // F-185: `bizar models explain <role>` — non-interactive ranking.
   // Handled BEFORE the picker fetch path so it never touches the gateway.

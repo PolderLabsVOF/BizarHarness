@@ -248,11 +248,11 @@ export async function guardAgentModel(input, options = {}) {
     return {};
   }
 
-  // Claude Code accepts full model IDs for native Agent calls. A model picked
-  // through `bizar models` is therefore valid directly; do not collapse every
-  // user selection into the four family aliases.
-  if (userPicks.has(requested) && !hasFailoverContract) {
-    return {};
+  // Native Agent/Task transport accepts only Claude's four aliases, even when
+  // a gateway accepts arbitrary IDs for the main conversation. Full IDs belong
+  // in Bizar's generated subagent frontmatter, not in this enum-shaped field.
+  if (userPicks.has(requested)) {
+    return deny(`Bizar Agent dispatch blocked: native Agent model accepts aliases only. Use generated subagent_type ${modelAgentName(requested)} and omit model; re-run \`bizar models\` if it is missing.`);
   }
 
   // F-185 contract: when the orchestrator passes both `routingDecisionId`

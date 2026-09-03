@@ -224,13 +224,21 @@ export function createE2EHarness(opts = {}) {
     });
 
     // Build the augmented payload the workflow would have produced.
+    const { model: _ignoredNativeModel, ...safeExtraOpts } = call.extraOpts ?? {};
     const augmented = {
-      ...(call.extraOpts ?? {}),
+      ...safeExtraOpts,
       role,
       risk: taskFeatures.risk,
       capabilities: taskFeatures.capabilities,
       phase: taskFeatures.phase,
-      model: decision.modelId ?? undefined,
+      // Claude Code's native Agent/Task transport has an alias-only `model`
+      // field. Bizar carries the selected full gateway ID in generated
+      // definition frontmatter instead, so tests must not revive raw payloads.
+      subagent_type: `bizar-model-${String(decision.modelId ?? '').replace(/[^a-z0-9-]/gi, '-')}`,
+      additionalContext: {
+        ...(call.extraOpts?.additionalContext ?? {}),
+        bizarConfiguredModel: decision.modelId ?? null,
+      },
       routingDecisionId: decision.routingDecisionId,
       tier: decision.tier,
       selectorReason: decision.reason,
@@ -331,9 +339,14 @@ export function createE2EHarness(opts = {}) {
       health: ctx.health,
     });
 
+    const { model: _ignoredNativeModel, ...safePayload } = payload ?? {};
     const augmentedPayload = {
-      ...payload,
-      model: decision.modelId ?? undefined,
+      ...safePayload,
+      subagent_type: `bizar-model-${String(decision.modelId ?? '').replace(/[^a-z0-9-]/gi, '-')}`,
+      additionalContext: {
+        ...(payload?.additionalContext ?? {}),
+        bizarConfiguredModel: decision.modelId ?? null,
+      },
       routingDecisionId: decision.routingDecisionId,
       tier: decision.tier,
       selectorReason: decision.reason,
