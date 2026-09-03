@@ -43,14 +43,23 @@ import { homedir } from 'node:os';
 
 const Database = (await import('better-sqlite3')).default;
 
-/** Lifecycle phases — must match `ObjectiveRunPhase` in the SDK. */
+/** Lifecycle phases — must match `ObjectiveRunPhase` in the SDK.
+ *
+ * Phase 1 OMX adoption (F-202) extends the enum additively with
+ * `reviewing`, `checkpointing`, and the non-terminal `blocked`. We
+ * keep the historical 6 phases in their original positions so the
+ * SQLite CHECK constraint widens cleanly without a migration; any
+ * pre-existing rows continue to be valid. */
 export const OBJECTIVE_PHASES = Object.freeze([
   'planning',
   'executing',
   'verifying',
+  'reviewing',
+  'checkpointing',
   'done',
   'failed',
   'cancelled',
+  'blocked',
 ]);
 
 /** Status — must match `ObjectiveRunStatus` in the SDK. */
@@ -61,8 +70,10 @@ export const OBJECTIVE_STATUSES = Object.freeze([
   'cancelled',
 ]);
 
-/** Phases that own an active lease. */
-export const ACTIVE_PHASES = new Set(['planning', 'executing', 'verifying']);
+/** Phases that own an active lease. `reviewing` and `checkpointing`
+ *  are mid-flight phases (F-202 OMX adoption), so they too own a
+ *  lease the same way `verifying` does. */
+export const ACTIVE_PHASES = new Set(['planning', 'executing', 'verifying', 'reviewing', 'checkpointing']);
 /** Statuses that own an active lease. */
 export const ACTIVE_STATUSES = new Set(['active']);
 
@@ -82,7 +93,7 @@ CREATE TABLE IF NOT EXISTS objectives (
   objective_run_id  TEXT PRIMARY KEY,
   owner             TEXT,
   phase             TEXT NOT NULL
-                    CHECK (phase IN ('planning','executing','verifying','done','failed','cancelled')),
+                    CHECK (phase IN ('planning','executing','verifying','reviewing','checkpointing','done','failed','cancelled','blocked')),
   status            TEXT NOT NULL
                     CHECK (status IN ('active','succeeded','failed','cancelled')),
   goal              TEXT NOT NULL,

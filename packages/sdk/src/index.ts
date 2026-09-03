@@ -134,4 +134,11 @@ export * from "./release/index.js";
 // Audit #85 — Efficiency benchmarks + auto-fan-out reduction.
 export * from "./bench/index.js";
 
+// F-202 Phase 1 — OMX adoption scaffolding: ambiguity math, deep-
+// interview spec, and the ralplan handoff contract. These are
+// additive re-exports; existing consumers are unaffected.
+export * from "./ambiguity/index.js";
+export * from "./handoff/ralplan.js";
+export * from "./specs/deep-interview.js";
+
 export { SDK_VERSION } from "./version.js";
