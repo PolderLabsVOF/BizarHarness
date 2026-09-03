@@ -61,8 +61,13 @@ manual remapping. The guard accepts generated definitions on both real `Task`
 and `Agent` hook transports, while raw selected IDs are denied before Claude
 Code can emit its enum error. Focused model/router/guard/workflow coverage is
 102/102; SDK coverage is 513/513; the retained Node/harness suite, `make e2e`
-(13/13), and `make check` pass. Pending before release: installed-package real
-Claude spawn smoke.
+(13/13), and `make check` pass. Installed package smoke completed: global
+`@polderlabs/bizar@10.23.17`, `bizar install`, and `bizar doctor` (13/13) kept
+the operator's nine selected IDs and regenerated nine global definitions. A
+real Claude Code 2.1.259 `Task` dispatch with the generated MiniMax M2.7
+highspeed definition and no native `model` launched successfully; its
+subagent transcript records `MiniMax-M2.7-highspeed`, proving frontmatter-based
+full-ID selection rather than an Anthropic family alias.
 
 Fresh evidence: focused model/router/guard/workflow coverage 110/110; all hook
 tests 294/294; `make test` (SDK 513/513 plus retained Node/harness suite),
