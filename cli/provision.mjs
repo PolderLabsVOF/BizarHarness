@@ -1263,7 +1263,7 @@ export async function runProvision(opts = {}) {
   } else {
     console.log(chalk.dim('  Premium model: (no premium pick configured yet — run `bizar models`)'));
   }
-  console.log(chalk.dim('  See /use-premium or .claude/commands/use-premium.md for the full launch snippet.'));
+  console.log(chalk.dim('  Inspect configured selections with `bizar models --list` or `bizar models --agent-types --json`.'));
   console.log('');
   return { ok: !anyFail, mode: effectiveMode, state: detectState(), stepResults };
 }

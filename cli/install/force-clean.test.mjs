@@ -489,7 +489,7 @@ test('after force + sync*, agents/skills/commands/hooks/rules are re-synced from
     const counts = JSON.parse(r.stdout);
     assert.ok(counts.agents >= 16, `expected ≥16 agents, got ${counts.agents}`);
     assert.ok(counts.skills >= 66, `expected ≥66 skills, got ${counts.skills}`);
-    assert.ok(counts.commands >= 38, `expected ≥38 commands, got ${counts.commands}`);
+    assert.ok(counts.commands >= 33, `expected ≥33 commands, got ${counts.commands}`);
     assert.ok(counts.rules >= 7, `expected ≥7 rules, got ${counts.rules}`);
     assert.ok(counts.hooks >= 30, `expected ≥30 hooks, got ${counts.hooks}`);
 

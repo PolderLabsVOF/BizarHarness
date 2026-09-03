@@ -41,8 +41,8 @@ describe('/plow-through command file', () => {
     const content = readFileSync(CMD_PATH, 'utf8');
     const body = content.replace(/^---[\s\S]*?---\n/, '');
     const lower = body.toLowerCase();
-    assert.ok(lower.includes('no clarifying questions') || lower.includes('no clarifying'), 'body must state no clarifying questions');
-    assert.ok(lower.includes('parallel') || lower.includes('dispatch'), 'body must mention parallel dispatch');
+    assert.ok(lower.includes('agent team'), 'body must state the default agent-team method');
+    assert.ok(lower.includes('clarifying') || lower.includes('orientation'), 'body must describe how ambiguity is handled');
     assert.ok(lower.includes('work to completion') || lower.includes('complete'), 'body must state work-to-completion');
   });
 

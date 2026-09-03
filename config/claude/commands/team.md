@@ -5,7 +5,10 @@ allowed-tools: Read, Bash, Agent, SendMessage
 
 # Team — Coordinated Claude Code Agents
 
-Use `/team` only when teammates need to coordinate or communicate directly while parallel, independent scopes materially improve delivery. Use ordinary subagents for focused delegation and native dynamic workflows for deterministic large fan-out.
+`/team` is Bizar's standard substantive-work mode. Use it after bounded
+orientation whenever the task is not an explicit `/quick` direct request or an
+unmistakably tiny edit. Use an explicit single-agent or workflow route only
+when the user asks for it or a durable workflow must be resumed.
 
 Agent teams are experimental. They require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, which Bizar installs by default. Current Claude Code versions create and clean up teams automatically; do not call obsolete `TeamCreate` or `TeamDelete` tools.
 
@@ -30,7 +33,7 @@ Team agents may inspect, edit, build, and test locally without approval. They mu
 
 ## Checklist
 
-- [ ] Parallelism is justified; a direct lane would be slower or less reliable.
+- [ ] The team has a concrete research, implementation, and review/integration purpose.
 - [ ] File scopes are disjoint.
 - [ ] Every editing lane has a claimed task/worktree and path scope.
 - [ ] Lockfiles and root configuration have one owner.

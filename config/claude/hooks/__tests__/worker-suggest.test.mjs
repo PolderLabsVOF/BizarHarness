@@ -106,8 +106,8 @@ for (const prompt of [
     assert.equal(status, 0);
     const context = parseStdout(stdout).hookSpecificOutput.additionalContext;
     assert.match(context, /Adaptive Bizar routing policy/);
-    assert.match(context, /clarification question/);
-    assert.match(context, /coordination mode/i);
+    assert.match(context, /Ask one concise question only/);
+    assert.match(context, /Agent teams are the default execution method/);
     assert.match(context, /default enabled operator-selected gateway ID/);
     assert.match(context, /stable Bizar role name/);
     assert.match(context, /OMIT the native `model` field/);
@@ -156,34 +156,15 @@ test('worker-suggest: invalid JSON on stdin exits 0', () => {
 });
 
 
-test('worker-suggest: quick-once sentinel cannot bypass adaptive coordination for substantive work', () => {
-  const sentinelDir = mkdtempSync(join(tmpdir(), 'bizar-quick-'));
-  mkdirSync(join(sentinelDir, '.bizar'), { recursive: true });
-  writeFileSync(join(sentinelDir, '.bizar', '.quick-once'), '');
-  try {
-    const { status, stdout, stderr } = runHook({
-      session_id: 'quick-session',
-      cwd: sentinelDir,
-      hook_event_name: 'UserPromptSubmit',
-      prompt: 'fix the login logic',
-    });
-    assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
-    const obj = parseStdout(stdout);
-    assert.ok(obj, `stdout not parseable JSON: ${stdout}`);
-    assert.match(obj.hookSpecificOutput.additionalContext, /Adaptive Bizar routing policy/);
-    assert.equal(existsSync(join(sentinelDir, '.bizar', '.quick-once')), false);
-  } finally {
-    rmSync(sentinelDir, { recursive: true, force: true });
-  }
-});
-
-test('worker-suggest: /quick cannot bypass adaptive coordination for substantive work', () => {
+test('worker-suggest: /quick explicitly selects primary-session direct execution', () => {
   const { status, stdout } = runHook({
     session_id: 'quick-command', cwd: '/tmp', hook_event_name: 'UserPromptSubmit',
     prompt: '/quick implement authentication',
   });
   assert.equal(status, 0);
-  assert.match(parseStdout(stdout).hookSpecificOutput.additionalContext, /Adaptive Bizar routing policy/);
+  const context = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(context, /Bizar \/quick direct path/);
+  assert.doesNotMatch(context, /Adaptive Bizar routing policy/);
 });
 
 test('worker-suggest: task completion is consumed instead of re-routed', () => {
@@ -221,8 +202,8 @@ test('worker-suggest: emits orchestrator prompt (you ARE @mike) when sentinel ab
   const obj = parseStdout(stdout);
   assert.ok(obj);
   assert.match(obj.hookSpecificOutput.additionalContext, /you ARE @mike/);
-  assert.match(obj.hookSpecificOutput.additionalContext, /clarification question/);
-  assert.match(obj.hookSpecificOutput.additionalContext, /native Bizar Workflow/);
+  assert.match(obj.hookSpecificOutput.additionalContext, /Ask one concise question only/);
+  assert.match(obj.hookSpecificOutput.additionalContext, /Agent teams are the default execution method/);
 });
 
 test('worker-suggest: appends only bounded explicit learning, not telemetry feeds', () => {

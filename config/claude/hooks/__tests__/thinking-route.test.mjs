@@ -289,7 +289,6 @@ test('slash: /pr-review routes to slash note (not mental model)', () => {
 for (const c of [
   ['/setup-provider',  'Configure a provider'],
   ['/explain',         'Read-only explanation'],
-  ['/tailscale-serve', 'Tailscale'],
   ['/bizar',           'Bizar harness orientation'],
   ['/init',            'bizar init'],
   ['/cron',            'scheduled tasks'],

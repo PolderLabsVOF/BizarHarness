@@ -14,7 +14,7 @@
 Choose your models once. Give Claude Code real work. Bizar supplies the routing,
 specialists, guardrails, and evidence to carry it through responsibly.
 
-`84 agents` · `80 skills` · `39 commands` · `14-tool MCP server`
+`84 agents` · `80 skills` · `33 commands` · `14-tool MCP server`
 
 </div>
 
@@ -24,9 +24,10 @@ specialists, guardrails, and evidence to carry it through responsibly.
 
 Claude Code is already powerful. Bizar makes longer, cross-cutting work easier
 to trust and easier to follow. It starts with a small read-only orientation,
-asks one useful clarification for meaningful work, then selects the lightest
-coordination style that fits: a direct edit, an isolated agent, parallel
-specialists, an agent team, or a visible workflow.
+forms an agent team by default for substantive work, and asks a clarification
+only when a material decision remains unresolved. `/quick` deliberately
+selects direct primary-session work; workflows and single agents are explicit
+or resumed modes.
 
 It keeps the operator in control of model selection and high-impact actions.
 Your configured model choices live in your global Claude configuration—not in

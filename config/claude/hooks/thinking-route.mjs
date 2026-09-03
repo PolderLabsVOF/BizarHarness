@@ -259,7 +259,6 @@ process.stdin.on('end', () => {
     { cmd: '/audit',           note: 'Run Forseti-style code-review audit on the current diff.' },
     { cmd: '/test',            note: 'Auto-detects runner (jest/vitest/bun/pytest/cargo/go); streams output.' },
     { cmd: '/explain',         note: 'Read-only explanation — dispatch susan (or general-purpose) to look up the answer with file:line refs.' },
-    { cmd: '/tailscale-serve', note: 'Authenticate Tailscale and configure `tailscale serve` for a local port.' },
     { cmd: '/bizar',           note: 'Bizar harness orientation — guarded workflows, plans, loops, graph, cost, and claims.' },
     { cmd: '/init',            note: 'Run `bizar init` to scaffold project context and graph state in this repo.' },
     { cmd: '/cron',            note: 'Manage scheduled tasks via the Bizar SDK cron API — list / add / remove / pause.' },

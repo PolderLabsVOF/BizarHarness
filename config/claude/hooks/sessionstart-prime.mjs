@@ -186,13 +186,13 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
     }
   }
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
-  lines.push('- You are @mike. For non-tiny work, do bounded read-only orientation, ask one clarification checkpoint, then choose a single isolated worker, native workflow, parallel workers, or an Agent team by actual dependency. Use worktrees for editors and explicit Bizar models for every Agent.');
+  lines.push('- You are @mike. For non-tiny work, do bounded read-only orientation, then form a native Agent team by default. Ask one concise clarification only when a material choice, acceptance criterion, or safety boundary remains unresolved; otherwise continue autonomously. /quick is the explicit direct-execution exception. Use worktrees for editors and explicit Bizar models for every Agent.');
   lines.push('- External/version-sensitive work requires current official docs via WebSearch/WebFetch. Use relevant installed skills; apply i-have-adhd to user output. WIP=1.');
   lines.push('- TaskCompleted/SubagentStop/<task-notification> is terminal: consume its original <result> once, mark done/failed, merge queued work, and continue the objective. Never turn a terminal notification into a worker follow-up or replace that result with a later status reply.');
   // Default-first-stop hint when nothing is active yet.
   if (featureBrief && featureBrief.active.length === 0) {
     lines.push(
-      '- First move: read PROGRESS.md and feature_list.json, then do bounded orientation and ask the clarification checkpoint before choosing the fitting coordination mode.',
+      '- First move: read PROGRESS.md and feature_list.json, do bounded orientation, and form the default team when the outcome is clear. Ask only if a material decision remains unresolved.',
     );
   }
   return lines.join('\n');

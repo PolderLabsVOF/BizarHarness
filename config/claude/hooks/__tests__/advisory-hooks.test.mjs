@@ -255,7 +255,7 @@ test('sessionstart-prime: external/version-sensitive docs bullet is in briefing 
   );
   assert.match(
     src,
-    /bounded read-only orientation, ask one clarification checkpoint, then choose a single isolated worker, native workflow, parallel workers, or an Agent team/,
+    /bounded read-only orientation, then form a native Agent team by default/,
     'expected adaptive coordination boundary in sessionstart-prime.mjs',
   );
 });

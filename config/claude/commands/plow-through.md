@@ -8,8 +8,9 @@ Execute the requested local work end-to-end without pausing for ordinary reversi
 
 1. Read repository instructions, `PROGRESS.md`, and relevant project files.
 2. Infer reasonable details from evidence; record material assumptions.
-3. Use direct execution by default. Use parallel dispatch only for genuinely
-   independent scopes where it materially improves throughput.
+3. Form the default native Agent team with bounded research, implementation,
+   and review/integration ownership. Use direct execution only for an explicit
+   `/quick` request or an unmistakably tiny edit.
 4. Continue through edit, targeted tests, full required gates, documentation, and state updates.
 5. Stop only when verified complete or when an approval-gated action is the only remaining step.
 

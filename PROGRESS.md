@@ -54,6 +54,16 @@ re-verified on the integration host with the focused provisioner test and
 
 ## In Progress — F-201 adaptive orchestration and model isolation (2026-09-03)
 
+### Team-first coordination and command-surface audit (active)
+
+Make native agent teams the default execution mode for substantive work. Keep
+direct work only for explicitly requested `/quick` sessions or genuinely tiny
+tasks, and ask clarification questions only when bounded orientation leaves a
+material choice, acceptance criterion, or safety boundary unresolved. Audit
+the slash-command surface against current routing and remove demonstrably
+legacy, redundant, or policy-conflicting entries while preserving the current
+CLI capabilities they fronted.
+
 ### Windows toolchain fix integration (completed)
 
 Reviewed and merged the requested Windows toolchain command-detection pull
@@ -5194,5 +5204,67 @@ Audit blocker remediation for `v10.20.0` Phase A: six agent files had `descripti
 - `node --test cli/__tests__/prompt-trim.test.mjs`: 2/10 PASS, 8/10 FAIL — the 8 failures are pre-existing trim gaps in this worktree (v10.19.7 baseline vs the v10.20.0 prompt-trim test suite: office-manager.md 527 lines, AGENT_BASELINE.md missing new sections, advisor-context TOTAL_CAP / MAX_RECORDS not yet set to 2048 / 4, brand-designer.md and others not yet trimmed, syncAgentFiles _shared copy block not yet added). **The critical test for this task — `every agent file has description: <=100 chars AND name/description pairing` — passes for all six target files**; it fails only on unrelated agents whose description was never in scope.
 - `node --test cli/__tests__/advisor-context.test.mjs config/claude/hooks/__tests__/agent-grounding.test.mjs`: 11/11 PASS.
 - `git diff --stat`: 6 files changed, 6 insertions(+), 6 deletions(-). 1 untracked: `cli/__tests__/prompt-trim.test.mjs`.
-
 **Next:** the target worktree (`agent-ada070fe121a07114`) still needs the same six description swaps + the qa-reviewer blank-line fix. A fresh dispatch into that worktree, or a cherry-pick from this branch, should land them.
+
+## Complete — Agent-team default + slash-command audit (2026-09-03)
+**Date:** 2026-09-03
+**Branch:** `master` (resumed from codex session `01a062f2-7804-7e60-941e-9083b82d4fbc`).
+**WIP holder:** @mike.
+**Objective delivered:** Make a native Agent team the default coordination mode for substantive work
+in `office-manager`, keep `/quick` as the explicit direct-execution escape hatch, and remove
+demonstrably obsolete slash commands while leaving the underlying capabilities intact.
+**Files touched (38 files, +216/-290):**
+- `AGENTS.md`, `CLAUDE.md`, `config/claude/CLAUDE.md`, `config/claude/agents/office-manager.md` —
+  policy shifted from "Mike picks an isolated Agent / parallel Agents / team per request" to
+  "Mike forms a native Agent team by default; asks one clarification only when a material choice or
+  unresolved constraint would change the work".
+- `config/claude/commands/quick.md` — now explicitly selects direct primary-session execution and
+  reaffirms that safety + verification are never bypassed.
+- `config/claude/commands/team.md`, `config/claude/commands/plow-through.md`,
+  `config/claude/commands/bizar.md` — kept aligned with the team-first policy and the `commit-staged`
+  approval-gated commit pattern.
+- `config/claude/commands/migrate.md`, `tailscale-serve.md`, `tier.md`, `upgrade-defaults.md`,
+  `use-default.md`, `use-premium.md` — DELETED (6 obsolete slash entry points). `/ralph` and
+  `/ralplan` were first removed with the rest, then restored in this same commit because
+  `config/claude/hooks/keyword-router.mjs` (EXPLICIT_COMMANDS map),
+  `config/claude/hooks/__tests__/workflow-lifecycle.test.mjs`, and the `ralph` / `ralplan` skills
+  still depend on them as first-class Bizar workflows. Net deletions: 6 slash entry points; net
+  command count drops from 39 → 33.
+- `config/claude/hooks/sessionstart-prime.mjs`, `sessionend-recall.mjs`, `thinking-route.mjs`,
+  `worker-suggest.mjs`, `workflow-route-guard.mjs`, `workflow-route-state.mjs` — updated to reflect
+  the team-first coordination policy and remove now-deleted command suggestions. The `.quick-once`
+  sentinel + `unlinkSync` path were retired; `/quick` now resolves through the new
+  `QUICK_ROUTE_POLICY` branch in `worker-suggest.mjs`.
+- `config/claude/hooks/__tests__/*` — adjusted five hook test suites for the trimmed command
+  surface (worker-suggest, thinking-route, agent-grounding, advisory-hooks, sessionstart-prime).
+- `config/workflows/{bizar-debug,bizar-implement,bizar-research,ultracode,ultracode-research,ultracode-review}.js` —
+  `dispatchAgent` now sets `model: routeModel(opts.risk || 'medium')` on every payload, satisfying
+  the autonomy-contract static check (`scripts/__tests__/autonomy-contract-workflow.test.mjs` line
+  139) which had been unenforced on master since the routing refactor.
+- `cli/provision.mjs`, `cli/commands/validate.mjs`, `cli/install/force-clean.test.mjs`,
+  `cli/__tests__/prompt-trim.test.mjs`, `cli/plow-through.test.mjs` — small adjustments for the new
+  policy + removed command surface. `REQUIRED_COMMANDS` and the install baseline were updated to
+  count the 33 retained slash commands (including the restored `ralph.md` / `ralplan.md`).
+- `README.md` — user-facing rewrite aligned with the team-first default; command count updated to
+  match the new installed surface.
+**Verification (this worktree, master @ 16d667f + the working-tree diff above):**
+- `make verify-removed-surfaces`: PASS.
+- `make verify-repo-structure`: PASS.
+- `make check-arch`: PASS (40 skill files verified).
+- `make check` (TypeScript): PASS.
+- `make test`: 1109/1109 PASS, 0 FAIL.
+- `make clean-check`: 5/5 PASS — Build/typecheck, retained unit tests, feature ledger integrity,
+  architecture + removed surfaces, Claude Code startup path all clean.
+- `make e2e`: not re-run; last green at commit `16d667f` (Windows toolchain fix).
+**Verification gates Codex ran before running out of credits:**
+- Focused suite: 188/188 PASS (per `assistant_message` at line 6454 of the codex rollout).
+- `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, `make check`:
+  all PASS.
+**Resumed-in-this-session corrections:**
+- Restored `config/claude/commands/ralph.md` and `config/claude/commands/ralplan.md` (see rationale
+  above) — the `keyword-router.mjs` EXPLICIT_COMMANDS map, `workflow-lifecycle.test.mjs`, and the
+  matching skills would otherwise lose their slash entry points.
+- Added explicit `model: routeModel(...)` to the six workflow `dispatchAgent` helpers — closes the
+  pre-existing `autonomy-contract-workflow` static gap so `make test` is green.
+**Untracked scratch left out of this commit:** `.omc/`, `.test-bizar-home/`,
+`IMPROVEMENTS-2026-08-31.md`, `docs/plans/` (operator artifacts; not part of the harness change set).

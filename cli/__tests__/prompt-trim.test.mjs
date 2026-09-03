@@ -44,13 +44,13 @@ describe('prompt-trim v10.20.0', () => {
     assert.ok(lines <= 300, `office-manager.md is ${lines} lines, must be <= 300`);
   });
 
-  test('office-manager can choose Workflow, Agent, or Agent-team coordination after clarification', () => {
+  test('office-manager defaults substantive work to teams and clarifies only when needed', () => {
     const source = readFileSync(OFFICE_MANAGER, 'utf8');
     const frontmatter = source.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
     assert.match(frontmatter, /^tools:.*\bWorkflow\b/m);
     assert.match(frontmatter, /^tools:.*\bAskUserQuestion\b/m);
-    assert.match(source, /clarification checkpoint/);
-    assert.match(source, /Agent team/);
+    assert.match(source, /native Agent team/);
+    assert.match(source, /Ask one concise clarification question only/);
     assert.match(source, /isolation: "worktree"/);
   });
 

@@ -88,9 +88,10 @@ process.stdin.on('end', () => {
     }
 
     // Coordination is an orchestrator decision, not a hard-coded tool gate.
-    // Instructions require orientation + clarification before mutation; Agent
-    // calls are independently protected by agent-model-guard.mjs. Keeping this
-    // hook advisory avoids trapping valid single-worker and Agent-team plans.
+    // Instructions require orientation, then a team by default; clarification
+    // is conditional on unresolved material choices. Agent calls are
+    // independently protected by agent-model-guard.mjs. Keeping this hook
+    // advisory avoids trapping valid direct, single-worker, and team plans.
   } catch (error) {
     process.stderr.write(`[bizar.workflow-route] ${error?.message || String(error)}\n`);
   }

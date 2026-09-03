@@ -66,6 +66,6 @@ export function promptRequiresWorkflow(input) {
   if (!prompt) return false;
   if (input?.task_notification || /^<task-notification\b[\s\S]*<result\b[\s\S]*<\/task-notification>\s*$/i.test(prompt)) return false;
   const quick = prompt.match(/^\/quick(?:\s+([\s\S]*))?$/i);
-  if (quick) return Boolean(quick[1]?.trim()) && !isTinyDirectTask(quick[1]);
+  if (quick) return false;
   return !isTinyDirectTask(prompt);
 }

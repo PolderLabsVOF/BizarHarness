@@ -5,9 +5,8 @@
  * Bizar Background Workers — UserPromptSubmit hook.
  *
  * Runs on every user prompt. Only unmistakably tiny, single-scope edits take
- * a cheap fast path. Every other request is routed into a native Bizar
- * adaptive coordination mode selected by Mike after bounded orientation and a
- * clarification checkpoint.
+ * a cheap fast path. Every other request is routed into a team-first Bizar
+ * coordination mode selected by Mike after bounded orientation.
  *
  * Uses import.meta.url + dynamic import() to resolve the sibling CLI module so
  * the hook works regardless of install path (fixes ERR_MODULE_NOT_FOUND after
@@ -36,7 +35,6 @@
 'use strict';
 
 import { dirname, join } from 'node:path';
-import { existsSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isTinyDirectTask } from './workflow-route-state.mjs';
 
@@ -56,10 +54,17 @@ const FAST_ROUTE_POLICY = [
   '- If inspection reveals behavioral logic, more than one target, ambiguity, a required test change, or any interaction beyond the named micro-edit, stop the direct path and invoke the matching native Bizar workflow before editing further.',
 ].join('\n');
 
+const QUICK_ROUTE_POLICY = [
+  'Bizar /quick direct path:',
+  '- The user explicitly selected direct, primary-session execution for this turn. Do not create an Agent team, dispatch a subagent, or start a workflow merely because the request is substantial.',
+  '- Do bounded read-only orientation, then proceed autonomously when the requested outcome, acceptance criteria, and safety boundary are clear. Ask only when a material choice or missing success criterion prevents a safe, correct implementation.',
+  '- /quick never bypasses worktree, approval, credential, destructive-action, or verification safeguards. Run the smallest relevant proof before reporting completion.',
+].join('\n');
+
 const ROUTE_POLICY = [
   'Adaptive Bizar routing policy:',
-  '- If this is the primary session, you ARE @mike. First do only bounded read-only orientation. Then ask one concise clarification question describing the inferred outcome, the material choice/risk, and your proposed coordination mode. Wait for the answer before edits, branches, tests, or editor dispatch. If the user explicitly waives questions, continue autonomously.',
-  '- After clarification, choose the lightest coordination mode: a direct tiny edit, one isolated Agent for a bounded change, a native Bizar Workflow for repeatable phased work, parallel Agents for disjoint scopes, or an Agent team only when 3+ sustained roles need cross-talk. Do not force a workflow or team when it adds no value.',
+  '- If this is the primary session, you ARE @mike. First do only bounded read-only orientation. If the inferred outcome, acceptance criteria, and safety boundary are clear, continue without a clarification question. Ask one concise question only when a material choice, unresolved constraint, or missing success criterion would change the work.',
+  '- For substantive work, native Agent teams are the default execution method. Form a small team with clear ownership, use a lead to integrate evidence, and use worktrees for editors. Use direct execution only for an unmistakably tiny edit or an explicit /quick request. Use a single agent or a native workflow only when the user explicitly requests that mode or an existing workflow must be resumed.',
   '- For every normal Agent, workflow worker, or agent-team teammate, pass its stable Bizar role name (`greg`, `todd`, `linda`, and so on) as `subagent_type` and OMIT the native `model` field. `bizar models` keeps that global role definition frontmatter bound to the default enabled operator-selected gateway ID. Never put a raw gateway ID or a Claude family alias in the native model field; aliases are compatibility-only. `bizar models --agent-types --json` is advanced explicit per-model routing only. For teams, do not name a competing model in the spawn prompt. If the stable role definition is missing, run `bizar models`; do not retry by cycling providers or tiers. Every editing worker uses call-level `isolation: "worktree"`. For genuinely disjoint writable scopes, dispatch concurrently; otherwise use one owner.',
   '- Consume each terminal agent result exactly once from its original `<result>`/final summary, merge queued worktrees with bizar worktree-merge, and run integration checks in the primary session. Never send a terminal notification, idle ping, or completed task back to that agent as a follow-up and never re-dispatch a completed background agent merely to summarize its result. A subagent may not recursively dispatch itself.',
   '- Do NOT execute any tool you do not have. If a tool you need is missing from your tools list, dispatch to a subagent that has it — do not pretend you have it.',
@@ -91,25 +96,8 @@ process.stdin.on('end', async () => {
 
   if (/^\/quick(?:\s|$)/i.test(prompt)) {
     const quickTask = prompt.replace(/^\/quick(?:\s+|$)/i, '').trim();
-    const context = !quickTask || isFastLocalTask(quickTask) ? FAST_ROUTE_POLICY : ROUTE_POLICY;
+    const context = !quickTask ? FAST_ROUTE_POLICY : QUICK_ROUTE_POLICY;
     process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context } }) + '\n');
-    return;
-  }
-
-  // /quick sentinel bypass: when .bizar/.quick-once exists, skip the
-  // orchestrator routing policy for this single turn. The sentinel is
-  // created by the /quick slash command and removed by session-end.
-  const quickSentinel = join(input.cwd || process.cwd(), '.bizar', '.quick-once');
-  if (existsSync(quickSentinel)) {
-    try { unlinkSync(quickSentinel); } catch { /* best-effort one-shot cleanup */ }
-    const context = isFastLocalTask(prompt) ? FAST_ROUTE_POLICY : ROUTE_POLICY;
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'UserPromptSubmit',
-        additionalContext: context,
-      },
-    }) + '\n');
-    process.exit(0);
     return;
   }
 

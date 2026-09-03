@@ -28,7 +28,7 @@
 
 'use strict';
 
-import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
@@ -353,14 +353,6 @@ process.stdin.on('end', () => {
   const nextStep = inferNextStep(summary, detectActiveFeature(cwd));
   const notePath = writeSessionNote(cwd, sessionId, reason, summary);
   const stateOk = writeSessionState(cwd, sessionId, reason, summary, nextStep);
-
-  // Clear /quick sentinel so the next session is back to orchestrator routing.
-  try {
-    const quickSentinel = join(cwd, '.bizar', '.quick-once');
-    if (existsSync(quickSentinel)) {
-      try { unlinkSync(quickSentinel); } catch { /* best-effort */ }
-    }
-  } catch { /* best-effort */ }
 
   // Silent success — the artifact is the file system.
   process.stdout.write(

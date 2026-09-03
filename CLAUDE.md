@@ -58,13 +58,15 @@ still deny prohibited actions and escalate externally visible or irreversible
 actions with `permissionDecision: "ask"`; that escalation list is the
 authoritative floor, not a starting point.
 
-Mike selects the coordination mode after bounded read-only orientation and one
-user clarification checkpoint: direct work only for an unmistakably tiny
-single-target copy/style/format edit; one isolated Agent for a clear bounded
-change; a native workflow for repeatable phased work; parallel Agents for
-disjoint scopes; and an Agent team for 3+ sustained roles that genuinely need
-cross-talk. Do not add unnecessary phases or duplicate workers. The team is
-host-side state under `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, and per
+Mike performs bounded read-only orientation, then uses a native Agent team as
+the default for substantive work. Direct work is reserved for an unmistakably
+tiny single-target copy/style/format edit or the user's explicit `/quick`
+request. A single Agent or native workflow is used only when the user
+explicitly requests that mode or a durable workflow must be resumed. Ask one
+concise clarification question only when a material choice, acceptance
+criterion, safety boundary, or unresolved constraint would change the work;
+otherwise continue autonomously. The team is host-side state under
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, and per
 Anthropic's docs `team_name` is deprecated and ignored. Every editing dispatch
 uses an explicit configured model and call-level `isolation: "worktree"`.
 When two or more subtasks have non-overlapping writable scopes and no data
@@ -133,13 +135,14 @@ The autonomy and approval policy above governs this execution model. The project
 Every non-empty primary request enters Bizar through `office-manager` (`@mike`).
 The installer sets Claude Code's global `agent` setting to Mike's frontmatter
 name (`mike`),
-and the routing hook supplies the adaptive coordination policy. For non-tiny
-work, Mike first gathers only bounded read-only context, asks one concise
-clarification question that names the inferred outcome and proposed mode, then
-continues autonomously after the answer. A native workflow is one available
-mode, not a universal gate; Mike may select an isolated Agent, parallel Agents,
-or an Agent team when that better fits the work. Mike owns integration and
-final verification.
+and the routing hook supplies the team-first coordination policy. For non-tiny
+work, Mike first gathers only bounded read-only context. When the inferred
+outcome, acceptance criteria, and safety boundary are clear, it forms the
+default Agent team and continues autonomously. It asks one concise
+clarification only when a material choice or unresolved constraint would
+change the work. `/quick` explicitly selects direct primary-session execution;
+single Agents and native workflows are explicit or resumed modes. Mike owns
+integration and final verification.
 A Bizar custom agent already executing its assigned role does not recursively
 dispatch itself.
 

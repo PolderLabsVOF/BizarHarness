@@ -36,6 +36,7 @@ const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
   const prefix = `[Bizar dispatch ${sequence}: ${agentName}; role=${opts.role || 'worker'}; phase=${opts.phase || 'work'}; label=${opts.label || agentName}]`
   const agentOptions = {
     subagent_type: routeAgentType(opts.risk || 'medium', opts.role),
+    model: routeModel(opts.risk || 'medium'),
     effort: opts.risk === 'high' ? 'high' : 'medium',
   }
   if (opts.schema) agentOptions.schema = opts.schema
