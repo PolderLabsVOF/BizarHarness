@@ -118,6 +118,7 @@ function showHelp() {
     verify-release         Verify a release artifact set against the pinned allowlist
     spec-list              List SDK schemas, policy docs, and mirror sync status (audit #84)
     ambiguity              Score a deep-interview spec's clarity breakdown (Phase 3 OMX)
+    guard <subcommand>     F-206 progress-guarding loop (start/check/status/stop/list)
     bench                  Efficiency benchmarks + auto-fan-out rule (audit #85)
     team                   Run the office-manager orchestration agent
     subagent               Run a named agent in read-only plan mode
@@ -523,6 +524,23 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'spec-list');
+      const code = await mod.run(cmdArgs);
+      if (typeof code === 'number') process.exit(code);
+      break;
+    }
+
+    case 'guard': {
+      // F-206 — `/guard` progress-guarding loop. The CLI is read-only
+      // with respect to the repo (plan + PROGRESS.md + feature_list +
+      // checks.jsonl). See cli/commands/guard.mjs for the verdict
+      // semantics and side-effect rules.
+      const mod = await importCommand('guard');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load guard command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'guard');
       const code = await mod.run(cmdArgs);
       if (typeof code === 'number') process.exit(code);
       break;

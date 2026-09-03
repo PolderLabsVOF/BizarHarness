@@ -124,6 +124,23 @@ export {
   type CronTask,
 } from "./agent/cron.js";
 
+// F-206 — `/guard` progress-guarding loop (Pillar A extension).
+export {
+  addGuard,
+  getGuard,
+  listGuards,
+  removeGuard,
+  recordGuardCheck,
+  markGuardStopped,
+  listGuardChecks,
+  normalizeSlug,
+  GUARD_SCHEMA_VERSION,
+  type Guard,
+  type GuardCheck,
+  type GuardStatus,
+  type GuardVerdict,
+} from "./agent/guard.js";
+
 // F-194 — Autonomy contract (Phase B.1): typed ObjectiveRun,
 // EvidenceBundle, OutcomeLearnerOutcome.
 export * from "./autonomy/index.js";

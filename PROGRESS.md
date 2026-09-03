@@ -364,6 +364,116 @@ EXTENDED (5):
   pivots). Both are reversible; the merge state is fully audit-able
   via the merge-archive tags.
 
+## In Progress - F-206 /guard progress guard (2026-09-03)
+
+### Objective
+
+Add a structured progress-guarding loop that an operator launches
+once with `bizar guard start <plan-path> --interval 15m` and lets
+Claude Code's host-side `/loop` primitive re-invoke
+`bizar guard check --slug <id> --json` on the configured cadence.
+Each check inspects the plan doc + PROGRESS.md + feature_list.json +
+recent git log + the per-guard `checks.jsonl`, returns a verdict
+(`healthy | drift | stuck | done`), records drift/stuck to a
+per-guard `drift-log.md` + a PROGRESS.md next-actions nudge, and
+self-terminates on `done` (plan closed OR VCR=passing with WIP=0).
+The guard MUST NOT spawn a persistent background process; every
+action is driven by an explicit `bizar guard check` invocation. The
+guard MUST NOT auto-commit, auto-push, or auto-publish; all "fix"
+actions are advisory log/nudge writes only.
+
+### Pre-change evidence
+
+- `feature_list.json` F-206: `state: "in_progress"`, scope
+  enumerated, owner `@todd`.
+- WIP=1 invariant preserved — no other feature currently
+  `in_progress` on master.
+- `feature_list.json` VCR prior: 85/85 = 1.000 (85 passing, 86
+  activated). F-206 promotion to `passing` will bump activated to
+  86 with ratio 1.000.
+- No prior `/guard` slash command, skill, SDK module, or CLI
+  surface — fresh net-new surface across
+  `packages/sdk/src/agent/guard.ts`,
+  `cli/commands/guard.mjs`, `config/claude/commands/guard.md`,
+  `config/skills/guard/SKILL.md`.
+- Closest existing patterns: `packages/sdk/src/agent/cron.ts`
+  (single-file, persisted JSON, no I/O surprises) and
+  `config/claude/commands/cron.md` (routing mirror).
+
+### Implementation
+
+- `packages/sdk/src/agent/guard.ts`: SDK module exporting
+  `addGuard`, `getGuard`, `listGuards`, `removeGuard`,
+  `recordGuardCheck`, `markGuardStopped`, `listGuardChecks`,
+  `normalizeSlug`, `GUARD_SCHEMA_VERSION = "1.0.0"`, with typed
+  `Guard`, `GuardCheck`, `GuardStatus`, `GuardVerdict`. Persists to
+  `.bizar/guards/<slug>/state.json` and appends to
+  `.bizar/guards/<slug>/checks.jsonl`. Re-exported through
+  `packages/sdk/src/index.ts` for both source and dist consumers.
+- `packages/sdk/tests/agent/guard.test.ts`: vitest with 14 cases
+  covering add/list/remove round-trip, `recordGuardCheck` appending
+  to `checks.jsonl`, `markGuardStopped` transitioning status, slug
+  idempotency, mismatched-options rejection, missing-plan
+  rejection, sub-second interval rejection, malformed JSON load
+  returning `null`, `GUARD_NOT_FOUND` for unknown guards, nested
+  directory creation, and the `done` verdict auto-stop transition.
+- `cli/commands/guard.mjs`: subcommands `start`, `status`, `check`,
+  `stop`, `list`. Interval parser accepts `15m | 900000 | 1h | 30s`
+  and unitless milliseconds. Verdict logic in `performAudit`:
+  - `done` triggers when (plan first H2 is "Done"|"Complete") OR
+    (`vcr.activated == vcr.passing` AND no in_progress features) OR
+    (PROGRESS.md most-recent Status reads "All gates green" AND
+    `git log -1` is older than `lastCheckedAt`).
+  - `drift` triggers when plan's next-actions and PROGRESS.md's
+    next-actions differ by ≥ 3 token-set difference OR one side has
+    zero items while the other has ≥ 3.
+  - `stuck` escalates when the last 2 checks were `stuck` OR no
+    commits in the interval AND no in-flight worktrees older than
+    2 intervals AND `feature_list.json` mtime has not advanced.
+  - Otherwise `healthy`.
+  - `done` writes `.bizar/guards/<slug>/DONE.md` and sets
+    `status=done, stoppedAt=ts, selfTerminated=true`. `drift`/`stuck`
+    write `.bizar/guards/<slug>/drift-log.md` and append a one-line
+    `> guard@<ts>: ...` nudge to PROGRESS.md's most-recent
+    `## In Progress` block.
+- `cli/__tests__/guard.test.mjs`: node --test with 17 cases
+  covering all four verdicts, status / list / stop round-trips,
+  start idempotency, missing plan / slug error paths, malformed
+  slug rejection, and interval parsing for `15m`, `900000`, `1h`.
+- `cli/bin.mjs`: registered `guard` in the dispatch switch after
+  `spec-list`; added `guard <subcommand>` row to the top-level help
+  banner.
+- `cli/__tests__/bin-help-dispatch.test.mjs`: extended
+  `DIRECT_COMMANDS` with `{ cmd: 'guard', expect: 'bizar guard —
+  F-206 progress-guarding loop' }` so the help dispatcher is
+  regression-tested.
+- `config/claude/commands/guard.md`: slash command frontmatter
+  mirroring the cron.md routing pattern; explicit per-subcommand
+  routing table.
+- `config/skills/guard/SKILL.md`: lifecycle skill mirroring
+  `config/skills/ultrawork/SKILL.md` structure — frontmatter
+  (name, description, argument-hint), lifecycle steps, verdict
+  table, operator actions.
+
+### Verification
+
+- `npx vitest run packages/sdk/tests/agent/guard.test.ts`: 14/14.
+- `node --test cli/__tests__/guard.test.mjs`: 17/17.
+- `node --test cli/__tests__/bin-help-dispatch.test.mjs`: 9/9
+  (extended to include `binar guard --help`).
+- `npm run build:sdk`: clean; `packages/sdk/dist/agent/guard.js`
+  and `guard.d.ts` produced.
+- `npm run typecheck`: clean.
+
+### Status
+
+- F-206 implementation complete in this worktree; `state:
+  "in_progress"` retained per the task brief (the orchestrator
+  promotes to `passing` at integration so the VCR activated-vs-
+  passing delta is captured in a single ledger transaction).
+- WIP=1 invariant preserved — F-206 is the only feature currently
+  `in_progress`.
+
 ## In Progress - Ambiguity SDK semantic flip (1.0.0 → 2.0.0, 2026-09-03)
 
 ### Objective
