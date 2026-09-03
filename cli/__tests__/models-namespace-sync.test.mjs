@@ -30,7 +30,9 @@ import {
   partitionStalePicks,
   classifyKind,
   buildClaudeModelOverrides,
+  MODEL_AGENT_NAME_MAX_LENGTH,
   modelAgentName,
+  isGeneratedModelAgentName,
   syncGeneratedModelAgents,
   syncStableRoleModelAgents,
   stableSpecialistAgentNames,
@@ -59,6 +61,35 @@ test('generated model agents use a Claude-safe name and preserve the full gatewa
     assert.ok(result.names.includes(name));
     const definition = readFileSync(join(agentsDir, `${name}.md`), 'utf8');
     assert.match(definition, new RegExp(`model: ${id.replace(/[./-]/g, '\\$&')}`));
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test('generated model agent names stay bounded and distinct for long gateway IDs', () => {
+  const cwd = makeCwd();
+  try {
+    const agentsDir = join(cwd, 'agents', 'bizar-models');
+    const sharedPrefix = `openrouter/${'x'.repeat(220)}`;
+    const ids = [`${sharedPrefix}-a`, `${sharedPrefix}-b`];
+    const names = ids.map((id) => modelAgentName(id, 'greg'));
+
+    assert.ok(names.every((name) => name.length <= MODEL_AGENT_NAME_MAX_LENGTH));
+    assert.ok(names.every((name) => /^[a-z0-9-]+$/.test(name)));
+    assert.ok(names.every((name) => /-[0-9a-f]{16}$/.test(name)));
+    assert.notEqual(names[0], names[1]);
+    assert.equal(isGeneratedModelAgentName(names[0], ids), true);
+    assert.equal(isGeneratedModelAgentName(names[1], ids), true);
+
+    const result = syncGeneratedModelAgents(ids, { agentsDir });
+    assert.equal(result.names.length, 32);
+    for (const name of result.names) {
+      assert.doesNotThrow(() => readFileSync(join(agentsDir, `${name}.md`), 'utf8'));
+    }
+    assert.match(
+      readFileSync(join(agentsDir, `${names[0]}.md`), 'utf8'),
+      new RegExp(`model: ${ids[0].replace(/[./-]/g, '\\$&')}`),
+    );
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

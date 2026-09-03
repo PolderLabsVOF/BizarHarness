@@ -2,6 +2,46 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress - Bound generated model-agent filenames (2026-09-03)
+
+### Objective
+
+Keep generated Bizar model-agent definitions installable when a gateway model
+ID is long. The current phonetic expansion is unbounded and can exceed the
+filesystem filename limit, aborting `bizar install` before gateway settings
+are written.
+
+### Pre-change evidence
+
+- npm `@polderlabs/bizar@10.23.22` was published from commit `c7998e3`, now
+  present on `origin/master`.
+- A Linux install failed with `ENAMETOOLONG` while writing under
+  `~/.claude/agents/bizar-models/`.
+- `cli/commands/models.mjs#modelAgentName` expands every model-ID character
+  into a phonetic word with no length bound; `syncGeneratedModelAgents` uses
+  that value directly as a filename.
+- The following `bizar models` `endpoint is required` error is consistent with
+  the install aborting before `settings.json` persistence.
+
+### Implementation
+
+- `cli/commands/models.mjs#modelAgentName` now preserves existing short names
+  and bounds long names to 160 characters with a deterministic SHA-256 suffix.
+  The complete gateway model ID remains in generated agent frontmatter.
+- `cli/__tests__/models-namespace-sync.test.mjs` now covers long IDs that share
+  a long prefix, verifies bounded Claude-safe names and generated-agent
+  recognition, and reads every generated definition back from disk.
+
+### Verification
+
+- `node --test --test-name-pattern="generated model agent" cli/__tests__/models-namespace-sync.test.mjs`:
+  2 passed, 0 failed.
+- `npm run typecheck`: passed.
+- `git diff --check`: passed.
+- The complete namespace-sync file has 41 passed and 2 pre-existing Windows
+  subprocess failures caused by passing an `X:/...` entrypoint to Node's ESM
+  loader; the new regression itself passes.
+
 ## In Progress - Windows toolchain command detection (2026-09-03)
 
 ### Objective
