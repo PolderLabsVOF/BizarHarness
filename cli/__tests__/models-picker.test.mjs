@@ -362,6 +362,7 @@ test('defaultTierHint: premium / high / default / mid / budget heuristics', () =
   assert.equal(defaultTierHint('claude-sonnet-4-20250514'), 'premium');
   assert.equal(defaultTierHint('claude-haiku-4-5-20251001'), 'high');
   assert.equal(defaultTierHint('claude-sonnet-3-7'), 'high');
+  assert.equal(defaultTierHint('glm/glm-5.3-flash'), 'high');
   assert.equal(defaultTierHint('claude-sonnet-3-5'), 'default');
   assert.equal(defaultTierHint('claude-minimax/MiniMax-M3'), 'default');
   assert.equal(defaultTierHint('claude-haiku'), 'budget', 'bare haiku is budget');
@@ -645,8 +646,8 @@ test('explainSelection: ranks 3 user-selected candidates by capability profile',
     const verdict = explainSelection({ routerPath, role: 'todd' });
     assert.deepEqual(verdict, {
       ranked: [
-        { id: 'claude-qwen/qwen3.8-max', tier: 'premium', eligible: true, ineligibleReasons: [], capabilityScore: 1, hasProfile: true },
         { id: 'claude-minimax/MiniMax-M3', tier: 'default', eligible: true, ineligibleReasons: [], capabilityScore: 0.55, hasProfile: true },
+        { id: 'claude-qwen/qwen3.8-max', tier: 'premium', eligible: true, ineligibleReasons: [], capabilityScore: 1, hasProfile: true },
         { id: 'claude/haiku-4-5', tier: 'high', eligible: true, ineligibleReasons: [], capabilityScore: 0, hasProfile: false },
       ],
     });

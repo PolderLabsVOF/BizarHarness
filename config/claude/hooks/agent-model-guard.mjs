@@ -49,7 +49,7 @@ import { pathToFileURL } from 'node:url';
 
 import { loadModelRouter } from '../../../config/agents/model-assignment.mjs';
 import { resolveClaudeConfigDir } from '../../../cli/config-paths.mjs';
-import { modelAgentName } from '../../../cli/commands/models.mjs';
+import { isGeneratedModelAgentName } from '../../../cli/commands/models.mjs';
 
 function deny(reason) {
   return {
@@ -226,7 +226,7 @@ export async function guardAgentModel(input, options = {}) {
   // Inheritance is safe only when the auditable Bizar selection equals the
   // actual global Claude parent model and is a selected, enabled user pick.
   if (!requested || requested === 'inherit') {
-    const generated = typeof toolInput.subagent_type === 'string' && [...userPicks].some((id) => toolInput.subagent_type === modelAgentName(id));
+    const generated = isGeneratedModelAgentName(toolInput.subagent_type, [...userPicks]);
     if (generated && !requested) return {};
     const configured = configuredContext;
     const parent = readConfiguredParentModel(options);
@@ -252,7 +252,7 @@ export async function guardAgentModel(input, options = {}) {
   // a gateway accepts arbitrary IDs for the main conversation. Full IDs belong
   // in Bizar's generated subagent frontmatter, not in this enum-shaped field.
   if (userPicks.has(requested)) {
-    return deny(`Bizar Agent dispatch blocked: native Agent model accepts aliases only. Use generated subagent_type ${modelAgentName(requested)} and omit model; re-run \`bizar models\` if it is missing.`);
+    return deny('Bizar Agent dispatch blocked: native Agent model accepts aliases only. Use the role-specific generated subagent_type from `bizar models --agent-types --json` and omit model; re-run `bizar models` if it is missing.');
   }
 
   // F-185 contract: when the orchestrator passes both `routingDecisionId`

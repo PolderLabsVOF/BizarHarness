@@ -100,7 +100,7 @@ async function runCapturedWorkflow(file, args, harness) {
     ...(args && typeof args === 'object' ? args : {}),
     routing: {
       default: 'provider/cheap', medium: 'provider/cheap', high: 'provider/strong',
-      agentTypes: { 'provider/cheap': 'bizar-model-cheap', 'provider/strong': 'bizar-model-strong' },
+      agentTypes: { 'provider/cheap': { greg: 'greg-cheap', paul: 'paul-cheap', todd: 'todd-cheap', linda: 'linda-cheap' }, 'provider/strong': { greg: 'greg-strong', paul: 'paul-strong', todd: 'todd-strong', linda: 'linda-strong' } },
       nativeAliases: { sonnet: 'provider/cheap', opus: 'provider/strong', haiku: 'provider/cheap', fable: 'provider/strong' },
     },
   };

@@ -34,7 +34,14 @@ import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 const MODEL_AGENT_WORDS = { a:'alpha', b:'bravo', c:'charlie', d:'delta', e:'echo', f:'foxtrot', g:'golf', h:'hotel', i:'india', j:'juliet', k:'kilo', l:'lima', m:'mike', n:'november', o:'oscar', p:'papa', q:'quebec', r:'romeo', s:'sierra', t:'tango', u:'uniform', v:'victor', w:'whiskey', x:'xray', y:'yankee', z:'zulu', 0:'zero', 1:'one', 2:'two', 3:'three', 4:'four', 5:'five', 6:'six', 7:'seven', 8:'eight', 9:'nine', '/':'slash', '.':'dot', '-':'dash', '_':'under' };
-function modelAgentName(modelId) { return `bizar-model-${[...String(modelId || '').toLowerCase()].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-')}`; }
+const ROLE_TO_BIZAR_AGENT = Object.freeze({
+  'research-analyst': 'greg', planner: 'paul', implementer: 'todd',
+  'qa-reviewer': 'linda', reviewer: 'linda', 'debug-specialist': 'carl',
+  'principal-engineer': 'karen', 'ui-designer': 'ria', 'it-lead': 'steve',
+  'knowledge-manager': 'oscar', 'support-tech': 'kevin', 'exec-assistant': 'pam',
+  'office-coordinator': 'brenda', 'office-greeter': 'janet', 'brand-designer': 'brad',
+});
+function modelAgentName(modelId, role = 'todd') { return `${ROLE_TO_BIZAR_AGENT[role] || (Object.values(ROLE_TO_BIZAR_AGENT).includes(role) ? role : 'todd')}-bizar-${[...String(modelId || '').toLowerCase()].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-')}`; }
 
 const { O_APPEND, O_CREAT, O_WRONLY } = fsConstants;
 
@@ -88,7 +95,7 @@ function defaultTierHintForId(modelId) {
   const id = String(modelId || '').toLowerCase();
   if (!id) return 'default';
   if (/(qwen3\.8|gpt-5|opus|o3-pro|o4-mini|sonnet-4)/.test(id)) return 'premium';
-  if (/(haiku-4|sonnet-3-7|mini-high|m3-high|grok-3)/.test(id)) return 'high';
+  if (/(haiku-4|sonnet-3-7|mini-high|m3-high|grok-3|glm[-/]?5\.3[-/]?flash)/.test(id)) return 'high';
   if (/(sonnet|gpt-4|m3(-|$)|(^|[^a-z])default($|[^a-z]))/.test(id)) return 'default';
   if (/(nano|mini[-/]|flash|lite|tiny|haiku($|[-_]\d))/.test(id)) return 'budget';
   return 'mid';
@@ -804,7 +811,7 @@ export function classifyDispatchOutcome(result, error, startMs) {
 export function augmentPayload(opts, decision, agentName, context = {}) {
   return {
     ...opts,
-    subagent_type: modelAgentName(decision.modelId),
+    subagent_type: modelAgentName(decision.modelId, opts.role),
     additionalContext: {
       ...(opts.additionalContext && typeof opts.additionalContext === 'object' ? opts.additionalContext : {}),
       bizarConfiguredModel: decision.modelId ?? null,

@@ -1,5 +1,16 @@
 # Changelog
 
+## [10.23.19] - 2026-09-03
+
+### Fixed
+
+- **GLM 5.3 Flash tiering** — `glm/glm-5.3-flash` is classified as `high`,
+  before the generic `flash` budget heuristic, across the picker, SDK router,
+  workflow mirror, and failover mirror.
+- **Recognizable Bizar roles** — generated full-ID definitions are now
+  role-specific (for example `greg-*`, `todd-*`, and `linda-*`) so Claude
+  Code displays the Bizar agent identity rather than an opaque model-only name.
+
 ## [10.23.17] - 2026-09-03
 
 ### Fixed

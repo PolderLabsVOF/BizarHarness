@@ -31,7 +31,7 @@ export function defaultTierHintForId(modelId) {
   const id = String(modelId || "").toLowerCase();
   if (!id) return "default";
   if (/(qwen3\.8|gpt-5|opus|o3-pro|o4-mini|sonnet-4)/.test(id)) return "premium";
-  if (/(haiku-4|sonnet-3-7|mini-high|m3-high|grok-3)/.test(id)) return "high";
+  if (/(haiku-4|sonnet-3-7|mini-high|m3-high|grok-3|glm[-/]?5\.3[-/]?flash)/.test(id)) return "high";
   if (/(sonnet|gpt-4|m3(-|$)|(^|[^a-z])default($|[^a-z]))/.test(id)) return "default";
   if (/(nano|mini[-/]|flash|lite|tiny|haiku($|[-_]\d))/.test(id)) return "budget";
   return "mid";

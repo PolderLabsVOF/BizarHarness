@@ -25,7 +25,7 @@ const routeModel = (risk) => {
   const selected = candidate.trim()
   return selected
 }
-const routeAgentType = (risk) => WORKFLOW_ROUTING.agentTypes?.[routeModel(risk)] || ''
+const routeAgentType = (risk, role = 'todd') => WORKFLOW_ROUTING.agentTypes?.[routeModel(risk)]?.[({ 'research-analyst': 'greg', planner: 'paul', implementer: 'todd', 'qa-reviewer': 'linda', reviewer: 'linda' }[role] || role)] || ''
 if (!routeModel('medium') || !routeModel('high') || !routeAgentType('medium') || !routeAgentType('high')) {
   return {
     status: 'blocked',
@@ -37,7 +37,7 @@ const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
   const sequence = ++WORKFLOW_DISPATCH_SEQUENCE
   const prefix = `[Bizar dispatch ${sequence}: ${agentName}; role=${opts.role || 'worker'}; phase=${opts.phase || 'work'}; label=${opts.label || agentName}]`
   const agentOptions = {
-    subagent_type: routeAgentType(opts.risk || 'medium'),
+    subagent_type: routeAgentType(opts.risk || 'medium', opts.role),
     effort: opts.risk === 'high' ? 'high' : 'medium',
   }
   if (opts.schema) agentOptions.schema = opts.schema

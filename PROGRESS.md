@@ -20,6 +20,19 @@ environment leakage from polluting test isolation.
 
 ### F-201 native Agent transport correction (active)
 
+### GLM 5.3 Flash tier correction (active)
+
+The generic `flash` heuristic incorrectly put `glm/glm-5.3-flash` in the
+budget tier. It is explicitly classified as `high` before the generic match in
+the picker, SDK router, workflow mirror, and failover mirror. Re-running
+`bizar models --set` will refresh existing operator tier hints without changing
+the selected model list.
+
+Generated definitions now project each selected model across the named Bizar
+roles, so dispatched tasks start with `greg-`, `todd-`, `linda-`, and similar
+role identities instead of the previous opaque `bizar-model-*` name. The role
+definition still carries the full selected gateway ID in frontmatter.
+
 Corrected again on 2026-09-03 after inspecting the operator's actual Claude
 Code transcript: the native `Agent`/`Task` schema rejects raw gateway IDs and
 accepts only `sonnet`, `opus`, `haiku`, or `fable` in `model`. Full IDs are

@@ -157,7 +157,7 @@ async function runCapturedWorkflow(file, args, captured, ctx) {
     ...(args && typeof args === 'object' ? args : {}),
     routing: {
       default: 'provider/default', medium: 'provider/mid', high: 'provider/high',
-      agentTypes: { 'provider/default': 'bizar-default', 'provider/mid': 'bizar-mid', 'provider/high': 'bizar-high' },
+      agentTypes: { 'provider/default': { greg: 'greg-default', paul: 'paul-default', todd: 'todd-default', linda: 'linda-default' }, 'provider/mid': { greg: 'greg-mid', paul: 'paul-mid', todd: 'todd-mid', linda: 'linda-mid' }, 'provider/high': { greg: 'greg-high', paul: 'paul-high', todd: 'todd-high', linda: 'linda-high' } },
     },
   };
   const source = readFileSync(resolve(workflowsDir, file), 'utf8');

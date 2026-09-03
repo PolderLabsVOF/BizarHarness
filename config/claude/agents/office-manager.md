@@ -63,8 +63,9 @@ from the global Bizar router. User-selected models take precedence over tier
 candidates; `disabledProviders` excludes both. Native aliases are compatibility
 transport labels bound by `bizar models`, not Anthropic selections. Native
 Agent/Task calls accept only those aliases, so do not pass a full gateway ID in
-`model`. Run `bizar models --agent-types --json`, look up the selected ID, pass
-its generated name as `subagent_type`, and omit `model`; the generated global
+`model`. Run `bizar models --agent-types --json`, look up the selected ID and
+Bizar role, pass its role-specific generated name (for example `greg-*` or
+`todd-*`) as `subagent_type`, and omit `model`; the generated global
 definition's `model:` frontmatter selects the full gateway ID. This is the
 default for individual subagents, workflows, and agent-team teammates. For
 teams, do not name a competing model in the spawn prompt. Use `bizar worker`

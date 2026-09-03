@@ -305,6 +305,7 @@ describe('selected-pool resolver (F-184)', () => {
     assert.equal(defaultTierHintForId('claude-opus-4-1'), 'premium');
     assert.equal(defaultTierHintForId('claude-sonnet-4-5'), 'premium');
     assert.equal(defaultTierHintForId('claude-sonnet-3-7'), 'high');
+    assert.equal(defaultTierHintForId('glm/glm-5.3-flash'), 'high');
     assert.equal(defaultTierHintForId('claude-sonnet'), 'default');
     assert.equal(defaultTierHintForId('claude-gpt-4o'), 'default');
     assert.equal(defaultTierHintForId('claude/gpt-5'), 'premium');

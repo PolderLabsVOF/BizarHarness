@@ -122,7 +122,7 @@ test('Agent model guard accepts generated definitions when live discovery is una
   assert.deepEqual(await guardAgentModel({
     ...input,
     tool_name: 'Task',
-    tool_input: { ...input.tool_input, subagent_type: modelAgentName('claude-minimax/MiniMax-M3') },
+    tool_input: { ...input.tool_input, subagent_type: modelAgentName('claude-minimax/MiniMax-M3', 'greg') },
   }, { registry }), {});
 
   // Even when `availableModelIds` is explicitly empty (defensive live probe),
@@ -130,7 +130,7 @@ test('Agent model guard accepts generated definitions when live discovery is una
   assert.deepEqual(await guardAgentModel({
     ...input,
     tool_name: 'Task',
-    tool_input: { ...input.tool_input, subagent_type: modelAgentName('claude-qwen/qwen3.8-max') },
+    tool_input: { ...input.tool_input, subagent_type: modelAgentName('claude-qwen/qwen3.8-max', 'greg') },
   }, { registry, availableModelIds: [] }), {});
 });
 

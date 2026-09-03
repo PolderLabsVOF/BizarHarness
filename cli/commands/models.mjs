@@ -675,7 +675,7 @@ export function defaultTierHint(modelId) {
   // Premium first — strongest model family.
   if (/(qwen3\.8|gpt-5|opus|o3-pro|o4-mini|sonnet-4)/.test(id)) return 'premium';
   // High — newer mid-tier (haiku-4 is stronger than haiku-3-5).
-  if (/(haiku-4|sonnet-3-7|mini-high|m3-high|grok-3)/.test(id)) return 'high';
+  if (/(haiku-4|sonnet-3-7|mini-high|m3-high|grok-3|glm[-/]?5\.3[-/]?flash)/.test(id)) return 'high';
   // Default — mainline sonnet / gpt-4 / m3.
   if (/(sonnet|gpt-4|m3(-|$)|(^|[^a-z])default($|[^a-z]))/.test(id)) return 'default';
   // Budget — small / fast variants. Match after the default family so that
@@ -1072,8 +1072,19 @@ export const NATIVE_AGENT_ALIASES = Object.freeze(['sonnet', 'opus', 'haiku', 'f
 
 const MODEL_AGENT_WORDS = Object.freeze({ a:'alpha', b:'bravo', c:'charlie', d:'delta', e:'echo', f:'foxtrot', g:'golf', h:'hotel', i:'india', j:'juliet', k:'kilo', l:'lima', m:'mike', n:'november', o:'oscar', p:'papa', q:'quebec', r:'romeo', s:'sierra', t:'tango', u:'uniform', v:'victor', w:'whiskey', x:'xray', y:'yankee', z:'zulu', 0:'zero', 1:'one', 2:'two', 3:'three', 4:'four', 5:'five', 6:'six', 7:'seven', 8:'eight', 9:'nine', '/':'slash', '.':'dot', '-':'dash', '_':'under' });
 
-export function modelAgentName(modelId) {
-  return `bizar-model-${[...String(modelId || '').toLowerCase()].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-')}`;
+// These are the stable Bizar role frontmatter names. Model definitions are
+// projected per role so Claude Code's task UI retains a meaningful Bizar agent
+// identity instead of displaying an opaque model-only worker.
+export const BIZAR_AGENT_ROLES = Object.freeze(['mike', 'paul', 'karen', 'linda', 'ria', 'greg', 'steve', 'oscar', 'todd', 'susan', 'pam', 'brenda', 'janet', 'kevin', 'brad', 'carl']);
+
+export function modelAgentName(modelId, role = 'worker') {
+  const safeRole = BIZAR_AGENT_ROLES.includes(role) ? role : 'worker';
+  return `${safeRole}-bizar-${[...String(modelId || '').toLowerCase()].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-')}`;
+}
+
+export function isGeneratedModelAgentName(name, modelIds) {
+  return typeof name === 'string' && (Array.isArray(modelIds) ? modelIds : []).some((id) =>
+    BIZAR_AGENT_ROLES.some((role) => name === modelAgentName(id, role)));
 }
 
 export function syncGeneratedModelAgents(modelIds, opts = {}) {
@@ -1082,8 +1093,12 @@ export function syncGeneratedModelAgents(modelIds, opts = {}) {
   if (existsSync(agentsDir)) rmSync(agentsDir, { recursive: true, force: true });
   if (!ids.length) return { agentsDir, names: [] };
   mkdirSync(agentsDir, { recursive: true, mode: 0o700 });
-  const names = ids.map((id) => modelAgentName(id));
-  ids.forEach((id, index) => writeFileSync(join(agentsDir, `${names[index]}.md`), `---\nname: ${names[index]}\ndescription: Bizar configured gateway model worker.\nmodel: ${id}\n---\n\nFollow the assigned Bizar role and task. Report concise evidence to the coordinator.\n`, { mode: 0o600 }));
+  const names = [];
+  ids.forEach((id) => BIZAR_AGENT_ROLES.forEach((role) => {
+    const name = modelAgentName(id, role);
+    names.push(name);
+    writeFileSync(join(agentsDir, `${name}.md`), `---\nname: ${name}\ndescription: Bizar ${role} role on a configured gateway model.\nmodel: ${id}\n---\n\nYou are the Bizar ${role} role. Follow the assigned task, preserve your role boundary, and report concise evidence to the coordinator.\n`, { mode: 0o600 });
+  }));
   return { agentsDir, names };
 }
 
@@ -2348,10 +2363,10 @@ export async function run(name, args, isHelpRequest, deps = {}) {
   if (wantAgentTypes) {
     const router = loadRouter(routerPath);
     const models = configuredEnabledModels(router);
-    const agentTypes = Object.fromEntries(models.map((id) => [id, modelAgentName(id)]));
+    const agentTypes = Object.fromEntries(models.map((id) => [id, Object.fromEntries(BIZAR_AGENT_ROLES.map((role) => [role, modelAgentName(id, role)]))]));
     const payload = { routerPath, models, agentTypes, agentsDir: join(resolveClaudeConfigDir(), 'agents', 'bizar-models') };
     if (wantJson) process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
-    else for (const id of models) process.stdout.write(`${id}\t${agentTypes[id]}\n`);
+    else for (const id of models) process.stdout.write(`${id}\t${JSON.stringify(agentTypes[id])}\n`);
     return true;
   }
 

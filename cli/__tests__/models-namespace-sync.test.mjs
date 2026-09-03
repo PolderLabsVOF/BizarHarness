@@ -50,10 +50,11 @@ test('generated model agents use a Claude-safe name and preserve the full gatewa
   try {
     const agentsDir = join(cwd, 'agents', 'bizar-models');
     const id = 'codex/gpt-5.6-sol';
-    const name = modelAgentName(id);
+    const name = modelAgentName(id, 'greg');
     assert.match(name, /^[a-z-]+$/);
     const result = syncGeneratedModelAgents([id], { agentsDir });
-    assert.deepEqual(result.names, [name]);
+    assert.equal(result.names.length, 16);
+    assert.ok(result.names.includes(name));
     const definition = readFileSync(join(agentsDir, `${name}.md`), 'utf8');
     assert.match(definition, new RegExp(`model: ${id.replace(/[./-]/g, '\\$&')}`));
   } finally {
