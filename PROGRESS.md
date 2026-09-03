@@ -66,6 +66,23 @@ pass 102/102; `make test` (SDK 513/513), `make e2e` (13/13), `make check`,
 `make check-arch`, removed-surface, repository-structure, and clean-state
 checks pass. Release metadata is prepared as 10.23.22.
 
+### User-facing README overhaul (active)
+
+Replace the terse repository-centric README with a clear operator-facing guide:
+show the install-to-first-task path, explain global model selection and native
+agent routing without exposing credentials, explain adaptive coordination and
+approval boundaries, present the shipped surfaces visually, and keep source
+verification commands discoverable. The guide must reflect the 84 integrated
+agents and 80 skills now shipped by Bizar.
+
+Completed 2026-09-03: README now leads with a branded terminal banner and two
+Mermaid maps for the first-task and global-model routes. It documents the
+global install, force-clean reinstall, `bizar models` flow, full-ID
+frontmatter routing for subagents/workflows/teams, specialist bench, safety
+boundaries, installed files, high-value commands, and contributor verification
+commands. `git diff --check`, `make check`, and repository-structure
+verification pass.
+
 Live Claude transcript evidence showed that the MiniMax replacement agents did
 produce their requested infrastructure, firmware, and web reports.  Later
 terminal/liveness notifications elicited short acknowledgements (for example

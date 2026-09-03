@@ -1,23 +1,219 @@
-# Bizar Harness
+<div align="center">
 
-Bizar is a guarded-autonomy harness for Claude Code. It packages 16 uniquely named role agents, 66 skills, slash-command workflows, lifecycle and safety hooks, a typed SDK, a 14-tool MCP server, and install/audit/test utilities.
+```text
+██████╗ ██╗███████╗ █████╗ ██████╗
+██╔══██╗██║╚══███╔╝██╔══██╗██╔══██╗
+██████╔╝██║  ███╔╝ ███████║██████╔╝
+██╔══██╗██║ ███╔╝  ██╔══██║██╔══██╗
+██████╔╝██║███████╗██║  ██║██║  ██║
+╚═════╝ ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
+```
 
-## What it does
+### Guarded autonomy for Claude Code
 
-- Executes clear local edit/test/verify work autonomously.
-- Uses Claude Code permission modes plus deterministic hooks for safety.
-- Requires human confirmation for commits, pushes, PR mutations, releases, publishing, deployments, and other external or irreversible operations.
-- Routes non-trivial work through research, plan/audit, implementation, review, and verification phases.
-- Preserves bounded session handoffs and learning evidence without providing a general-purpose note vault.
-- Guards compaction fidelity, commit quality, prose quality, dangerous shell commands, protected paths, and reviewer context.
+Choose your models once. Give Claude Code real work. Bizar supplies the routing,
+specialists, guardrails, and evidence to carry it through responsibly.
 
-Bizar deliberately ships no embedded web control plane, browser extension,
-background web service, or note-vault/search subsystem. The machine-readable
-`bizar control` command lets an optional OpenKan installation present Bizar
-agents, tasks, sessions, feature state, and durable messages without coupling
-to Bizar internals.
+`84 agents` · `80 skills` · `39 commands` · `14-tool MCP server`
 
-## Quick start
+</div>
+
+---
+
+## Why Bizar?
+
+Claude Code is already powerful. Bizar makes longer, cross-cutting work easier
+to trust and easier to follow. It starts with a small read-only orientation,
+asks one useful clarification for meaningful work, then selects the lightest
+coordination style that fits: a direct edit, an isolated agent, parallel
+specialists, an agent team, or a visible workflow.
+
+It keeps the operator in control of model selection and high-impact actions.
+Your configured model choices live in your global Claude configuration—not in
+the project you happen to be working on.
+
+| You want | Bizar provides |
+| --- | --- |
+| A clean way to begin | A guided installer and `bizar models` picker |
+| Your own gateway models | Global selection, full-ID subagent definitions, and native alias mapping |
+| Useful parallel work | Isolated worktrees, scoped tasks, and specialist roles |
+| Fewer surprises | Explicit safety checks for releases, publication, deployment, pushes, and destructive operations |
+| Confidence at the end | Tests, architecture checks, E2E checks, and evidence-aware handoff |
+
+## Start here
+
+Install Bizar globally, install its Claude Code integration, then choose the
+models you want Bizar to use.
+
+```sh
+npm install -g @polderlabs/bizar
+bizar install
+bizar models
+```
+
+Restart Claude Code after installation. The installer adds Bizar's agents,
+skills, commands, hooks, and settings to your user-level Claude configuration.
+It preserves your configured gateway endpoint and credential values during a
+clean reinstall.
+
+For a completely fresh Bizar-managed Claude setup while retaining endpoint and
+authentication settings:
+
+```sh
+bizar install --force
+bizar models
+```
+
+Then open any repository in Claude Code and describe the outcome you want.
+Mike—the Bizar coordinator—handles the rest.
+
+> **Tip:** Run `bizar doctor` whenever you want to verify that the global
+> install, Claude settings, hooks, skills, agents, and provider connection are
+> healthy.
+
+## The first-task experience
+
+```mermaid
+flowchart LR
+    U["Describe the outcome"] --> M["Mike: brief orientation"]
+    M --> Q{"Material choice?"}
+    Q -- Yes --> C["One concise question"]
+    C --> R["Choose a coordination mode"]
+    Q -- No --> R
+    R --> D["Direct edit"]
+    R --> A["Isolated specialist"]
+    R --> P["Parallel agents / team"]
+    R --> W["Visible workflow"]
+    D --> V["Verify and report evidence"]
+    A --> V
+    P --> V
+    W --> V
+```
+
+The coordinator does not force every request through a workflow. Small,
+obvious edits stay small; larger requests get only the structure they need.
+Writing agents work in Git worktrees, while read-only research stays light and
+foregrounded.
+
+## Your models, everywhere Bizar dispatches
+
+`bizar models` is the single operator-facing place to select models. It
+discovers candidates from your configured gateway and writes your selections to
+the global model router:
+
+```text
+~/.claude/model-router.json
+```
+
+The router is never stored in a project directory. Bizar uses the selected
+models for direct subagents, workflows, and agent-team teammates.
+
+```mermaid
+flowchart TD
+    Picker["bizar models"] --> Router["Global model router\n~/.claude/model-router.json"]
+    Router --> Definitions["Global Bizar agent definitions\nfull model ID in frontmatter"]
+    Router --> Aliases["sonnet · opus · haiku · fable\ncompatibility aliases"]
+    Definitions --> Agent["Subagents"]
+    Definitions --> Workflow["Workflow workers"]
+    Definitions --> Team["Agent-team teammates"]
+```
+
+Claude Code's native per-call model field has a small alias vocabulary. Bizar
+avoids making that vocabulary a limitation: it projects each selected gateway
+model into a global subagent definition whose frontmatter contains the full
+model ID. The agent, workflow, and team routes use that definition. The four
+native aliases are compatibility shortcuts only; they do not enable an
+unselected provider or reduce your selected-model pool to four choices.
+
+Useful inspection commands:
+
+```sh
+bizar models --list
+bizar models --agent-types --json
+bizar models explain todd
+bizar doctor
+```
+
+## A specialist bench, not a generic swarm
+
+Bizar ships its core coordination roles alongside 68 focused specialists for
+architecture, accessibility, security, testing, documentation, performance,
+language and framework review, build repair, operations, and evaluation. It
+also ships 80 skills for planning, debugging, verification, review,
+worktrees, and implementation practice.
+
+The coordinator selects specialists when their expertise reduces a concrete
+risk. It does not create parallel workers merely to look busy. You can inspect
+the installed specialist definition names through `bizar models --agent-types
+--json` and use a relevant Bizar specialist directly when needed.
+
+```text
+Core coordination                 Specialist coverage
+─────────────────                 ──────────────────────────────────
+Mike · research · plan            Architecture · accessibility · security
+Implementation · review           Build repair · tests · documentation
+Verification · integration        Frameworks · performance · operations
+                                  Evaluation · product and domain analysis
+```
+
+## Guardrails that stay out of the way
+
+Bizar is designed to be autonomous for local, reversible work and deliberate
+for consequential actions.
+
+| Category | Default behavior |
+| --- | --- |
+| Read, inspect, edit, test, format | Proceeds autonomously within the task scope |
+| Parallel code changes | Uses isolated worktrees and scoped task ownership |
+| Ambiguous material design choice | Asks one concise clarification before execution |
+| Commit | Locally allowed, with a fresh simplify review reminder |
+| Push, PR mutation, release, publish, deploy | Requires an explicit human decision |
+| Rebase, force-push, broad destructive commands | Denied or escalated by the safety floor |
+
+The goal is not to make Claude Code timid. It is to make its boundaries clear:
+Bizar works through local implementation and verification, then stops at the
+point where an external or difficult-to-reverse decision belongs to you.
+
+## What gets installed
+
+```text
+~/.claude/
+├── agents/          84 Bizar roles and specialist definitions
+├── skills/          80 skill packs
+├── commands/        39 slash-command surfaces
+├── hooks/           routing, lifecycle, safety, evidence, and quality hooks
+├── rules/           focused guidance for common development work
+├── workflows/       native workflow definitions
+├── settings.json    Bizar-managed Claude Code integration
+└── model-router.json operator-selected model state
+
+~/.config/bizar/
+├── installed.json   install record
+├── evidence/        local dispatch and verification evidence
+├── telemetry/       local routing and rejected-action feedback
+└── worktree-queue.json  completed worktree integration queue
+```
+
+`bizar control` is a machine-readable command boundary for optional external
+interfaces. Bizar deliberately does not include an embedded browser control
+plane, background daemon, or general-purpose note vault.
+
+## Commands worth knowing
+
+| Command | When to use it |
+| --- | --- |
+| `bizar install` | Install or refresh Bizar in your global Claude configuration |
+| `bizar models` | Discover and select the models Bizar may dispatch |
+| `bizar doctor` | Diagnose the global installation and provider connectivity |
+| `bizar validate` | Run an install-focused health check |
+| `bizar task` | Inspect or coordinate scoped worktree tasks |
+| `bizar worktree-merge --all` | Review and merge completed isolated work, surfacing conflicts |
+| `bizar control snapshot --json` | Read the machine-friendly current harness state |
+| `bizar evidence` | Inspect local dispatch and verification evidence |
+
+## Running Bizar from this repository
+
+For contributors, use the repository checkout rather than the global package:
 
 ```sh
 npm install
@@ -28,65 +224,7 @@ make test
 make e2e
 ```
 
-Claude Code reads `.claude/settings.json`. `cli/provision.mjs` can copy agents, commands, skills, hooks, rules, and settings into `~/.claude/` for user-level use.
-
-## Core surfaces
-
-| Surface | Purpose |
-| --- | --- |
-| `.claude/agents/` | Office-themed role agents and orchestrator |
-| `config/skills/` | Canonical skill library |
-| `.claude/commands/` | Slash-command workflows |
-| `.claude/hooks/` | Safety, HITL, lifecycle, routing, telemetry, and compaction hooks |
-| `packages/sdk/` | Agent registry, router, learning logs, federation, consensus, and MCP |
-| `cli/` | Installer, validator, backup, audit, cost/claim/task/control, sandbox, repair |
-| `scripts/` | Architecture, absence, E2E, feature, eval, and clean-state verification |
-
-The MCP tools are `plan_action`, `loop_start`, `loop_stop`, `loop_list`, `loop_status`, `graph_query`, `graph_path`, `list_instincts`, and `list_decisions`.
-
-## Parallel agent coordination
-
-Code-writing subagents run in isolated Git worktrees. `bizar task` stores a
-shared SQLite task graph under Git's common directory, so all worktrees observe
-the same dependencies, owners, path scopes, and expiring leases. The
-PreToolUse ownership hook denies edits outside the current task scope and edits
-to paths leased by sibling agents.
-
-```sh
-bizar task create sdk-change --title "Update SDK" --scope "packages/sdk/**"
-bizar task claim sdk-change --owner todd --workspace "$PWD"
-bizar task heartbeat sdk-change --owner todd
-bizar task complete sdk-change --owner todd --evidence "targeted tests passed"
-bizar task integrate enqueue sdk-change --commit abc1234 --owner todd
-bizar task integrate claim --worker steve
-bizar task integrate pass 1 --worker steve --evidence "aggregate checks passed"
-```
-
-The integration queue records the commit, base reference, verification command,
-owner, integrator, and outcome. It deliberately does not perform unapproved
-merge, rebase, push, or publication operations.
-
-## OpenKan control plane
-
-`bizar control snapshot --json` exposes the current agent catalogue, durable
-task and integration queues, feature ledger, progress summary, Claude Code
-background sessions, and durable control messages. OpenKan invokes task and
-session mutations through the same CLI instead of importing Bizar modules or
-opening its SQLite database.
-
-Messages are atomically queued under `.bizar/control/messages/`. Supported
-Claude Code `SessionStart` and `UserPromptSubmit` hooks claim and inject matching
-messages exactly once. A session-targeted message can request a documented
-background resume; Bizar never edits transcripts or attaches to private process
-internals.
-
-## Guarded autonomy
-
-Project settings default to `acceptEdits`, which lets Claude iterate locally while preserving prompts around broader shell operations. Operators who meet Claude Code's requirements may choose Auto mode; Bizar's deny/ask hooks still apply before permission-mode evaluation.
-
-The Git workflow hook denies force-push, rebase, unsupported commit subjects, and AI-attribution trailers. It asks before a commit, push, PR mutation, release, publish, or deploy. The simplify guard requires `/simplify` for every commit attempt.
-
-## Verification
+The verification suite covers both the code and the integration contract:
 
 ```sh
 make verify-removed-surfaces
@@ -98,10 +236,13 @@ make clean-check
 make check
 ```
 
-The root package uses a runtime-only allowlist: no test files, local state,
-duplicate skill mirror, or source-only fixture is published.
+## Learn more
 
-See [the documentation index](docs/INDEX.md), [architecture](docs/architecture.md), [core feature audit](docs/audits/core-feature-audit-2026-07-30.md), [repository cleanup audit](docs/audits/repository-cleanup-2026-07-30.md), and [upstream parity matrix](docs/audits/claude-codex-settings-parity-2026-07-30.md).
+- [Documentation index](docs/INDEX.md)
+- [Architecture](docs/architecture.md)
+- [Model routing decisions](docs/decisions/)
+- [Current progress and evidence](PROGRESS.md)
+- [MIT license](LICENSE)
 
 ## License
 
