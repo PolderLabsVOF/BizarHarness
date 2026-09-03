@@ -131,13 +131,19 @@ test('model router ownership recognizes Bizar schemas and preserves foreign sche
 });
 
 test('syncModelRouter creates and preserves only the global Bizar router', async () => {
+  // Router lives under CLAUDE_CONFIG_DIR (~/.claude/model-router.json). Set both
+  // env vars so resolveGlobalModelRouter() resolves correctly.
   const home = mkdtempSync(join(tmpdir(), 'bizar-global-router-'));
-  const previous = process.env.BIZAR_HOME;
-  process.env.BIZAR_HOME = home;
+  const claudeDir = join(home, '.claude');
+  mkdirSync(claudeDir, { recursive: true });
+  const previousBizarHome = process.env.BIZAR_HOME;
+  const previousClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  process.env.BIZAR_HOME = join(home, '.config', 'bizar');
+  process.env.CLAUDE_CONFIG_DIR = claudeDir;
   try {
     const { syncModelRouter } = await import('./provision.mjs');
     const first = await syncModelRouter();
-    const routerPath = join(home, 'config', 'claude', 'model-router.json');
+    const routerPath = join(claudeDir, 'model-router.json');
     assert.equal(first.path, routerPath);
     assert.equal(existsSync(routerPath), true);
     const created = JSON.parse(readFileSync(routerPath, 'utf8'));
@@ -149,8 +155,10 @@ test('syncModelRouter creates and preserves only the global Bizar router', async
     assert.deepEqual(JSON.parse(readFileSync(routerPath, 'utf8')).userSelected.models, ['operator/model']);
     assert.equal(existsSync(join(REPO_ROOT, 'config', 'claude', 'model-router.json')), false);
   } finally {
-    if (previous === undefined) delete process.env.BIZAR_HOME;
-    else process.env.BIZAR_HOME = previous;
+    if (previousBizarHome === undefined) delete process.env.BIZAR_HOME;
+    else process.env.BIZAR_HOME = previousBizarHome;
+    if (previousClaudeConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previousClaudeConfigDir;
     rmSync(home, { recursive: true, force: true });
   }
 });
@@ -232,7 +240,9 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
   const home = mkdtempSync(join(tmpdir(), 'bizar-settings-'));
   const claudeDir = join(home, '.claude');
   const bizarHome = join(home, '.config', 'bizar');
-  const routerPath = join(bizarHome, 'config', 'claude', 'model-router.json');
+  // Router lives under CLAUDE_CONFIG_DIR (~/.claude/model-router.json) — the
+  // single canonical location that both the CLI and Claude Code hooks agree on.
+  const routerPath = join(claudeDir, 'model-router.json');
   // F-169 + F-180: install the wrapper shim into the test claudeDir so
   // `resolveHookCommand` emits the wrapper-path command (its executable
   // form). `syncConfigExtras` does this on real installs.

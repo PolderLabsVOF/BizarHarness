@@ -16,6 +16,8 @@ const GATEWAY_KEYS = [
   'ANTHROPIC_BASE_URL',
   'BIZAR_MODEL_ROUTER_URL',
   'ANTHROPIC_AUTH_TOKEN',
+  // Prevent an operator's shell environment from leaking into test isolation.
+  'CLAUDE_CODE_MAX_CONTEXT_TOKENS',
 ];
 
 function runProductionWriter({ existing, force = false, env = {}, router } = {}) {
@@ -24,10 +26,10 @@ function runProductionWriter({ existing, force = false, env = {}, router } = {})
   const settingsPath = join(claudeDir, 'settings.json');
   mkdirSync(claudeDir, { recursive: true });
   if (existing) writeFileSync(settingsPath, `${JSON.stringify(existing)}\n`);
+  // Router lives under CLAUDE_CONFIG_DIR (~/.claude/model-router.json) — the single
+  // canonical location that both the CLI and Claude Code hooks agree on.
   if (router) {
-    const routerDir = join(home, '.config', 'bizar', 'config', 'claude');
-    const routerPath = join(routerDir, 'model-router.json');
-    mkdirSync(routerDir, { recursive: true });
+    const routerPath = join(claudeDir, 'model-router.json');
     writeFileSync(routerPath, `${JSON.stringify(router)}\n`);
   }
 

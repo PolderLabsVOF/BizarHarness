@@ -32,11 +32,28 @@ import {
   startWorkflow as startWorkflowCore,
   validateWorkflowState,
 } from '../core/workflow-state.mjs';
-import { loadModelRouter } from '../../config/agents/model-assignment.mjs';
 import { probeAvailableModels } from '../commands/workflow.mjs';
 
 const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), '..', '..');
-const testRegistry = loadModelRouter();
+
+// Controlled fixture registry — deterministic models, no dependency on the live
+// global router which was moved to ~/.claude/model-router.json (10.23.12).
+// loadModelRouter() returns a validated plain-object (tiers is NOT a Map).
+const testRegistry = {
+  version: '13.0.0',
+  endpoint: 'http://test/v1',
+  gateway: { endpoint: 'http://test/v1', availabilityProbe: '/models', unavailableBehavior: 'inherit-session' },
+  roleDefaults: { mike: 'premium', paul: 'premium', carl: 'premium', karen: 'high', linda: 'high', ria: 'mid-design', greg: 'default', steve: 'default', oscar: 'mid', todd: 'mid', susan: 'mid', pam: 'budget', brenda: 'budget', janet: 'budget', kevin: 'budget', brad: 'mid-design' },
+  tiers: {
+    premium: { models: ['cx/gpt-5.6-luna', 'cx/gpt-5.6-sol'], purpose: 'hard work', effort: 'high' },
+    mid: { models: ['cx/gpt-5.6-terra'], purpose: 'bounded work', effort: 'medium' },
+    default: { models: ['cx/gpt-5.6-mini'], purpose: 'ordinary work', effort: 'medium' },
+    high: { models: ['cx/gpt-5.6-high'], purpose: 'high work', effort: 'high' },
+    'mid-design': { models: ['cx/gpt-5.6-mid-design'], purpose: 'design work', effort: 'medium' },
+    budget: { models: ['cx/gpt-5.6-budget'], purpose: 'light work', effort: 'low' },
+  },
+  policies: { selectionOwner: 'orchestrator', discoveryFailure: 'configured-tier-fallback', unavailableModel: 'configured-tier-fallback', retryModelAliases: false, maxDispatchModelAttempts: 1 },
+};
 const availableModelIds = [
   ...new Set(Object.values(testRegistry.tiers).flatMap((tier) => tier.models)),
 ];

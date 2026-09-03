@@ -240,15 +240,22 @@ for (const script of SCRIPTS) {
     }
   });
 
-  test(`workflow-payload-capture: ${script.name} -> at least one captured payload has a non-undefined model`, async () => {
+  test(`workflow-payload-capture: ${script.name} -> at least one captured payload has a non-null bizarConfiguredModel`, async () => {
     const captured = [];
     const ctx = makeFixtureContext();
     await runCapturedWorkflow(script.file, script.args, captured, ctx);
 
-    const withModel = captured.filter((entry) => entry.payload.model !== undefined && entry.payload.model !== null);
+    // F-201 transport compatibility: the native Agent tool rejects gateway IDs
+    // in its enum-limited `model` field.  The Bizar-selected ID is carried as
+    // `additionalContext.bizarConfiguredModel` so the guard can verify the
+    // inherited session model matches before allowing dispatch.
+    const withModel = captured.filter((entry) =>
+      entry.payload.additionalContext?.bizarConfiguredModel !== undefined &&
+      entry.payload.additionalContext?.bizarConfiguredModel !== null,
+    );
     assert.ok(
       withModel.length >= 1,
-      `${script.name}: at least one payload must carry a model (saw ${withModel.length}/${captured.length})`,
+      `${script.name}: at least one payload must carry a bizarConfiguredModel (saw ${withModel.length}/${captured.length})`,
     );
   });
 
@@ -260,13 +267,14 @@ for (const script of SCRIPTS) {
     const highRisk = captured.filter((entry) => entry.risk === 'high');
     assert.ok(highRisk.length >= 1, `${script.name}: fixture must declare at least one high-risk lane`);
     for (const entry of highRisk) {
+      // F-201 transport compatibility: model ID lives in additionalContext.bizarConfiguredModel.
       assert.notEqual(
-        entry.payload.model, undefined,
-        `${script.name}/${entry.label}: high-risk lane must have a model (got ${entry.payload.model})`,
+        entry.payload.additionalContext?.bizarConfiguredModel, undefined,
+        `${script.name}/${entry.label}: high-risk lane must have a bizarConfiguredModel (got ${entry.payload.additionalContext?.bizarConfiguredModel})`,
       );
       assert.notEqual(
-        entry.payload.model, null,
-        `${script.name}/${entry.label}: high-risk lane model must not be null (got ${entry.payload.model})`,
+        entry.payload.additionalContext?.bizarConfiguredModel, null,
+        `${script.name}/${entry.label}: high-risk lane bizarConfiguredModel must not be null (got ${entry.payload.additionalContext?.bizarConfiguredModel})`,
       );
       // The selector reason must NOT be session-inherit for high-risk lanes.
       assert.notEqual(

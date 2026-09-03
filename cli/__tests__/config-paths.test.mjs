@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { resolveBizarHome, resolveGlobalModelRouter } from '../config-paths.mjs';
 
-test('BIZAR_HOME is global and relative values resolve once against cwd', () => {
+test('model router lives under CLAUDE_CONFIG_DIR, not BIZAR_HOME', () => {
   assert.equal(
-    resolveBizarHome({ cwd: '/tmp/project-a', env: { BIZAR_HOME: '../shared' } }),
-    '/tmp/shared',
+    resolveGlobalModelRouter({ cwd: '/tmp/project-b', env: { BIZAR_HOME: '/tmp/shared', HOME: '/home/user' } }),
+    '/home/user/.claude/model-router.json',
   );
   assert.equal(
-    resolveGlobalModelRouter({ cwd: '/tmp/project-b', env: { BIZAR_HOME: '/tmp/shared' } }),
-    join('/tmp/shared', 'config', 'claude', 'model-router.json'),
+    resolveGlobalModelRouter({ cwd: '/tmp/project-b', env: { CLAUDE_CONFIG_DIR: '/custom/claude', HOME: '/home/user' } }),
+    '/custom/claude/model-router.json',
   );
 });
 

@@ -3,7 +3,7 @@
  * sessionstart-model-sync.mjs — Claude Code SessionStart hook.
  *
  * Re-applies the operator's `userSelected.models` block (from
- * `~/.config/bizar/config/claude/model-router.json`) into the three
+ * `~/.claude/model-router.json`) into the three
  * Claude Code settings keys that the operator owns:
  *
  *   - modelPicker   → { options: [{ model, label }] } in user pick order
@@ -23,7 +23,7 @@
  *   This hook ONLY touches `modelPicker`, `modelOverrides`, and `model`.
  *   Env, mcpServers, permissions, hooks, and every other operator key is
  *   left untouched. The source of truth for picks
- *   (`~/.config/bizar/config/claude/model-router.json`) is also untouched.
+ *   (`~/.claude/model-router.json`) is also untouched.
  *
  * Failure policy:
  *   This is an advisory hook. Any failure (missing router, malformed JSON,

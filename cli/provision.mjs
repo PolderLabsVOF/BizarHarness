@@ -490,6 +490,8 @@ export function isBizarManagedModelRouter(value) {
 }
 
 export async function syncModelRouter({ dryRun = false, force = false } = {}) {
+  // Write to ~/.claude/model-router.json (resolveGlobalModelRouter now points there).
+  // This is the single canonical location — both the CLI and Claude Code hooks read it.
   const dest = resolveGlobalModelRouter();
   if (existsSync(dest)) {
     return { ok: true, message: `${dest} is operator-managed — preserved`, preserved: true };

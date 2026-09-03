@@ -1,5 +1,23 @@
 # Changelog
 
+## [10.23.12] - 2026-09-03
+
+### Fixed
+
+- **Global-router path finalized** — the model router now lives at
+  `~/.claude/model-router.json` (Claude Code's `CLAUDE_CONFIG_DIR`),
+  the single canonical location that both the CLI and Claude Code hooks
+  agree on. `resolveGlobalModelRouter()` and the SDK's
+  `defaultConfigPath()` both read this path; the SDK falls back to
+  `$BIZAR_HOME/config/claude/model-router.json` for pre-10.23.12
+  installs. Updated tests: `config-paths.test.mjs`,
+  `workflow-state.test.mjs` (inline fixture), `merge-settings.test.mjs`
+  (router path + env-cleanup), `provision.test.mjs`,
+  `workflow-payload-capture.test.mjs`, and `models-persists-under-bizar-home.test.mjs`.
+  The `merge-settings.test.mjs` fix also discovered that
+  `process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS` must be deleted from the
+  test subprocess environment to prevent operator-shell leakage.
+
 ## [10.23.11] - 2026-09-02
 
 ### Fixed

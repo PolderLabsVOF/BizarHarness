@@ -1,22 +1,14 @@
 /**
  * cli/__tests__/models-persists-under-bizar-home.test.mjs
  *
- * Regression coverage for the operator-reported bug:
- *
- *   "User ran `bizar models`, and the model router file
- *    (`model-router.json`) was saved to the
- *    CURRENT WORKING DIRECTORY instead of the global `BIZAR_HOME`
- *    directory (`~/.config/bizar/`). Things like this should always be
- *    configured globally so they can be used everywhere."
- *
- * The fix routes the router file under `BIZAR_HOME/config/claude/...`
- * (operator-controlled state that must survive cwd changes and
- * `bizar install --force` clean runs — see
- * `cli/provision.mjs#FORCE_CLEAN_PRESERVE_ENV_KEYS`).
+ * Regression coverage: the model router file must live under
+ * `~/.claude/model-router.json` (where Claude Code hooks read it),
+ * NOT under `~/.config/bizar/`.  Running `bizar models` from any cwd
+ * must persist to the same global file.
  *
  * These tests drive `bizar models --set` from two different tmp cwds and
  * assert that:
- *   1. The persisted file lives under `BIZAR_HOME`, NOT under the tmp cwd.
+ *   1. The persisted file lives under `CLAUDE_CONFIG_DIR`, NOT under the tmp cwd.
  *   2. Re-running the command from a DIFFERENT cwd preserves the SAME
  *      global file (no per-cwd copy).
  *   3. The `BIZAR_MODEL_ROUTER_CONFIG` env override still works as an
@@ -80,10 +72,12 @@ function runBizar(args, { cwd, env } = {}) {
   });
 }
 
-test('bizar models --set persists the router file under BIZAR_HOME, not cwd', async () => {
+test('bizar models --set persists the router file under CLAUDE_CONFIG_DIR, not cwd', async () => {
   const sandbox = makeSandbox();
   try {
-    const expectedRouterPath = join(sandbox.bizarHome, 'config', 'claude', 'model-router.json');
+    // Router lives under CLAUDE_CONFIG_DIR (~/.claude/model-router.json) — the single
+    // canonical location that both the CLI and Claude Code hooks agree on.
+    const expectedRouterPath = join(sandbox.claudeConfigDir, 'model-router.json');
 
     const { code, stdout, stderr } = await runBizar(['models', '--set=a/1,b/2', '--json'], {
       cwd: sandbox.cwd1,
@@ -92,22 +86,22 @@ test('bizar models --set persists the router file under BIZAR_HOME, not cwd', as
 
     assert.equal(code, 0, `expected 0, got ${code}; stderr=${stderr}; stdout=${stdout}`);
 
-    // The global router file MUST exist under BIZAR_HOME.
+    // The global router file MUST exist under CLAUDE_CONFIG_DIR.
     assert.equal(
       existsSync(expectedRouterPath),
       true,
-      `router file must be persisted at ${expectedRouterPath} (under BIZAR_HOME), not under cwd`,
+      `router file must be persisted at ${expectedRouterPath} (under CLAUDE_CONFIG_DIR), not under cwd`,
     );
 
-    // The cwd-relative mirror MUST NOT exist — that was the bug.
-    const cwdMirror = join(sandbox.cwd1, 'config', 'claude', 'model-router.json');
+    // The cwd-relative mirror MUST NOT exist — no per-cwd leakage.
+    const cwdMirror = join(sandbox.cwd1, 'model-router.json');
     assert.equal(
       existsSync(cwdMirror),
       false,
-      `no router file may leak into ${cwdMirror} — operator-controlled state must live under BIZAR_HOME`,
+      `no router file may leak into ${cwdMirror}`,
     );
 
-    // The persisted payload under BIZAR_HOME carries the userSelected block.
+    // The persisted payload under CLAUDE_CONFIG_DIR carries the userSelected block.
     const parsed = JSON.parse(readFileSync(expectedRouterPath, 'utf8'));
     assert.deepEqual(parsed.userSelected.models, ['a/1', 'b/2']);
     assert.equal(parsed.userSelected.source, 'cli-set');
@@ -119,10 +113,10 @@ test('bizar models --set persists the router file under BIZAR_HOME, not cwd', as
   }
 });
 
-test('re-running bizar models from a different cwd preserves the same global BIZAR_HOME file', async () => {
+test('re-running bizar models from a different cwd preserves the same global CLAUDE_CONFIG_DIR file', async () => {
   const sandbox = makeSandbox();
   try {
-    const expectedRouterPath = join(sandbox.bizarHome, 'config', 'claude', 'model-router.json');
+    const expectedRouterPath = join(sandbox.claudeConfigDir, 'model-router.json');
 
     // First run from cwd1.
     const first = await runBizar(['models', '--set=a/1', '--json'], {
@@ -140,7 +134,7 @@ test('re-running bizar models from a different cwd preserves the same global BIZ
     assert.equal(second.code, 0, `second run exited ${second.code}; stderr=${second.stderr}`);
 
     // No per-cwd copy: cwd2 must NOT have its own router file.
-    const cwd2Mirror = join(sandbox.cwd2, 'config', 'claude', 'model-router.json');
+    const cwd2Mirror = join(sandbox.cwd2, 'model-router.json');
     assert.equal(
       existsSync(cwd2Mirror),
       false,

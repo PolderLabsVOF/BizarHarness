@@ -218,11 +218,14 @@ function modelIds(value: unknown): string[] {
 }
 
 function defaultConfigPath(_cwd = process.cwd()): string {
-  // Anchor on BIZAR_HOME — the router file is operator-controlled state
-  // that must survive cwd changes and `bizar install --force` clean runs.
-  // The `_cwd` parameter is retained for the explicit `configPath` branch
-  // (relative `BIZAR_MODEL_ROUTER_CONFIG` overrides still resolve against
-  // it for tests that pre-stage the file in a tmp dir).
+  // Claude Code reads hooks, agents, skills, and model-router from ~/.claude/.
+  // Use ~/.claude/model-router.json as the single canonical location so the
+  // hook and SDK always agree.  Backward-compat fallback to BIZAR_HOME for
+  // existing installations that still have the file there.
+  const claudeConfigDir = join(osHomedir(), ".claude");
+  const claudePath = join(claudeConfigDir, "model-router.json");
+  if (existsSync(claudePath)) return claudePath;
+  // Fallback: BIZAR_HOME (for pre-10.23.12 installs).
   return join(bizarHome(), "config", "claude", "model-router.json");
 }
 
