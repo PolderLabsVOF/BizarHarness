@@ -127,9 +127,15 @@ describe("closeInterview — ambiguity score integration", () => {
   it("embeds the score computed from clarityBreakdown", () => {
     const spec = closeInterview(baseInput());
     assert.equal(spec.ambiguity.kind, "greenfield");
-    // Re-derive the expected score with the same math to confirm wiring.
+    // Post-v2.0.0 the score is `Σ w_i · (1 − clarity_i)` (low-is-good
+    // ambiguity). Re-derive it from the base fixture to confirm wiring.
     const expected =
-      0.20 * 0.8 + 0.20 * 0.7 + 0.15 * 0.6 + 0.15 * 0.5 + 0.15 * 0.9 + 0.15 * 0.4;
+      0.20 * (1 - 0.8) +
+      0.20 * (1 - 0.7) +
+      0.15 * (1 - 0.6) +
+      0.15 * (1 - 0.5) +
+      0.15 * (1 - 0.9) +
+      0.15 * (1 - 0.4);
     assert.equal(spec.ambiguity.score, Math.round(expected * 1e4) / 1e4);
   });
 

@@ -1,10 +1,18 @@
 /**
  * ambiguity/score.test.ts — Unit tests for the ambiguity math.
  *
+ * As of v2.0.0 the score is `Σ w_i · (1 − clarity_i)`, so it is
+ * low-is-good: a fully clear spec yields score 0.00; a fully
+ * unclear spec yields score 1.00. The original v1.0.0 formula
+ * `Σ w_i · clarity_i` returned the opposite direction (high-is-clear)
+ * and was inconsistent with the SKILL.md closure condition.
+ *
  * Verifies:
- *   - Boundary scores (all-0, all-1) are exact
+ *   - Boundary scores (all-0 / all-1 clarity) produce 1.00 / 0.00
+ *     ambiguity respectively
  *   - Weight-sum invariant (handled by scripts/__tests__/ambiguity-weights)
- *   - Closure behavior (the score is `Σ w_i · clarity_i`)
+ *   - Closure behavior (the score is `Σ w_i · (1 − clarity_i)`,
+ *     i.e., `1 − clarityScore` where `clarityScore = Σ w_i · clarity_i`)
  *   - Determinism: identical inputs produce identical outputs
  *   - Invalid inputs: missing keys, out-of-range, NaN, non-numeric,
  *     unknown dimensions, wrong kind
@@ -72,48 +80,50 @@ describe("AMBIGUITY_WEIGHTS presets", () => {
 });
 
 describe("computeAmbiguity — boundary scores", () => {
-  it("returns 1.00 when every dimension is fully clear (greenfield)", () => {
+  it("returns 0.00 when every dimension is fully clear (greenfield) — closure", () => {
     const r = computeAmbiguity(ALL_ONES_GREENFIELD, "greenfield");
-    assert.equal(r.score, 1);
+    assert.equal(r.score, 0);
     assert.equal(r.kind, "greenfield");
     assert.equal(r.schemaVersion, AMBIGUITY_SCHEMA_VERSION);
     assert.equal(Object.keys(r.breakdown).length, 6);
   });
 
-  it("returns 0.00 when every dimension is fully unclear (greenfield)", () => {
+  it("returns 1.00 when every dimension is fully unclear (greenfield) — maximal ambiguity", () => {
     const r = computeAmbiguity(ALL_ZEROS_GREENFIELD, "greenfield");
-    assert.equal(r.score, 0);
+    assert.equal(r.score, 1);
   });
 
-  it("returns 1.00 when every dimension is fully clear (brownfield)", () => {
+  it("returns 0.00 when every dimension is fully clear (brownfield) — closure", () => {
     const r = computeAmbiguity(ALL_ONES_BROWNFIELD, "brownfield");
-    assert.equal(r.score, 1);
+    assert.equal(r.score, 0);
     assert.equal(r.kind, "brownfield");
   });
 
-  it("returns 0.00 when every dimension is fully unclear (brownfield)", () => {
+  it("returns 1.00 when every dimension is fully unclear (brownfield) — maximal ambiguity", () => {
     const r = computeAmbiguity(ALL_ZEROS_BROWNFIELD, "brownfield");
-    assert.equal(r.score, 0);
+    assert.equal(r.score, 1);
   });
 });
 
 describe("computeAmbiguity — closure", () => {
-  it("computes a weighted score for an asymmetric greenfield input", () => {
+  it("computes a weighted ambiguity score for an asymmetric greenfield input", () => {
     const r = computeAmbiguity(
       { intent: 1, outcome: 0.5, scope: 0.5, constraints: 0.5, success: 0.5, context: 0.5 },
       "greenfield",
     );
-    // 0.20*1 + (0.20+0.15+0.15+0.15+0.15)*0.5 = 0.20 + 0.40 = 0.60
-    assert.equal(r.score, 0.6);
+    // clarity sum = 0.20*1 + (0.20+0.15+0.15+0.15+0.15)*0.5 = 0.20 + 0.40 = 0.60
+    // ambiguity = 1 - 0.60 = 0.40
+    assert.equal(r.score, 0.4);
   });
 
-  it("computes a weighted score for an asymmetric brownfield input", () => {
+  it("computes a weighted ambiguity score for an asymmetric brownfield input", () => {
     const r = computeAmbiguity(
       { intent: 0, outcome: 1, scope: 1, constraints: 1, success: 1 },
       "brownfield",
     );
-    // 0.25*0 + 0.25*1 + 0.20*1 + 0.15*1 + 0.15*1 = 0.75
-    assert.equal(r.score, 0.75);
+    // clarity sum = 0.25*0 + 0.25*1 + 0.20*1 + 0.15*1 + 0.15*1 = 0.75
+    // ambiguity = 1 - 0.75 = 0.25
+    assert.equal(r.score, 0.25);
   });
 
   it("breakdown values sum to the score", () => {
@@ -125,7 +135,7 @@ describe("computeAmbiguity — closure", () => {
     assert.ok(Math.abs(breakdownSum - r.score) < 1e-6, `breakdown sum ${breakdownSum} != score ${r.score}`);
   });
 
-  it("breakdown contribution for each dimension matches w*clarity", () => {
+  it("breakdown contribution for each dimension matches w*(1-clarity)", () => {
     const clarity = { intent: 0.5, outcome: 0.5, scope: 0.5, constraints: 0.5, success: 0.5, context: 0.5 };
     const r = computeAmbiguity(clarity, "greenfield");
     for (const dim of Object.keys(AMBIGUITY_WEIGHTS.greenfield)) {
@@ -133,6 +143,21 @@ describe("computeAmbiguity — closure", () => {
       const expected = Math.round(w * 0.5 * 1e4) / 1e4;
       assert.equal(r.breakdown[dim], expected);
     }
+  });
+
+  it("closure condition: score <= 0.10 iff the brief is fully clearish", () => {
+    // Build a "mostly clear" input where every dimension is at least
+    // 0.9. The closure threshold is 0.10 so the gate must allow it.
+    const almostClear = {
+      intent: 0.95,
+      outcome: 0.95,
+      scope: 0.95,
+      constraints: 0.95,
+      success: 0.95,
+      context: 0.95,
+    };
+    const r = computeAmbiguity(almostClear, "greenfield");
+    assert.ok(r.score <= 0.10, `expected score <= 0.10 for closure, got ${r.score}`);
   });
 });
 

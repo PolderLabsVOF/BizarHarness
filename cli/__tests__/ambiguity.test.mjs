@@ -47,15 +47,21 @@ const BIN = join(REPO_ROOT, 'cli', 'bin.mjs');
  *  back through `computeAmbiguity`, yields the same numeric. The
  *  default scores line up with the SKILL.md closure threshold
  *  (`AmbiguityScore ≤ 0.10` for closure).
+ *
+ *  As of AMBIGUITY_SCHEMA_VERSION 2.0.0 the SDK returns true ambiguity
+ *  (low-is-good): `score = Σ w_i · (1 − clarity_i)`. To make the
+ *  recomputed score match the stored one we therefore store clarity
+ *  values equal to `1 − score` (uniform across dimensions so the
+ *  weighted average collapses cleanly).
  */
 function setupFixture({ kind = 'greenfield', score = 0.05, mtime = null } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'bizar-ambiguity-'));
   mkdirSync(join(root, 'docs', 'specs'), { recursive: true });
   // Pick clarity values that, weighted-averaged with the greenfield
-  // preset, yield the requested `score` (round to 4dp to mirror the
-  // SDK's rounding). We use uniform clarity across dimensions so the
-  // weighted average collapses to the per-dimension value.
-  const clarityValue = Number(score);
+  // preset, yield `1 − score` ambiguity (i.e. the requested `score`).
+  // We use uniform clarity so the weighted average collapses to the
+  // per-dimension value.
+  const clarityValue = 1 - Number(score);
   const clarity = {
     intent: clarityValue,
     outcome: clarityValue,
@@ -139,6 +145,10 @@ test('parseAmbiguitySection parses a JSON code block with clarityBreakdown', () 
 });
 
 test('parseAmbiguitySection recovers clarity values from a breakdown contribution map', () => {
+  // Post-v2.0.0: breakdown stores ambiguity contributions
+  // `w_i · (1 − clarity_i)`. For clarity_i = 0.95 the contributions
+  // are w_i · 0.05 (e.g. intent 0.01, scope 0.0075). The parser must
+  // invert via `clarity = 1 − contribution / w_i`.
   const spec = [
     '# Spec',
     '',
@@ -146,7 +156,7 @@ test('parseAmbiguitySection recovers clarity values from a breakdown contributio
     '',
     '```json',
     JSON.stringify(
-      { kind: 'greenfield', breakdown: { intent: 0.19, outcome: 0.19, scope: 0.1425, constraints: 0.1425, success: 0.1425, context: 0.1425 } },
+      { kind: 'greenfield', breakdown: { intent: 0.01, outcome: 0.01, scope: 0.0075, constraints: 0.0075, success: 0.0075, context: 0.0075 } },
       null,
       2,
     ),
@@ -224,25 +234,31 @@ test('resolveSpecPath throws a clear error when no fixture exists', () => {
 // ── render functions ──────────────────────────────────────────────────────
 
 test('renderHuman emits aligned columns and a breakdown table when --breakdown is set', () => {
+  // Breakdown contributions per AMBIGUITY_SCHEMA_VERSION 2.0.0:
+  // `w_i · (1 − clarity_i)`. For `score = 0.05` with uniform clarity
+  // 0.95, the contributions are w_i · 0.05 (intent 0.01, scope 0.0075).
   const out = renderHuman({
     specPath: '/tmp/spec.md',
     kind: 'greenfield',
     score: 0.05,
-    breakdown: { intent: 0.19, outcome: 0.19, scope: 0.1425, constraints: 0.1425, success: 0.1425, context: 0.1425 },
+    breakdown: { intent: 0.01, outcome: 0.01, scope: 0.0075, constraints: 0.0075, success: 0.0075, context: 0.0075 },
     showBreakdown: true,
   });
   assert.match(out, /bizar ambiguity/);
   assert.match(out, /PASS/);
   assert.match(out, /intent/);
-  assert.match(out, /contribution/);
+  assert.match(out, /ambiguity/);
+  assert.match(out, /clarity/);
 });
 
 test('renderJson produces parseable JSON with all expected fields', () => {
+  // Post-v2.0.0 breakdown contributions for score=0.05 / clarity=0.95:
+  // w_i · 0.05 → intent 0.01, scope 0.0075.
   const json = renderJson({
     specPath: '/tmp/spec.md',
     kind: 'greenfield',
     score: 0.05,
-    breakdown: { intent: 0.19, outcome: 0.19, scope: 0.1425, constraints: 0.1425, success: 0.1425, context: 0.1425 },
+    breakdown: { intent: 0.01, outcome: 0.01, scope: 0.0075, constraints: 0.0075, success: 0.0075, context: 0.0075 },
     showBreakdown: false,
   });
   const parsed = JSON.parse(JSON.stringify(json));
@@ -310,7 +326,10 @@ test('run() --breakdown includes per-dimension output', async () => {
       console.log = origLog;
     }
     const text = captured.join('\n');
-    assert.match(text, /contribution/);
+    // Post-v2.0.0 renderHuman prints an "ambiguity" + "clarity" table
+    // (the breakdown map is now `w_i · (1 − clarity_i)`, low-is-good).
+    assert.match(text, /ambiguity/);
+    assert.match(text, /clarity/);
     assert.match(text, /intent/);
   } finally {
     rmSync(root, { recursive: true, force: true });

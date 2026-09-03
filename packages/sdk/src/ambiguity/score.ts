@@ -2,15 +2,23 @@
  * ambiguity/score.ts — Quantitative ambiguity scoring for Bizar
  * deep-interview and pre-execution gates (F-202, Phase 1 OMX adoption).
  *
- * Inspired by OMX's per-dimension clarity model:
- *   `score = Σ_i (w_i · clarity_i)`
- * where `clarity_i ∈ [0, 1]` and `Σ w_i = 1`.
+ * Inspired by OMX's per-dimension clarity model. The function name
+ * matches its semantics: `computeAmbiguity` returns an *ambiguity*
+ * score in `[0, 1]` where **lower = clearer** (low-is-good). This is
+ * what `config/skills/deep-interview/SKILL.md` reads for the closure
+ * condition `AmbiguityScore ≤ 0.10` and what `bizar ambiguity`'s
+ * `--allow-high` gate uses.
  *
- * The score here is computed strictly from caller-supplied numeric
- * clarity dimensions; we DO NOT call an LLM from inside this module.
+ * Internally we accept per-dimension *clarity* values in `[0, 1]`
+ * (high-is-clear) and compute the ambiguity contribution per
+ * dimension as `w_i · (1 − clarity_i)`. The total is therefore:
+ *   `score = Σ_i (w_i · (1 − clarity_i)) = 1 − Σ_i (w_i · clarity_i)`
+ * which is in `[0, 1]`, low-is-good, and matches the function name.
+ *
  * The split keeps the math deterministic and testable in isolation
  * (no model flakiness in unit tests) while still letting callers
  * source the per-dimension clarity from an upstream Socratic loop.
+ * We do NOT call an LLM from inside this module.
  *
  * Two weight presets are shipped:
  *   - `greenfield` — 6 dimensions, `intent | outcome | scope | constraints | success | context`.
@@ -18,13 +26,20 @@
  * Both weight sets are required to sum to exactly `1.00` (see
  * `scripts/__tests__/ambiguity-weights.test.mjs` for the invariant).
  *
- * Returned `score` is the weighted average of the supplied clarity
- * values and is therefore already in `[0, 1]`. The `breakdown`
- * records the contribution each dimension made so callers can
- * render a "what is still unclear?" table.
+ * Returned `score` is the weighted average of per-dimension
+ * ambiguity, so closure (`score ≤ 0.10`) reads as "≤ 10% ambiguity
+ * remaining". The `breakdown` records each dimension's contribution
+ * to that total so callers can render a "what is still unclear?"
+ * table without redoing the math.
+ *
+ * **Schema note**: AMBIGUITY_SCHEMA_VERSION was bumped 1.0.0 → 2.0.0
+ * on 2026-09-03 to mark the semantic flip from `Σ w_i · clarity_i`
+ * (high-is-clear) to `Σ w_i · (1 − clarity_i)` (low-is-good, true
+ * ambiguity). Consumers that persisted a v1.0.0 score should treat
+ * it as `1 − stored` when reading back.
  */
 
-export const AMBIGUITY_SCHEMA_VERSION = "1.0.0" as const;
+export const AMBIGUITY_SCHEMA_VERSION = "2.0.0" as const;
 
 /** Allowed ambiguity-weight presets. */
 export type AmbiguityKind = "greenfield" | "brownfield";
@@ -43,11 +58,15 @@ export type AmbiguityInput = Readonly<Record<string, number>>;
 
 /** Result of `computeAmbiguity`. */
 export interface AmbiguityScore {
-  /** Weighted score in `[0, 1]`. Higher = clearer. */
+  /** Weighted ambiguity in `[0, 1]`. Lower = clearer. The closure
+   *  gate in `config/skills/deep-interview/SKILL.md` is
+   *  `score ≤ 0.10`. */
   readonly score: number;
-  /** Per-dimension contribution to the score. Keys mirror the
-   *  weight-set keys; values are the per-dimension `w_i · clarity_i`
-   *  contribution in `[0, w_i]`. */
+  /** Per-dimension ambiguity contribution. Keys mirror the
+   *  weight-set keys; values are the per-dimension
+   *  `w_i · (1 − clarity_i)` contribution in `[0, w_i]`. The values
+   *  sum to `score` so callers can render "what is still unclear?"
+   *  by sorting descending without redoing the math. */
   readonly breakdown: Readonly<Record<string, number>>;
   /** Echoes `AMBIGUITY_SCHEMA_VERSION` so consumers can persist a
    *  versioned record alongside the spec artifact. */
@@ -150,7 +169,7 @@ export function computeAmbiguity(
         `computeAmbiguity: dimension "${dim}" must be a finite number in [0, 1] (got ${String(raw)})`,
       );
     }
-    const contribution = weight * raw;
+    const contribution = weight * (1 - raw);
     score += contribution;
     breakdown[dim] = Math.round(contribution * 1e4) / 1e4;
   }

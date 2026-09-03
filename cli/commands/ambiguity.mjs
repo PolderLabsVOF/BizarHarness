@@ -186,12 +186,14 @@ export function parseAmbiguitySection(specText) {
       throw new TypeError('parseAmbiguitySection: JSON block must be an object');
     }
     // Accept either {kind, clarityBreakdown} or a full {kind, score, breakdown}.
+    // As of AMBIGUITY_SCHEMA_VERSION 2.0.0 the `breakdown` map stores
+    // ambiguity contributions `w_i · (1 − clarity_i)` (low-is-good),
+    // not clarity contributions. Recover the raw clarity per dimension
+    // by inverting: `clarity_i = 1 − contribution / w_i`.
     let clarityBreakdown;
     if (parsed.clarityBreakdown && typeof parsed.clarityBreakdown === 'object') {
       clarityBreakdown = parsed.clarityBreakdown;
     } else if (parsed.breakdown && typeof parsed.breakdown === 'object') {
-      // `breakdown` is the contribution map (Σ w_i · c_i). Recover the
-      // raw clarity values by dividing each contribution by its weight.
       clarityBreakdown = {};
       const weights = AMBIGUITY_WEIGHTS[parsed.kind ?? DEFAULT_KIND];
       for (const [dim, contribution] of Object.entries(parsed.breakdown)) {
@@ -201,7 +203,13 @@ export function parseAmbiguitySection(specText) {
             `parseAmbiguitySection: cannot invert breakdown for dimension "${dim}" (missing weight)`,
           );
         }
-        clarityBreakdown[dim] = contribution / w;
+        const recovered = 1 - contribution / w;
+        if (!Number.isFinite(recovered) || recovered < 0 || recovered > 1) {
+          throw new TypeError(
+            `parseAmbiguitySection: breakdown contribution for "${dim}" implies clarity outside [0,1] (got ${recovered})`,
+          );
+        }
+        clarityBreakdown[dim] = recovered;
       }
     } else {
       throw new TypeError(
@@ -333,13 +341,16 @@ export function renderHuman({ specPath, kind, score, breakdown, explicitScore, s
   lines.push(`  closure threshold:   ${CLOSURE_THRESHOLD.toFixed(2)}  (${score <= CLOSURE_THRESHOLD ? 'PASS' : 'ABOVE'})`);
   if (showBreakdown) {
     lines.push('');
-    lines.push(`  ${'dimension'.padEnd(14)}${'weight'.padStart(8)}${'clarity'.padStart(10)}${'contribution'.padStart(15)}`);
+    // Post-v2.0.0: `breakdown[dim]` is the ambiguity contribution
+    // `w_i · (1 − clarity_i)` (low-is-good). Recover the clarity for
+    // display by inverting: `clarity_i = 1 − breakdown[dim] / w_i`.
+    lines.push(`  ${'dimension'.padEnd(14)}${'weight'.padStart(8)}${'ambiguity'.padStart(12)}${'clarity'.padStart(10)}`);
     const weights = AMBIGUITY_WEIGHTS[kind];
     for (const dim of Object.keys(weights)) {
       const w = weights[dim];
-      const c = breakdown[dim] ?? 0;
-      const contrib = (breakdown[dim] ?? 0) * w;
-      lines.push(`  ${dim.padEnd(14)}${fmt(w, 8)}${fmt(c, 10)}${fmt(contrib, 15)}`);
+      const contrib = breakdown[dim] ?? 0;
+      const clarity = w > 0 ? 1 - contrib / w : 0;
+      lines.push(`  ${dim.padEnd(14)}${fmt(w, 8)}${fmt(contrib, 12)}${fmt(clarity, 10)}`);
     }
   }
   lines.push('');

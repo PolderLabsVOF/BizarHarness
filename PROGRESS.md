@@ -364,6 +364,80 @@ EXTENDED (5):
   pivots). Both are reversible; the merge state is fully audit-able
   via the merge-archive tags.
 
+## In Progress - Ambiguity SDK semantic flip (1.0.0 → 2.0.0, 2026-09-03)
+
+### Objective
+
+Resolve a post-integration inconsistency between the SDK and the rest of
+the harness: `computeAmbiguity` returned `Σ w_i · clarity_i` (high-is-clear,
+matching its old v1.0.0 contract) but `config/skills/deep-interview/SKILL.md`
+closure gate, the CLI threshold, and `--allow-high` semantics all read
+`AmbiguityScore ≤ 0.10` as true ambiguity (low-is-good). The function name
+itself promised ambiguity. Flip the SDK to `Σ w_i · (1 − clarity_i)`,
+bump `AMBIGUITY_SCHEMA_VERSION` to `2.0.0`, and update every consumer
+(SDK tests, deep-interview spec tests, CLI parser, CLI renderer, CLI
+test fixtures) so the full pipeline is consistent.
+
+### Pre-change evidence
+
+- `packages/sdk/tests/ambiguity/score.test.ts`: 28/28 pass (flipped).
+- `packages/sdk/tests/specs/deep-interview.test.ts`: 1 failure on the
+  expected-score calculation (used old `Σ w_i · clarity_i` math).
+- `node --test cli/__tests__/ambiguity.test.mjs`: 17/21 pass; 4 failures
+  (`run()` low-score spec, `run() --breakdown`, `binar ambiguity
+  --format json`, plus the breakdown-recovery path in `parseAmbiguitySection`).
+- `make clean-check` "Retained unit tests" gate failed (1 fail) due to
+  the same inconsistency in the SDK deep-interview spec test.
+
+### Implementation
+
+- `packages/sdk/src/ambiguity/score.ts`: docstring rewritten for
+  low-is-good ambiguity; contribution changed from `weight * raw` to
+  `weight * (1 - raw)`; schema version bumped to `"2.0.0"`; inline note
+  documents the 1.0.0 → 2.0.0 semantic flip for downstream readers.
+- `packages/sdk/tests/ambiguity/score.test.ts`: file header rewritten;
+  all boundary tests flipped (all-ones → score 0.00 closure, all-zeros
+  → score 1.00 maximal ambiguity); asymmetric cases recomputed; new
+  closure-condition test asserts `score <= 0.10` iff `clarity_i >= 0.9`.
+- `packages/sdk/tests/specs/deep-interview.test.ts`: expected score
+  math flipped from `Σ w_i · clarity_i` to `Σ w_i · (1 − clarity_i)`.
+- `cli/commands/ambiguity.mjs`: `parseAmbiguitySection` inverts the
+  stored breakdown via `clarity = 1 − contribution / w_i` (with
+  out-of-range guard); `renderHuman` breakdown table columns relabeled
+  to `ambiguity | clarity` (the recovered clarity) instead of the
+  old `clarity | contribution` (which double-multiplied by weight).
+- `cli/__tests__/ambiguity.test.mjs`: `setupFixture` now stores clarity
+  values equal to `1 − score` so recomputation matches the stored
+  score; renderHuman/renderJson fixtures use `w_i · 0.05`-sized
+  contribution values; breakdown-recovery fixture uses small
+  contributions matching `w_i · 0.05`; the `--breakdown` integration
+  test asserts the new column labels.
+
+### Verification
+
+- `npx vitest run packages/sdk/tests/ambiguity/score.test.ts`: 28/28.
+- `npx vitest run packages/sdk/tests/specs/deep-interview.test.ts`:
+  23/23.
+- `node --test cli/__tests__/ambiguity.test.mjs`: 21/21.
+- `node --test scripts/__tests__/ambiguity-weights.test.mjs`: 4/4.
+- `node --test cli/__tests__/spec-list.test.mjs`: passes.
+- `make test`: 583/583 pass (45 test files).
+- `make check`: clean.
+- `make check-arch`: 0 failed.
+- `make verify-removed-surfaces verify-repo-structure clean-check vcr`:
+  5/5, VCR 85/85 = 1.000.
+- `npm run typecheck`: clean.
+
+### Status
+
+- All gates green. WIP=1 invariant preserved (no feature currently
+  `in_progress`; this fix is a one-commit post-integration correction
+  to the F-203 ambiguity surface rather than a new feature).
+- SDK + CLI direction now uniformly low-is-good, matching the SKILL.md
+  closure condition `AmbiguityScore ≤ 0.10` and the function name.
+- Consumer migration note: any persisted v1.0.0 scores should be read
+  back as `1 − stored` (documented inline in `score.ts`).
+
 ## Complete — 10.23.23 patch release (2026-09-03)
 
 ### Objective
