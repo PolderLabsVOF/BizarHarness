@@ -1,5 +1,34 @@
 # Changelog
 
+## [10.23.23] - 2026-09-03
+
+### Fixed
+- **Windows Claude config directory alignment** — `resolveClaudeDir`,
+  `claudeConfigDir`, and the new `~/.config/bizar/...` split now honor
+  `CLAUDE_CONFIG_DIR` first, fall back to `%APPDATA%\Claude` on Windows,
+  and otherwise resolve to `$HOME/.claude`. The pre-existing cross-path
+  config split is documented but intentionally not unified in this patch.
+- **Bound generated model-agent filenames** — `bizar models` now keeps
+  every generated agent definition filename ≤ 160 characters by appending
+  a deterministic 16-character SHA-256 hex suffix to the phonetic
+  expansion of the gateway model ID. The complete gateway ID remains in
+  the generated agent frontmatter (`model:` plus a redundant
+  `gateway-id:` for human readability). This stops the install-time
+  `ENAMETOOLONG` failure seen with the old unbounded NATO-phonetic
+  spellings on filesystems near the 255-byte limit.
+- **Louder non-TTY provider-config warning** — `runInteractiveSetup`
+  now writes a `[BIZAR_PROVIDER_CONFIG_MISSING]` header plus a concrete
+  action line in the non-interactive branch and mirrors both to
+  `process.stderr` when `output` is the real stdout, so CI runners and
+  operator logs cannot silently drop the missing-provider-config signal
+  inside a flood of piped output.
+- **`syncConfiguredModelAgents` failure isolation** — `runProvision`
+  wraps the model-agent sync step in a try/catch that records a
+  structured `{ ok: false, message, error, code }` step result and lets
+  the rest of the install pipeline continue. A `HASH_COLLISION`,
+  `NAME_TOO_LONG`, or any I/O error becomes a clean step failure
+  instead of aborting the installer before `settings.json` is written.
+
 ## [10.23.22] - 2026-09-03
 
 ### Added
