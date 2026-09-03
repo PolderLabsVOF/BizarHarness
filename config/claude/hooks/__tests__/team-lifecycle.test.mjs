@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { handleTeamLifecycle } from '../team-lifecycle.mjs';
 import { selectEventChain } from '../../../../cli/commands/hook.mjs';
 
-test('TaskCompleted is terminal and writes bounded state', (t) => {
+test('TaskCompleted is terminal, writes bounded state, and does not inject a follow-up prompt', (t) => {
   const home = mkdtempSync(join(tmpdir(), 'bizar-team-hooks-'));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   const result = handleTeamLifecycle({
@@ -17,7 +17,7 @@ test('TaskCompleted is terminal and writes bounded state', (t) => {
     task_id: 'task-1',
     subject: 'x'.repeat(1000),
   }, { bizarHome: home });
-  assert.match(result.hookSpecificOutput.additionalContext, /terminal \(completed\)/);
+  assert.deepEqual(result, {});
   const rows = readFileSync(join(home, 'telemetry', 'team-lifecycle.jsonl'), 'utf8').trim().split('\n');
   const record = JSON.parse(rows[0]);
   assert.equal(record.event, 'TaskCompleted');

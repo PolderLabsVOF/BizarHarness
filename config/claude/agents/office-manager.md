@@ -94,8 +94,10 @@ Worktree branches use `wt/<agent_type>-<short-task-id>`.
 - Inspect an idle task after its second idle notification. Stop and reassign a
   task that has no progress/evidence; do not model-cycle it.
 - A `TaskCompleted`, `SubagentStop`, or `<task-notification>` is terminal. Read
-  its `<result>`, mark the worker done/failed, merge queued work, and continue
-  the active objective. Never route a completion notification as a new prompt.
+  its original `<result>` once, mark the worker done/failed, merge queued work,
+  and continue the active objective. Never route a completion notification as
+  a new prompt, send it back to the worker, or replace its deliverable with a
+  later acknowledgement/status reply.
 
 ## Learning and completion
 

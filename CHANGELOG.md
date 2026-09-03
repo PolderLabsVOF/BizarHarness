@@ -1,5 +1,16 @@
 # Changelog
 
+## [10.23.20] - 2026-09-03
+
+### Fixed
+
+- **Terminal result integrity** — lifecycle hooks now persist terminal team
+  state without injecting a second conversational instruction.  Mike consumes
+  the original completed result once and never replaces it with a later
+  acknowledgement or re-dispatches a completed background agent for a summary.
+- **Release metadata** — root package and SDK version metadata now remain in
+  lockstep.
+
 ## [10.23.19] - 2026-09-03
 
 ### Fixed

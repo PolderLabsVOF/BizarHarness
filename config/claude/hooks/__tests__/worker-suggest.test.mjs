@@ -194,7 +194,8 @@ test('worker-suggest: task completion is consumed instead of re-routed', () => {
   assert.equal(status, 0, stderr);
   const context = parseStdout(stdout).hookSpecificOutput.additionalContext;
   assert.match(context, /terminal task update/);
-  assert.match(context, /consume.*<result>/);
+  assert.match(context, /consume.*<result>.*exactly once/i);
+  assert.match(context, /do not send this notification back to the agent/i);
   assert.doesNotMatch(context, /Adaptive Bizar routing|Bizar workers suggest/);
 });
 

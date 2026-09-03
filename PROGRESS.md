@@ -22,6 +22,23 @@ environment leakage from polluting test isolation.
 
 ### GLM 5.3 Flash tier correction (active)
 
+### Terminal subagent-result integrity (active)
+
+Live Claude transcript evidence showed that the MiniMax replacement agents did
+produce their requested infrastructure, firmware, and web reports.  Later
+terminal/liveness notifications elicited short acknowledgements (for example
+"Ready."), and the parent incorrectly treated those acknowledgement turns as
+the task results.  This is an orchestration/result-consumption defect, not a
+GLM Flash or MiniMax capability failure.  Terminal lifecycle hooks must record
+state without adding a second conversational instruction; the coordinator must
+consume the original terminal `<result>` exactly once and must never re-dispatch
+a completed background agent just to obtain a summary.
+
+Verification also exposed stale release metadata left by the earlier 10.23.19
+root-package publish: `packages/sdk/package.json` and `SDK_VERSION` still said
+10.23.13.  Keep the SDK and root package versions aligned before the next
+release gate.
+
 The generic `flash` heuristic incorrectly put `glm/glm-5.3-flash` in the
 budget tier. It is explicitly classified as `high` before the generic match in
 the picker, SDK router, workflow mirror, and failover mirror. Re-running

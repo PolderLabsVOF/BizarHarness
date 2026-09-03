@@ -368,10 +368,7 @@ Background (async, returns immediately):
 
 ### Coordinating multiple background agents
 
-When fanning out several research or exploration tasks, issue multiple `Agent` calls in the **same message** with `run_in_background: true`. Each runs in parallel. Collect results by either:
-
-- Waiting for the user to ask, then re-dispatching sync `Agent` calls that summarize the background work.
-- Reading the background agent's final summary when it completes.
+When fanning out several research or exploration tasks, issue multiple `Agent` calls in the **same message** with `run_in_background: true`. Each runs in parallel. Collect the original final summary/result when the task completes. Do not re-dispatch a completed background agent to summarize its work: that creates a new, context-poor task and its acknowledgement is not a replacement for the original deliverable.
 
 ---
 

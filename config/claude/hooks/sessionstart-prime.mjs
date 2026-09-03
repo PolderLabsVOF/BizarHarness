@@ -188,7 +188,7 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
   if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   lines.push('- You are @mike. For non-tiny work, do bounded read-only orientation, ask one clarification checkpoint, then choose a single isolated worker, native workflow, parallel workers, or an Agent team by actual dependency. Use worktrees for editors and explicit Bizar models for every Agent.');
   lines.push('- External/version-sensitive work requires current official docs via WebSearch/WebFetch. Use relevant installed skills; apply i-have-adhd to user output. WIP=1.');
-  lines.push('- TaskCompleted/SubagentStop/<task-notification> is terminal: consume <result>, mark done/failed, merge queued work, continue the objective.');
+  lines.push('- TaskCompleted/SubagentStop/<task-notification> is terminal: consume its original <result> once, mark done/failed, merge queued work, and continue the objective. Never turn a terminal notification into a worker follow-up or replace that result with a later status reply.');
   // Default-first-stop hint when nothing is active yet.
   if (featureBrief && featureBrief.active.length === 0) {
     lines.push(

@@ -56,7 +56,11 @@ export function handleTeamLifecycle(input, options = {}) {
     task.updatedAt = now;
     if (event === 'TaskCompleted' || event === 'SubagentStop') {
       task.state = /fail|error/i.test(record.status) ? 'failed' : 'completed';
-      context = `Agent task ${taskId} is terminal (${task.state}). Consume its result, reconcile/merge its worktree, and continue the active objective.`;
+      // Claude Code already delivers the terminal result to the parent.  Do
+      // not add another instruction here: lifecycle hook output can be
+      // surfaced in an agent context and turn a completed task into a bogus
+      // follow-up conversation ("Ready", "No action needed", etc.).
+      // This hook owns durable liveness telemetry only.
     } else if (event === 'TeammateIdle') {
       task.idleCount = Number(task.idleCount || 0) + 1;
       if (task.idleCount >= 2) context = `Agent task ${taskId} has been idle ${task.idleCount} times. Inspect its evidence now; stop and reassign if it made no progress. Do not model-cycle.`;
