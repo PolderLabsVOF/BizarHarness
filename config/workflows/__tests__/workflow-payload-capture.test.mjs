@@ -155,7 +155,10 @@ function makeCaptureDispatch(captured, ctx) {
 async function runCapturedWorkflow(file, args, captured, ctx) {
   args = {
     ...(args && typeof args === 'object' ? args : {}),
-    routing: { default: 'provider/default', medium: 'provider/mid', high: 'provider/high' },
+    routing: {
+      default: 'provider/default', medium: 'provider/mid', high: 'provider/high',
+      nativeAliases: { sonnet: 'provider/default', opus: 'provider/mid', haiku: 'provider/high', fable: 'provider/default' },
+    },
   };
   const source = readFileSync(resolve(workflowsDir, file), 'utf8');
   const metaStart = source.search(/export\s+const\s+meta\s*=\s*\{/);

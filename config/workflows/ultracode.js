@@ -21,12 +21,14 @@ const WORKFLOW_DEFAULT_MODEL = typeof WORKFLOW_INPUT.model === 'string'
     : ''
 const routeModel = (risk) => {
   const candidate = WORKFLOW_ROUTING[risk] || WORKFLOW_ROUTING.default || WORKFLOW_DEFAULT_MODEL
-  return typeof candidate === 'string' ? candidate.trim() : ''
+  if (typeof candidate !== 'string') return ''
+  const selected = candidate.trim()
+  return selected
 }
 if (!routeModel('medium') || !routeModel('high')) {
   return {
     status: 'blocked',
-    reason: 'No explicit configured Bizar model routing was supplied. Read the global Bizar model router and retry with args.routing; provider defaults are prohibited.',
+    reason: 'No explicit enabled Bizar model was supplied for workflow routing. Read the global model router and retry with args.routing; provider defaults are prohibited.',
   }
 }
 let WORKFLOW_DISPATCH_SEQUENCE = 0

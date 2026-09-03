@@ -116,6 +116,28 @@ function requiresGatewayModelDiscovery(modelIds) {
   return modelIds.some((id) => !/^(?:claude(?:-|$)|anthropic(?:[./-]|$))/i.test(id));
 }
 
+// Bind Claude Code's four family aliases to the operator's selected gateway
+// IDs for compatibility. They never imply an Anthropic provider selection and
+// do not constrain full-ID native Agent dispatch.
+const NATIVE_AGENT_ALIASES = ['sonnet', 'opus', 'haiku', 'fable'];
+const NATIVE_AGENT_OVERRIDE_KEYS = {
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5',
+  haiku: 'claude-haiku-4-5-20251001',
+  fable: 'claude-fable-5',
+};
+const NATIVE_AGENT_ENV_KEYS = {
+  sonnet: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  haiku: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  fable: 'ANTHROPIC_DEFAULT_FABLE_MODEL',
+};
+
+function nativeAgentAliasTargets(modelIds) {
+  if (modelIds.length === 0) return {};
+  return Object.fromEntries(NATIVE_AGENT_ALIASES.map((alias, index) => [alias, modelIds[index] || modelIds[0]]));
+}
+
 function readSettingsPath() {
   return join(resolveClaudeConfigDir(), 'settings.json');
 }
@@ -217,18 +239,24 @@ function syncOnce() {
   });
 
   const overrideKeys = [
-    'claude-fable-5', 'claude-opus-5', 'claude-sonnet-5',
-    'claude-haiku-4-5-20251001', 'claude-opus-4-8', 'claude-opus-4-7',
+    'claude-sonnet-5', 'claude-opus-5', 'claude-haiku-4-5-20251001', 'claude-fable-5',
+    'claude-opus-4-8', 'claude-opus-4-7',
     'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101',
     'claude-sonnet-4-5-20250929', 'claude-opus-4-1-20250805',
     'claude-opus-4-20250514', 'claude-sonnet-4-20250514',
     'claude-3-7-sonnet-20250219', 'claude-3-5-haiku-20241022',
     'claude-3-5-sonnet-20241022',
   ];
+  const aliasTargets = nativeAgentAliasTargets(liveIds);
   settings.modelPicker = { options };
   settings.modelOverrides = Object.fromEntries(
-    overrideKeys.map((key, index) => [key, liveIds[index % liveIds.length]]),
+    overrideKeys.map((key, index) => {
+      const alias = NATIVE_AGENT_ALIASES.find((candidate) => NATIVE_AGENT_OVERRIDE_KEYS[candidate] === key);
+      return [key, alias ? aliasTargets[alias] : liveIds[index % liveIds.length]];
+    }),
   );
+  settings.env = { ...(settings.env || {}) };
+  for (const alias of NATIVE_AGENT_ALIASES) settings.env[NATIVE_AGENT_ENV_KEYS[alias]] = aliasTargets[alias];
   if (requiresGatewayModelDiscovery(liveIds)) {
     settings.env = {
       ...(settings.env || {}),

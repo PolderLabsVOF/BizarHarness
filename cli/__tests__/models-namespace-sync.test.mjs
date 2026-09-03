@@ -37,9 +37,10 @@ import {
 
 test('custom gateway picks populate standard Claude override keys without constraining direct Agent dispatch', () => {
   const overrides = buildClaudeModelOverrides(['glm/glm-5.3', 'codex/gpt-5.6', 'minimax/MiniMax-M3']);
-  assert.equal(overrides['claude-fable-5'], 'glm/glm-5.3');
+  assert.equal(overrides['claude-sonnet-5'], 'glm/glm-5.3');
   assert.equal(overrides['claude-opus-5'], 'codex/gpt-5.6');
-  assert.equal(overrides['claude-sonnet-5'], 'minimax/MiniMax-M3');
+  assert.equal(overrides['claude-haiku-4-5-20251001'], 'minimax/MiniMax-M3');
+  assert.equal(overrides['claude-fable-5'], 'glm/glm-5.3');
 });
 
 const CWD = process.cwd();
@@ -201,7 +202,13 @@ test('applyModelOverrides: switches managed context tokens and clears them when 
     applyModelOverrides({ settingsJsonPath: settingsPath, pickedIds: ['provider/unknown'], profiles });
     back = JSON.parse(readFileSync(settingsPath, 'utf8'));
     assert.equal(back.model, 'provider/unknown');
-    assert.deepEqual(back.env, { CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1' });
+    assert.deepEqual(back.env, {
+      CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: '1',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'provider/unknown',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'provider/unknown',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'provider/unknown',
+      ANTHROPIC_DEFAULT_FABLE_MODEL: 'provider/unknown',
+    });
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

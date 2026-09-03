@@ -44,7 +44,15 @@ test('Agent model guard accepts a synchronized native alias for its enabled cust
   }, { registry, modelOverrides: { 'claude-sonnet-5': 'glm/glm-5.3' } }), {});
 });
 
-test('Agent model guard accepts a raw custom model selected through bizar models', async () => {
+test('Agent model guard accepts fable when it maps to an enabled gateway selection', async () => {
+  const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['ark/deepseek-v4-flash'] } };
+  assert.deepEqual(await guardAgentModel({
+    ...input,
+    tool_input: { ...input.tool_input, model: 'fable', additionalContext: { bizarConfiguredModel: 'ark/deepseek-v4-flash' } },
+  }, { registry, modelOverrides: { 'claude-fable-5': 'ark/deepseek-v4-flash' } }), {});
+});
+
+test('Agent model guard accepts a full custom model selected through bizar models', async () => {
   const registry = { tiers: { default: { models: [] } }, userSelected: { models: ['codex/gpt-5.6-sol'] } };
   assert.deepEqual(await guardAgentModel({
     ...input,
@@ -94,7 +102,7 @@ test('Agent model guard fails closed when the global router cannot be loaded', a
   }, { routerPath: '/definitely/missing/model-router.json' })), 'deny');
 });
 
-test('Agent model guard accepts a userSelected model without live-discovery', async () => {
+test('Agent model guard accepts full user-selected IDs when live discovery is unavailable', async () => {
   // Build a synthetic registry where the only valid model comes from
   // `userSelected` — the live-discovery list is empty.
   const registry = {
@@ -253,7 +261,7 @@ test('Agent model guard fails closed when global settings.json cannot be read an
 
 // ─── F-185 / IMP-019 health-aware failover contract ──────────────────────
 
-test('Agent model guard accepts primary + user-selected fallback when routingDecisionId is set', async () => {
+test('Agent model guard accepts a raw primary when a routingDecisionId and fallback are present', async () => {
   // Two user-selected models; the orchestrator pins a primary and a
   // pre-computed failover. The guard must accept BOTH without re-probing
   // the gateway, since `pickFailover` already validated the failover.
@@ -310,10 +318,9 @@ test('Agent model guard still requires primary to be in the pool when routingDec
   assert.equal(decision(blocked), 'deny');
 });
 
-test('Agent model guard ignores additionalContext.fallback when routingDecisionId is missing', async () => {
+test('Agent model guard accepts a selected raw primary when fallback has no routingDecisionId', async () => {
   // The contract is both-or-neither. Without routingDecisionId the
-  // contract is not active and the existing flow (no live probe for
-  // userSelected) applies.
+  // contract is not active and a selected primary remains valid.
   const registry = {
     tiers: { premium: { models: ['tier/never'], purpose: 'p', effort: 'high' } },
     userSelected: { models: ['claude-minimax/MiniMax-M3', 'claude-qwen/qwen3.8-max'] },
@@ -342,7 +349,7 @@ test('Agent model guard denies disabled-provider overrides', async () => {
   }, { registry });
   assert.equal(decision(out), 'deny');
   assert.match(out.hookSpecificOutput?.permissionDecisionReason || '', /disabledProviders/);
-  // A non-disabled user pick still passes.
+  // A non-disabled raw user pick is valid for native Agent dispatch.
   const out2 = await guardAgentModel({
     ...input,
     tool_input: { ...input.tool_input, model: 'claude-minimax/MiniMax-M3' },

@@ -1455,7 +1455,7 @@
         "feature_list.json"
       ],
       "created": "2026-09-02",
-  "evidence": "In progress. 2026-09-03 custom-model dispatch correction: `bizar models` remains the sole global user-selected source, and workflows, Agent teams, and direct Agent calls pass the exact selected raw gateway model ID directly to Claude Code. The guard permits only enabled userSelected IDs and rejects omitted/inherited or out-of-pool models. Native aliases are backward-compatible only and are not required for dispatch. The workflow helper reads the same global CLAUDE_CONFIG_DIR/model-router.json path from any cwd. Focused CLI/workflow/guard/model-sync/guidance coverage 126/126, make e2e 13/13, make check, diff hygiene, and direct validation of the operator's codex/gpt-5.6-sol global selection pass."
+      "evidence": "In progress. 2026-09-03 native-Agent model correction: current Claude Code documentation and v2.1.259 support full model IDs in Agent calls, so Bizar dispatches each enabled global user-selected gateway ID directly and validates it in the guard. `bizar models` also maps the first four selections to sonnet, opus, haiku, and fable through ANTHROPIC_DEFAULT_* settings as optional compatibility aliases only; those mappings never enable Anthropic or limit the full selected pool. The exact-model bizar worker process dispatcher remains available for an independently launched worktree process. Focused CLI/workflow/guard/model-sync/worker coverage 101/101; SDK 513/513; make check; and make e2e 13/13 pass."
     }
   ],
   "vcr": {

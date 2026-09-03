@@ -17,7 +17,7 @@ default for meaningful work.
 | Shape | Signals | Execution |
 |---|---|---|
 | Tiny direct | one obvious copy, typo, comment, whitespace, or single style-token edit; one target; no behavior or test change | inspect, make the micro-edit, run the smallest proving check yourself |
-| Single isolated worker | one bounded implementation after scope is clear | dispatch one worktree-isolated Agent with an explicit Bizar model; integrate and verify |
+| Single isolated worker | one bounded implementation after scope is clear | dispatch one worktree-isolated native Agent with its explicit Bizar model; use an exact-model process worker only when a separate Claude process is useful; integrate and verify |
 | Native workflow | repeatable diagnosis, research, review, or an implementation needing visible phase barriers | invoke the matching Bizar workflow with explicit Bizar routing |
 | Agent team | three or more sustained, independent roles need bounded cross-talk or coordinated handoff | use the native Agent-team capability; writers use worktrees and explicit Bizar models |
 | Parallel agents | two disjoint writable scopes with no cross-talk needed | dispatch concurrently with explicit models and worktree isolation |
@@ -34,15 +34,20 @@ version-sensitive claims. Inspect installed skills before hard or specialized
 work; if stuck with no match, search skills.sh and review the candidate before
 proposing installation.
 
-Before every Workflow, Agent, or Agent-team call, read the global Bizar model router and construct a
-small `args.routing` object whose `default`, `medium`, and `high` values are
-explicit enabled configured model IDs (user picks win; otherwise use enabled
-tier candidates). Include the user's task in the same args object under the
-workflow's documented task field. Pass the exact enabled raw gateway ID chosen
-from `bizar models` as `model`; never substitute a Claude family alias. You may
-include that selection in `additionalContext.bizarConfiguredModel` for audit
-telemetry. If no configured model exists, stop and ask the operator to run
-`bizar models`; never retry by omitting `model` or using `inherit`.
+Before every Workflow, Agent, or Agent-team call, read the global Bizar model
+router and construct a small `args.routing` object whose `default`, `medium`,
+and `high` values are explicit enabled configured gateway IDs. Include the
+user's task in the same args object under the workflow's documented task field.
+Pass the chosen full gateway ID directly in every native Agent `model` field;
+current Claude Code supports full model IDs there. Include that same ID in
+`additionalContext.bizarConfiguredModel` for audit telemetry. Never use
+`inherit` or an unconfigured provider default. `bizar models` additionally
+maintains `sonnet`, `opus`, `haiku`, and `fable` aliases as compatibility
+shortcuts, but aliases must not limit dispatch to four selected models. The
+exact-model `bizar worker` command remains available where a separate top-level
+Claude process is useful, not as a fallback for normal native dispatch. If no
+configured model exists, stop and ask the operator to run `bizar models`; never
+omit model selection or cycle providers.
 
 Invoke the selected workflow by `name` first. If Claude reports that the Bizar
 name is unavailable, resolve the active Claude config directory and retry once
@@ -55,14 +60,16 @@ implementation around a broken workflow installation.
 
 ## Models
 
-For every Agent call, select the cheapest sufficient enabled configured model
+For every dispatch, select the cheapest sufficient enabled configured model
 from the global Bizar router. User-selected models take precedence over tier
-candidates; `disabledProviders` excludes both. Pass that raw selected custom
-ID directly; the guard verifies it is in the enabled selected pool. If no
-enabled configured candidate exists, stop with the configuration error. Never
-let Claude choose an unconfigured default, inherit the session model, or retry
-by cycling models, providers, or tiers. A single configured transport failover
-is allowed only when the router explicitly supplies it.
+candidates; `disabledProviders` excludes both. Native aliases are transport
+labels bound by `bizar models`, not Anthropic selections. Use the full selected
+model ID directly for native Agents and teams; every enabled selection is
+eligible. Use `bizar worker` only when a separately launched process worktree
+is useful. If no enabled configured candidate exists, stop with the
+configuration error. Never let Claude choose an unconfigured default, inherit
+the session model, use an unmapped alias,
+or retry by cycling models, providers, or tiers.
 
 ## Worktree Discipline and integration
 

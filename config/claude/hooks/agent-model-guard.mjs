@@ -169,15 +169,26 @@ const NATIVE_AGENT_TRANSPORT_KEYS = Object.freeze({
   sonnet: 'claude-sonnet-5',
   opus: 'claude-opus-5',
   haiku: 'claude-haiku-4-5-20251001',
+  fable: 'claude-fable-5',
+});
+
+const NATIVE_AGENT_TRANSPORT_ENV_KEYS = Object.freeze({
+  sonnet: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  haiku: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  fable: 'ANTHROPIC_DEFAULT_FABLE_MODEL',
 });
 
 function readTransportTarget(alias, options = {}) {
   const key = NATIVE_AGENT_TRANSPORT_KEYS[alias];
   if (!key) return '';
-  const overrides = options.modelOverrides || (() => {
+  const settings = options.settings || (options.modelOverrides ? null : (() => {
     const settingsPath = options.settingsPath || join(resolveClaudeConfigDir(), 'settings.json');
-    try { return JSON.parse(readFileSync(settingsPath, 'utf8'))?.modelOverrides; } catch { return null; }
-  })();
+    try { return JSON.parse(readFileSync(settingsPath, 'utf8')); } catch { return null; }
+  })());
+  const envTarget = settings?.env?.[NATIVE_AGENT_TRANSPORT_ENV_KEYS[alias]];
+  if (typeof envTarget === 'string' && envTarget.trim()) return envTarget.trim();
+  const overrides = options.modelOverrides || settings?.modelOverrides;
   return typeof overrides?.[key] === 'string' ? overrides[key].trim() : '';
 }
 
@@ -231,6 +242,13 @@ export async function guardAgentModel(input, options = {}) {
     if (!userPicks.has(transportTarget)) {
       return deny(`Bizar Agent dispatch blocked: native alias ${requested} does not map to an enabled Bizar selection. Re-run \`bizar models\` and restart Claude Code.`);
     }
+    return {};
+  }
+
+  // Claude Code accepts full model IDs for native Agent calls. A model picked
+  // through `bizar models` is therefore valid directly; do not collapse every
+  // user selection into the four family aliases.
+  if (userPicks.has(requested) && !hasFailoverContract) {
     return {};
   }
 

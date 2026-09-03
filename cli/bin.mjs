@@ -129,6 +129,7 @@ function showHelp() {
     workflow <subcommand>  Session-bound autopilot workflow state
     hook <name>            Run a portable Claude Code hook
     worktree-merge <branch>  Merge a feature branch with archive tag (no work lost)
+    worker <subcommand>      Run an exact-model Claude process worker in a worktree
     models                 Configure the global model picker and Models.dev metadata
     evidence <subcommand>  Inspect model-routing evidence
     improve <subcommand>   Propose and verify bounded self-edits
@@ -611,6 +612,14 @@ async function main() {
     case 'worktree-merge': {
       await import('./commands/worktree-merge.mjs');
       return;
+    }
+
+    case 'worker': {
+      const mod = await importCommand('worker');
+      if (!mod) { process.exit(EXIT_ERROR); return; }
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) process.exit(EXIT_USAGE);
+      break;
     }
 
     case 'explain-run': {

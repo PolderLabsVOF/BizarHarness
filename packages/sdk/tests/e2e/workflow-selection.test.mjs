@@ -98,7 +98,10 @@ function buildStub(label) {
 async function runCapturedWorkflow(file, args, harness) {
   args = {
     ...(args && typeof args === 'object' ? args : {}),
-    routing: { default: 'provider/cheap', medium: 'provider/cheap', high: 'provider/strong' },
+    routing: {
+      default: 'provider/cheap', medium: 'provider/cheap', high: 'provider/strong',
+      nativeAliases: { sonnet: 'provider/cheap', opus: 'provider/strong', haiku: 'provider/cheap', fable: 'provider/strong' },
+    },
   };
   const source = readFileSync(resolve(workflowsDir, file), 'utf8');
   const metaStart = source.search(/export\s+const\s+meta\s*=\s*\{/);
@@ -141,7 +144,9 @@ async function runCapturedWorkflow(file, args, harness) {
         history: h.ctx.history,
         runId: h.ctx.runId,
       });
-      const augmented = dispatch.augmentPayload(opts, decision, agentName);
+      const augmented = dispatch.augmentPayload(opts, decision, agentName, {
+        selectedProfiles: h.profiles,
+      });
       // Record via the harness so the agent-tool stub captures it and
       // the evidence store sees the row.
       const result = await h.dispatch({

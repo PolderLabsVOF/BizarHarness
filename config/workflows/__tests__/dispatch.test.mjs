@@ -192,7 +192,7 @@ test('dispatchAgent: with selectedProfiles + risk=high -> additionalContext.biza
     FIXTURE_CONTEXT,
   );
   assert.ok(capturedOpts, 'agentFn must be invoked');
-  assert.equal(capturedOpts.model, 'provider/strong', 'selected custom gateway ID is passed directly to native Agent');
+  assert.equal(capturedOpts.model, 'provider/strong', 'native Agent receives the selected full gateway ID');
   assert.equal(capturedOpts.additionalContext?.bizarConfiguredModel, 'provider/strong');
   assert.ok(UUID_RE.test(capturedOpts.routingDecisionId));
   assert.equal(capturedOpts.tier, 'high');
@@ -367,7 +367,7 @@ test('dispatch: captured payloads from a synthetic dispatch contain model + rout
 /*          augmentPayload: F-201 transport-compatibility shape                */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-test('dispatch.augmentPayload: passes the audited Bizar selection directly', () => {
+test('dispatch.augmentPayload: passes the audited Bizar selection as a full native model ID', () => {
   const decision = {
     modelId: 'claude-qwen/qwen3.8-max',
     routingDecisionId: 'r-2026-09-02-001',
@@ -375,7 +375,7 @@ test('dispatch.augmentPayload: passes the audited Bizar selection directly', () 
     reason: 'strongest',
     fallbackChain: [],
   };
-  const payload = dispatch.augmentPayload({ role: 'generic', risk: 'low' }, decision, 'mike');
+  const payload = dispatch.augmentPayload({ role: 'generic', risk: 'low' }, decision, 'mike', { selectedProfiles: [{ id: 'claude-qwen/qwen3.8-max' }] });
   assert.equal(payload.model, 'claude-qwen/qwen3.8-max');
   assert.equal(payload.additionalContext?.bizarConfiguredModel, 'claude-qwen/qwen3.8-max');
   assert.equal(payload.routingDecisionId, 'r-2026-09-02-001');
@@ -389,19 +389,18 @@ test('dispatch.augmentPayload: preserves caller-provided additionalContext and m
     { additionalContext: { existing: 'value', otherKey: 42 } },
     decision,
     'todd',
+    { selectedProfiles: [{ id: 'provider/x' }] },
   );
   assert.equal(payload.additionalContext.existing, 'value');
   assert.equal(payload.additionalContext.otherKey, 42);
   assert.equal(payload.additionalContext.bizarConfiguredModel, 'provider/x');
 });
 
-test('dispatch.augmentPayload: null decision.modelId renders as null additionalContext value, not omitted', () => {
-  // computeDecision() throws when modelId is missing, but augmentPayload
-  // is the lower-level shape — it must tolerate null and produce a
-  // deterministic additionalContext value the guard can match against.
-  const payload = dispatch.augmentPayload({}, { modelId: null, routingDecisionId: 'r1', tier: 'x', reason: 'r', fallbackChain: [] }, 'a');
-  assert.equal(payload.model, null);
-  assert.equal(payload.additionalContext?.bizarConfiguredModel, null);
+test('dispatch.augmentPayload: accepts an exact model beyond four alias slots', () => {
+  const payload = dispatch.augmentPayload({}, { modelId: 'provider/five', routingDecisionId: 'r1', tier: 'x', reason: 'r', fallbackChain: [] }, 'a', {
+    selectedProfiles: [{ id: 'provider/one' }, { id: 'provider/two' }, { id: 'provider/three' }, { id: 'provider/four' }, { id: 'provider/five' }],
+  });
+  assert.equal(payload.model, 'provider/five');
 });
 
 /* ────────────────────────────────────────────────────────────────────────── */

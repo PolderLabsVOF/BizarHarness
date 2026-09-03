@@ -991,6 +991,7 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
   // must be keys; configured gateway aliases are values. This also suppresses
   // print-mode `[claude-code:unrecognized_model]` diagnostics for Agent SDK calls.
   settings.modelOverrides = buildClaudeModelOverrides(synced);
+  const nativeAgentAliases = applyNativeAgentAliasTargets(settings, synced);
   if (requiresGatewayModelDiscovery(synced)) {
     settings.env = {
       ...(settings.env || {}),
@@ -1020,6 +1021,7 @@ export function applyModelOverrides({ settingsJsonPath, pickedIds, liveIds = [],
     syncedIds: synced,
     skippedStale: skipped,
     skippedDisabled,
+    nativeAgentAliases,
     settingsPath: path,
   };
 }
@@ -1042,9 +1044,8 @@ export function configuredEnabledModels(router) {
 }
 
 export const CLAUDE_MODEL_OVERRIDE_KEYS = Object.freeze([
-  'claude-fable-5',
-  'claude-opus-5',
   'claude-sonnet-5',
+  'claude-opus-5',
   'claude-haiku-4-5-20251001',
   'claude-opus-4-8',
   'claude-opus-4-7',
@@ -1060,13 +1061,61 @@ export const CLAUDE_MODEL_OVERRIDE_KEYS = Object.freeze([
   'claude-3-5-sonnet-20241022',
 ]);
 
+// Claude Code's native Agent tool accepts these transport labels in the
+// installed runtime. They are labels only: Bizar binds them to the operator's
+// gateway IDs below; they never select an Anthropic provider by themselves.
+export const NATIVE_AGENT_ALIASES = Object.freeze(['sonnet', 'opus', 'haiku', 'fable']);
+
+const NATIVE_AGENT_OVERRIDE_KEYS = Object.freeze({
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5',
+  haiku: 'claude-haiku-4-5-20251001',
+  fable: 'claude-fable-5',
+});
+
+export function buildNativeAgentAliasTargets(modelIds) {
+  const unique = [...new Set((Array.isArray(modelIds) ? modelIds : [])
+    .filter((id) => typeof id === 'string' && id.trim())
+    .map((id) => id.trim()))];
+  if (unique.length === 0) return {};
+  return Object.fromEntries(NATIVE_AGENT_ALIASES.map((alias, index) => [
+    alias,
+    unique[index] || unique[0],
+  ]));
+}
+
+export function applyNativeAgentAliasTargets(settings, modelIds) {
+  const targets = buildNativeAgentAliasTargets(modelIds);
+  const env = { ...(settings.env || {}) };
+  const envKeys = {
+    sonnet: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+    opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+    haiku: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+    fable: 'ANTHROPIC_DEFAULT_FABLE_MODEL',
+  };
+  for (const alias of NATIVE_AGENT_ALIASES) {
+    const envKey = envKeys[alias];
+    if (targets[alias]) env[envKey] = targets[alias];
+    else delete env[envKey];
+  }
+  settings.env = env;
+  return targets;
+}
+
 export function buildClaudeModelOverrides(modelIds) {
   const unique = [...new Set((Array.isArray(modelIds) ? modelIds : [])
     .filter((id) => typeof id === 'string' && id.trim())
     .map((id) => id.trim()))];
   if (unique.length === 0) return {};
-  return Object.fromEntries(CLAUDE_MODEL_OVERRIDE_KEYS
-    .map((key, index) => [key, unique[index % unique.length]]));
+  const targets = buildNativeAgentAliasTargets(unique);
+  const nativeEntries = NATIVE_AGENT_ALIASES.map((alias) => [
+    NATIVE_AGENT_OVERRIDE_KEYS[alias],
+    targets[alias],
+  ]);
+  const remaining = CLAUDE_MODEL_OVERRIDE_KEYS
+    .filter((key) => !Object.values(NATIVE_AGENT_OVERRIDE_KEYS).includes(key))
+    .map((key, index) => [key, unique[index % unique.length]]);
+  return Object.fromEntries([...nativeEntries, ...remaining]);
 }
 
 /** Custom gateway IDs must be discoverable to Claude's SDK/subagent path. */

@@ -217,7 +217,10 @@ async function runWorkflow(file, args) {
   const bindings = await resolveImports(imports);
   const routedArgs = {
     ...(args && typeof args === 'object' ? args : {}),
-    routing: { default: 'provider/default', medium: 'provider/mid', high: 'provider/high' },
+    routing: {
+      default: 'provider/default', medium: 'provider/mid', high: 'provider/high',
+      nativeAliases: { sonnet: 'provider/default', opus: 'provider/mid', haiku: 'provider/high', fable: 'provider/default' },
+    },
   };
   const runtime = makeRuntime(routedArgs);
   const fn = new Function(

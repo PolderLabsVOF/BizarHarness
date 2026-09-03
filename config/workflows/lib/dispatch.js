@@ -796,11 +796,12 @@ export function classifyDispatchOutcome(result, error, startMs) {
 }
 
 /**
- * Build the augmented agent-call payload. The native Agent model field cannot
- * carry selected gateway IDs directly. The guard validates that the raw ID is
- * an enabled Bizar selection before the native Agent tool sees it.
+ * Build the augmented native-Agent payload. Claude Code supports an explicit
+ * full model ID in an Agent invocation; use the selected gateway ID directly
+ * so every configured selection is usable by native agents and teams. The
+ * transport aliases remain a compatibility option for callers that need them.
  */
-export function augmentPayload(opts, decision, agentName) {
+export function augmentPayload(opts, decision, agentName, context = {}) {
   return {
     ...opts,
     model: decision.modelId,
@@ -858,13 +859,14 @@ export async function dispatchAgent(agentFn, agentName, prompt, opts = {}, conte
   if (!agentName || typeof agentName !== 'string') {
     throw new TypeError('dispatchAgent requires a non-empty agentName');
   }
-  const decision = computeDecision(agentName, prompt, opts, context);
+  const ctx = context ?? loadDispatchContext();
+  const decision = computeDecision(agentName, prompt, opts, ctx);
   if (!decision.modelId) {
     throw new ModelRoutingError(
       'No enabled configured model is available for this Agent dispatch. Configure a model tier or user selection with `bizar models`; refusing to inherit an unconfigured provider default.',
     );
   }
-  const augmented = augmentPayload(opts, decision, agentName);
+  const augmented = augmentPayload(opts, decision, agentName, ctx);
 
   // F-191 / IMP-018 audit trail — persist the decision before invoking
   // the agent. Best-effort: telemetry failures MUST NOT abort the

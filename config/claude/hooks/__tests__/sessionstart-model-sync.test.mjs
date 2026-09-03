@@ -131,9 +131,14 @@ test('model-sync: reapplies modelPicker + modelOverrides + resets any unconfigur
 
     // Every recognized Claude alias is redirected into the configured pool.
     assert.equal(Object.keys(after.modelOverrides).length, 16);
-    assert.equal(after.modelOverrides['claude-fable-5'], 'codex/gpt-5.6-sol');
+    assert.equal(after.modelOverrides['claude-sonnet-5'], 'codex/gpt-5.6-sol');
     assert.equal(after.modelOverrides['claude-opus-5'], 'minimax/MiniMax-M3');
-    assert.equal(after.modelOverrides['claude-sonnet-5'], 'qct/qwen3.8-max-preview');
+    assert.equal(after.modelOverrides['claude-haiku-4-5-20251001'], 'qct/qwen3.8-max-preview');
+    assert.equal(after.modelOverrides['claude-fable-5'], 'codex/gpt-5.6-sol');
+    assert.equal(after.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'codex/gpt-5.6-sol');
+    assert.equal(after.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'minimax/MiniMax-M3');
+    assert.equal(after.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'qct/qwen3.8-max-preview');
+    assert.equal(after.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'codex/gpt-5.6-sol');
     assert.ok(Object.values(after.modelOverrides).every((id) => [
       'codex/gpt-5.6-sol', 'minimax/MiniMax-M3', 'qct/qwen3.8-max-preview',
     ].includes(id)));

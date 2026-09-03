@@ -1,5 +1,26 @@
 # Changelog
 
+## [10.23.15] - 2026-09-03
+
+### Fixed
+
+- **Native Agent dispatch** — Bizar passes every selected custom gateway ID
+  directly into Claude Code's native `Agent` model field. `bizar models`
+  additionally binds the first four enabled global selections to the valid
+  `sonnet`, `opus`, `haiku`, and `fable` transport aliases through
+  `ANTHROPIC_DEFAULT_*_MODEL`. These are transport labels: Fable maps to the
+  fourth configured gateway selection and never enables Anthropic; aliases are
+  compatibility shortcuts, not a four-model dispatch limit.
+- **Every selected model remains usable** — native Agents and teams receive
+  the exact selected ID. `bizar worker start --model <id>
+  --task <task>` launches a top-level Claude process in an isolated `wt/`
+  worktree with the literal selected gateway ID. This avoids global settings
+  races and supports model-specific parallel work beyond the four native
+  Agent slots.
+- **Accurate failure handling** — a raw ID in a native Agent call is rejected
+  before dispatch with exact-worker guidance, instead of yielding a misleading
+  zero-tool completed agent.
+
 ## [10.23.14] - 2026-09-03
 
 ### Fixed

@@ -18,17 +18,46 @@ registry), `merge-settings.test.mjs` (router path + env cleanup). The
 must be deleted from the test subprocess environment to prevent operator-shell
 environment leakage from polluting test isolation.
 
-### F-201 transport compatibility
+### F-201 native Agent transport correction (active)
 
-Corrected 2026-09-03: current Claude Code gateway configuration passes an
-explicit custom `model` value directly to the endpoint. Bizar therefore must
-not reduce the operator's `bizar models` selection to Claude-family aliases.
-Workflows, teams, and direct Agent calls now pass the exact selected raw model
-ID; the guard validates that it is an enabled `userSelected` model and refuses
-omitted/inherited or out-of-pool values. Native aliases remain accepted only as
-backward-compatible mappings, never as Bizar's required dispatch mechanism.
-This preserves every configured custom model for subagent dispatch and keeps
-the Anthropic provider opt-out intact.
+Corrected again on 2026-09-03 after inspecting the operator's actual Claude
+Code transcript: its native `Agent` tool schema rejects raw gateway IDs and
+accepts only `sonnet`, `opus`, `haiku`, or `fable` in `model`. The previous
+raw-ID transport repair therefore caused every dispatched custom-model agent to
+finish at zero tools with an `InputValidationError`. Current Claude Code 2.1.259
+documentation confirms full IDs are supported for native Agent calls, so Bizar
+must pass the selected full gateway ID directly and retain aliases only as a
+compatibility feature. It dynamically binds each alias in the
+global `~/.claude/settings.json` to enabled models from `bizar models` via
+`ANTHROPIC_DEFAULT_{SONNET,OPUS,HAIKU,FABLE}_MODEL`. These labels are native API
+transport selectors, not Anthropic model selections; their targets remain the
+operator's selected gateway IDs. The guard and every dispatch path must refuse
+raw IDs for the native Agent call and verify the alias target against the
+global user-selected pool. Model picker and generic overrides continue to
+expose every enabled selected gateway model; the native Agent API itself has
+four alias slots, but aliases must not constrain the full selected pool or
+prevent native parallel Agent dispatch.
+
+Implemented the direct dispatch path. `bizar models` writes the first four
+enabled global selections into `ANTHROPIC_DEFAULT_SONNET_MODEL`,
+`ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`, and
+`ANTHROPIC_DEFAULT_FABLE_MODEL`, and keeps their matching override keys aligned.
+Fable is a native transport label only; it maps to the fourth configured
+gateway selection and never enables Anthropic. Native workflows and teams emit
+the selected raw gateway IDs directly, with the same ID as audit context;
+aliases are compatibility shortcuts only. `bizar worker start --model <selected-id> --task <task>` creates a
+`wt/` worktree and launches an isolated top-level Claude process with the
+literal selected model, making every selected model usable without global
+settings races. Fresh focused coverage is 101/101; SDK 513/513; `make check`;
+and `make e2e` 13/13 pass.
+
+Fresh 2026-09-03 evidence after the full-ID correction: Claude Code 2.1.259
+and the current official subagent documentation both confirm a full model ID is
+valid in a per-invocation Agent `model` field. Focused picker, alias, guard,
+workflow, and worker tests pass 134/134; `make check` is clean; and `make e2e`
+passes 13/13. The guard accepts any enabled global user selection directly,
+still denies disabled or out-of-pool IDs, and also verifies the generated
+`fable` alias against its mapped fourth selection.
 
 Fresh evidence: focused model/router/guard/workflow coverage 110/110; all hook
 tests 294/294; `make test` (SDK 513/513 plus retained Node/harness suite),
