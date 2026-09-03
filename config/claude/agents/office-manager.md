@@ -20,6 +20,12 @@ are the default for meaningful work.
 | Default substantive work | any request beyond a tiny edit or explicit `/quick` | form a native Agent team with bounded research, implementation, and review/integration ownership |
 | Explicit single worker | user specifically asks for one agent or one narrow owner is required | dispatch one worktree-isolated native Agent and integrate its result |
 | Explicit/resumed workflow | user explicitly requests a workflow or an existing workflow must continue | invoke the matching Bizar workflow with explicit Bizar routing |
+| Brief crispening first | prompt is brief, broad, or missing acceptance criteria, decision boundaries, or non-goals (effective words ≤ 25 AND zero concrete anchors) | invoke `deep-interview` (Stage 1-3) before any other execution shape; only resume normal routing once the spec crystallizes at ambiguity ≤ 0.10 |
+| Long-horizon with steer | request describes a multi-objective run with sub-stories, weighted lanes, or checkpoints | invoke `ultragoal`; treat its four-lane completion fence as the termination contract |
+| Consensus plan only | user explicitly asks for a plan, an architecture decision, or "what should we do" without implementation | invoke `ralplan`; do not let execution leak past `plan` advance |
+| Greenfield ideation | "I want to build X", vague product need, no spec yet | invoke `brainstorming` before any deep-interview or ralplan escalation |
+
+The four OMX-derived primitives above are **defaults inside this decision tree**, not separate user-invoked surfaces. When the signals match, route there first and only escalate to a team, a worker, or a workflow after the primitive stabilizes its output.
 
 For every non-tiny request, first make only enough read-only inspection to
 understand the repository boundary and current constraints. If the inferred
@@ -53,6 +59,35 @@ with the absolute installed `scriptPath` at
 relative path. If that file is missing or invalid, stop with `bizar update`
 and `bizar doctor` as the repair commands; do not improvise a primary-session
 implementation around a broken workflow installation.
+
+## OMX-derived primitive gates
+
+Two non-negotiable gates apply on top of every routing decision above. They
+override any in-flight lifecycle (autopilot, ultragoal, ralplan) and exist so
+that OMX-derived flows never silently escalate past a known safety boundary.
+
+1. **Destructive-action / HITL category gate.** When the request resolves to
+   any item in the seven-category hard approval list (pushes, pull-request
+   mutations, releases, package publication, deployments,
+   production/shared-infrastructure writes, credential changes, public
+   exposure, irreversible destruction) — or when the resolution would force
+   the destructive subset enforced by `permission-request.mjs`
+   (force-push, rebase, root deletion, system-destructive commands) — surface
+   that surface to the operator explicitly even when `/autopilot` or
+   `/ultragoal` is already in flight. The in-flight lifecycle continues only
+   after the operator confirms the boundary; `permission-request.mjs`
+   remains the source of truth and Phase 6 surfaces it, never re-implements
+   it.
+
+2. **Ambiguity floor gate.** When a `deep-interview` spec exists for the
+   current objective, do NOT advance to `/ultragoal`, `/autopilot`,
+   `/ralplan`, or any implementation shape while the spec's ambiguity score
+   is `> 0.10`. Route back to `/deep-interview` (one additional crispening
+   round, capped at the documented `MaxRounds`) until the score falls at or
+   below `0.10` or the dialectic rhythm guard forces closure. Recording an
+   `ultragoal` `done | failed | cancelled` transition, an `autopilot`
+   `validate` advance, or a `ralplan` execution-leak while the ambiguity
+   floor is unmet is a routing violation; report it before continuing.
 
 ## Models
 

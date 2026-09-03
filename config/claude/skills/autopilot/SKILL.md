@@ -57,6 +57,32 @@ Run the stages in order:
 - If cancelled, invoke the `cancel` skill; do not remove state by hand.
 - If a conflict reports a newer revision or different stage, stop the stale write, fetch status, and continue from current state.
 
+## Phase 6 cross-reference (OMX-derived primitives)
+
+The four primitives below pivot the operator to a sibling skill when the
+current task shape does not match `/autopilot`'s lifecycle. They are
+informational — `/autopilot` itself continues unchanged — and they are not
+invoked from the autopilot lifecycle. The office-manager (`@mike`) and the
+`worker-suggest` hook surface them as routing pivots; the seven-category
+HITL floor in `permission-request.mjs` remains the source of truth and
+applies on top of every primitive.
+
+- **`deep-interview`** — Stage 1-3 spec crispening. Use when the request is
+  brief, broad, or missing acceptance criteria, decision boundaries, or
+  non-goals; emit a durable spec at `docs/specs/deep-interview-<slug>.md`
+  with the ambiguity score at or below `0.10` before advancing.
+- **`ralplan`** — Separate planner and adversarial reviewer passes that
+  produce a research-grounded implementation plan. Use when the operator
+  asks only for a plan / architecture decision; do not let execution leak
+  past the `plan` stage advance.
+- **`ultragoal`** — Long-horizon multi-objective run with weighted
+  sub-stories and a four-lane completion fence. Use when the operator
+  wants durable steer across multiple objectives that only complete when
+  every lane passes a fresh quality gate.
+- **`brainstorming`** — Greenfield ideation. Use when the request is a new
+  product / feature / tool with no spec yet, before any `deep-interview`
+  or `ralplan` escalation.
+
 ## Provenance
 
 The durable phased-run concept was independently adapted for Bizar after studying the MIT-licensed `oh-my-claudecode` project at pinned revision `41a4c0f77144c5beb5f5f000a89cff379c680606`. This procedure and its runtime contract are Bizar-specific; no upstream memory/wiki service, daemon transport, or automatic publication behavior is included.
