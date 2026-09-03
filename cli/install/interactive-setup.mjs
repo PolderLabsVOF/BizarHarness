@@ -92,7 +92,19 @@ export async function runInteractiveSetup({
   const interactive = enabled && input.isTTY === true && output.isTTY === true;
   if (!interactive) {
     if (detected.missing.length > 0) {
-      writeLine(output, `  ! Provider ${detected.missing.join(' and ')} not detected; set ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN or run \`bizar setup-provider\`.`);
+      const missing = detected.missing.join(' and ');
+      const header = `  [BIZAR_PROVIDER_CONFIG_MISSING] Provider ${missing} not configured in this non-interactive run.`;
+      const action = `  Set ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN in the environment, or run \`bizar setup-provider\` interactively.`;
+      writeLine(output, '');
+      writeLine(output, header);
+      writeLine(output, action);
+      writeLine(output, '');
+      // Also surface to stderr when output is the real stdout so CI runners
+      // and operator logs do not silently lose the warning in a flood of
+      // piped output. The custom test output streams ignore stderr.
+      if (output === process.stdout) {
+        process.stderr.write(`${header}\n${action}\n`);
+      }
     }
     return { ok: true, interactive: false, configured: detected.missing.length === 0, missing: detected.missing };
   }

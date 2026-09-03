@@ -2,6 +2,56 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress - Installer hardening: provider-config warning + model-agent sync guard (2026-09-03)
+
+### Objective
+
+Make the non-interactive install path louder about missing provider config,
+and make `bizar install` survive a `syncConfiguredModelAgents` throw so the
+rest of the install pipeline still runs and surfaces the model-agent failure
+as a structured step result instead of crashing the process.
+
+This is the integration of the two non-conflicting pieces from Todd's
+`fix(models): short-hash model-agent filenames + installer hardening` branch.
+The long-name filename design from that branch is superseded by PR #17
+(Nizar's phonetic-bound + SHA-256-suffix) and is intentionally not ported
+here.
+
+### Pre-change evidence
+
+- `cli/install/interactive-setup.mjs#runInteractiveSetup` non-TTY branch
+  emits a single short `! Provider ... not detected` line. CI logs that
+  pipe the run through other tools lose that signal in surrounding output
+  and operators have asked for a louder, grep-friendly version.
+- `cli/provision.mjs#runProvision` calls `syncConfiguredModelAgents`
+  unguarded; a thrown `HASH_COLLISION`, `NAME_TOO_LONG`, or any I/O error
+  aborts the whole installer before `settings.json` is written.
+
+### Implementation
+
+- `cli/install/interactive-setup.mjs#runInteractiveSetup` (non-TTY branch)
+  now writes a `[BIZAR_PROVIDER_CONFIG_MISSING]` header plus an action
+  line and mirrors the same two lines to `process.stderr` when `output`
+  is the real stdout, so CI runners and operator logs cannot silently
+  drop the warning.
+- `cli/provision.mjs#runProvision` wraps `syncConfiguredModelAgents` in
+  a try/catch that records a `{ ok: false, message, error, code }`
+  step result and lets the rest of `runProvision` continue. A new
+  `section('Syncing configured model agents')` call gives the step its
+  own heading.
+- Return shapes, public exports, and existing test fixtures are
+  unchanged.
+
+### Verification
+
+- `node --test cli/install/interactive-setup.test.mjs`: 9/9 pass.
+- `node --test cli/provision.test.mjs`: 25/25 pass.
+- `npm run typecheck`: passed.
+- `git diff --check`: passed.
+- `make check`, `make verify-removed-surfaces`, `make check-arch`,
+  `make verify-repo-structure`, `make clean-check`: all passed.
+- Full `npm test`: 1113/1113 pass.
+
 ## In Progress - Bound generated model-agent filenames (2026-09-03)
 
 ### Objective

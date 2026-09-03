@@ -1204,7 +1204,14 @@ export async function runProvision(opts = {}) {
   if (routerStep.ok) logOk(routerStep.message); else logErr(routerStep.message);
   stepResults.push({ label: 'model-router', ...routerStep });
 
-  const modelAgentsStep = syncConfiguredModelAgents({ dryRun });
+  section('Syncing configured model agents');
+  let modelAgentsStep;
+  try {
+    modelAgentsStep = syncConfiguredModelAgents({ dryRun });
+  } catch (err) {
+    const message = err?.message ?? String(err);
+    modelAgentsStep = { ok: false, message: `configured model-agent sync failed: ${message}`, error: message, code: err?.code };
+  }
   if (modelAgentsStep.ok) logOk(modelAgentsStep.message); else logErr(modelAgentsStep.message);
   stepResults.push({ label: 'model-agents', ...modelAgentsStep });
 
