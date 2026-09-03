@@ -4,6 +4,11 @@
 
 ## In Progress — F-201 adaptive orchestration and model isolation (2026-09-03)
 
+### Windows toolchain fix integration (active)
+
+Review and merge the requested Windows toolchain command-detection pull request
+into `master`, verify its targeted and repository checks, and push the merge.
+
 ### Router path finalized (10.23.11/12)
 
 The model router lives at `~/.claude/model-router.json` — aligned with
