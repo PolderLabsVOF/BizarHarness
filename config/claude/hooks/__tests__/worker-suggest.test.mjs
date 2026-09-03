@@ -244,6 +244,101 @@ test('worker-suggest: appends only bounded explicit learning, not telemetry feed
   }
 });
 
+// Phase 6 — OMX-derived primitive pivot block must appear on every non-empty
+// prompt that reaches the dispatcher path. The block is informational; the
+// seven-category HITL floor and the deep-interview ambiguity floor remain
+// surfaced on top of every primitive.
+test('worker-suggest: emits the OMX-derived primitive pivot block on a substantive prompt', () => {
+  const { status, stdout, stderr } = runHook({
+    session_id: 'omx-pivot-001',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'show me what the worker suggestions look like',
+  });
+  assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+  const obj = parseStdout(stdout);
+  assert.ok(obj);
+  const ctx = obj.hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Bizar OMX-derived primitive pivots \(Phase 6\)/);
+  assert.match(ctx, /`deep-interview`/);
+  assert.match(ctx, /`ultragoal`/);
+  assert.match(ctx, /`ralplan`/);
+  assert.match(ctx, /`brainstorming`/);
+  // Both Phase 6 gates are surfaced on every substantive prompt.
+  assert.match(ctx, /HITL-floor category/);
+  assert.match(ctx, /ambiguity score is > 0\.10/);
+});
+
+test('worker-suggest: surfaces deep-interview pivot for broad/anchor-free prompts', () => {
+  const { status, stdout } = runHook({
+    session_id: 'omx-pivot-deep-interview',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'make the dashboard faster please',
+  });
+  assert.equal(status, 0);
+  const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Matched pivots for this prompt:/);
+  assert.match(ctx, /deep-interview \(Stage 1-3 spec crispening/);
+  assert.doesNotMatch(ctx, /ultragoal \(long-horizon/);
+  assert.doesNotMatch(ctx, /ralplan \(consensus plan only/);
+  assert.doesNotMatch(ctx, /brainstorming \(greenfield ideation/);
+});
+
+test('worker-suggest: surfaces ultragoal pivot for multi-objective / checkpoint prompts', () => {
+  const { status, stdout } = runHook({
+    session_id: 'omx-pivot-ultragoal',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'coordinate a multi-objective run with checkpoints across three sub-stories',
+  });
+  assert.equal(status, 0);
+  const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Matched pivots for this prompt:/);
+  assert.match(ctx, /ultragoal \(long-horizon/);
+});
+
+test('worker-suggest: surfaces ralplan pivot when prompt asks only for a plan', () => {
+  const { status, stdout } = runHook({
+    session_id: 'omx-pivot-ralplan',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'draft an architecture plan and consensus approach for the new module',
+  });
+  assert.equal(status, 0);
+  const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Matched pivots for this prompt:/);
+  assert.match(ctx, /ralplan \(consensus plan only/);
+});
+
+test('worker-suggest: surfaces brainstorming pivot for greenfield ideation', () => {
+  const { status, stdout } = runHook({
+    session_id: 'omx-pivot-brainstorm',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'I want to build a new app for tracking todos',
+  });
+  assert.equal(status, 0);
+  const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Matched pivots for this prompt:/);
+  assert.match(ctx, /brainstorming \(greenfield ideation/);
+});
+
+test('worker-suggest: never emits the OMX pivot block on the tiny direct path', () => {
+  const { status, stdout, stderr } = runHook({
+    session_id: 'omx-fast',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'fix the typo in this comment',
+  });
+  assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+  const obj = parseStdout(stdout);
+  const ctx = obj.hookSpecificOutput.additionalContext;
+  // Fast path is a micro-edit; pivot block stays out of the additionalContext.
+  assert.doesNotMatch(ctx, /Bizar OMX-derived primitive pivots/);
+  assert.doesNotMatch(ctx, /Matched pivots for this prompt:/);
+});
+
 // F-194 Phase D write side: when the hook fires on a prompt that matches a
 // worker, it must append one fingerprint-only `worker-suggest` row to
 // behavior.jsonl per matched worker.
@@ -286,4 +381,99 @@ test('worker-suggest: appends worker-suggest rows to behavior.jsonl when matches
     else process.env.BIZAR_HOME = savedBizarHome;
     rmSync(tmpHome, { recursive: true, force: true });
   }
+});
+
+// Phase 6 — OMX-derived primitive pivot block must appear on every non-empty
+// prompt that reaches the dispatcher path. The block is informational; the
+// seven-category HITL floor and the deep-interview ambiguity floor remain
+// surfaced on top of every primitive.
+test('worker-suggest: emits the OMX-derived primitive pivot block on a substantive prompt', () => {
+  const { status, stdout, stderr } = runHook({
+    session_id: 'omx-pivot-001',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'show me what the worker suggestions look like',
+  });
+  assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+  const obj = parseStdout(stdout);
+  assert.ok(obj);
+  const ctx = obj.hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Bizar OMX-derived primitive pivots \(Phase 6\)/);
+  assert.match(ctx, /`deep-interview`/);
+  assert.match(ctx, /`ultragoal`/);
+  assert.match(ctx, /`ralplan`/);
+  assert.match(ctx, /`brainstorming`/);
+  // Both Phase 6 gates are surfaced on every substantive prompt.
+  assert.match(ctx, /HITL-floor category/);
+  assert.match(ctx, /ambiguity score is > 0\.10/);
+});
+
+test('worker-suggest: surfaces deep-interview pivot for broad/anchor-free prompts', () => {
+  const { status, stdout } = runHook({
+    session_id: 'omx-pivot-deep-interview',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'make the dashboard faster please',
+  });
+  assert.equal(status, 0);
+  const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Matched pivots for this prompt:/);
+  assert.match(ctx, /deep-interview \(Stage 1-3 spec crispening/);
+  assert.doesNotMatch(ctx, /ultragoal \(long-horizon/);
+  assert.doesNotMatch(ctx, /ralplan \(consensus plan only/);
+  assert.doesNotMatch(ctx, /brainstorming \(greenfield ideation/);
+});
+
+test('worker-suggest: surfaces ultragoal pivot for multi-objective / checkpoint prompts', () => {
+  const { status, stdout } = runHook({
+    session_id: 'omx-pivot-ultragoal',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'coordinate a multi-objective run with checkpoints across three sub-stories',
+  });
+  assert.equal(status, 0);
+  const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Matched pivots for this prompt:/);
+  assert.match(ctx, /ultragoal \(long-horizon/);
+});
+
+test('worker-suggest: surfaces ralplan pivot when prompt asks only for a plan', () => {
+  const { status, stdout } = runHook({
+    session_id: 'omx-pivot-ralplan',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'draft an architecture plan and consensus approach for the new module',
+  });
+  assert.equal(status, 0);
+  const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Matched pivots for this prompt:/);
+  assert.match(ctx, /ralplan \(consensus plan only/);
+});
+
+test('worker-suggest: surfaces brainstorming pivot for greenfield ideation', () => {
+  const { status, stdout } = runHook({
+    session_id: 'omx-pivot-brainstorm',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'I want to build a new app for tracking todos',
+  });
+  assert.equal(status, 0);
+  const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
+  assert.match(ctx, /Matched pivots for this prompt:/);
+  assert.match(ctx, /brainstorming \(greenfield ideation/);
+});
+
+test('worker-suggest: never emits the OMX pivot block on the tiny direct path', () => {
+  const { status, stdout, stderr } = runHook({
+    session_id: 'omx-fast',
+    cwd: '/tmp',
+    hook_event_name: 'UserPromptSubmit',
+    prompt: 'fix the typo in this comment',
+  });
+  assert.equal(status, 0, `expected exit 0, got ${status}\nstderr: ${stderr}`);
+  const obj = parseStdout(stdout);
+  const ctx = obj.hookSpecificOutput.additionalContext;
+  // Fast path is a micro-edit; pivot block stays out of the additionalContext.
+  assert.doesNotMatch(ctx, /Bizar OMX-derived primitive pivots/);
+  assert.doesNotMatch(ctx, /Matched pivots for this prompt:/);
 });

@@ -71,6 +71,101 @@ const ROUTE_POLICY = [
   '- If you are already running as a Bizar custom agent, follow your assigned role and do not recursively dispatch yourself.',
 ].join('\n');
 
+/**
+ * OMX-derived primitive hints — surfaced additively in `additionalContext` when
+ * the prompt exhibits the documented signal. These are *informational pivots*
+ * that complement the dispatcher-emitted worker suggestions; they do not
+ * modify the dispatcher itself. See `office-manager.md` for the gating
+ * contract (HITL floor, ambiguity floor ≤ 0.10) that governs every primitive.
+ */
+const OMX_PRIMITIVE_HINTS = [
+  'Bizar OMX-derived primitive pivots (Phase 6):',
+  '- Prompt is brief, broad, or missing acceptance criteria, decision boundaries, or non-goals → consider `deep-interview` (Stage 1-3 spec crispening). Only resume normal routing after the spec crystallizes at ambiguity ≤ 0.10.',
+  '- Request describes a multi-objective run with sub-stories, weighted lanes, or checkpoints → consider `ultragoal` (durable progress tracker with four-lane completion fence). Treat its terminal transitions as the completion contract.',
+  '- User asks for a research-grounded plan, architecture decision, or "what should we do" without immediate implementation → consider `ralplan` (separate planner + adversarial reviewer). Do not let execution leak past the `plan` stage.',
+  '- Greenfield ideation with no spec yet ("I want to build X") → consider `brainstorming` before any deep-interview or ralplan escalation.',
+  '- Two non-negotiable gates always apply: (1) surface any HITL-floor category (push, PR mutation, release, publish, deploy, prod write, credential, public exposure, irreversible destruction) before continuing, even when `/autopilot` or `/ultragoal` is in flight; (2) refuse to advance past `/deep-interview` while the spec ambiguity score is > 0.10.',
+].join('\n');
+
+/**
+ * Returns true when the prompt is brief enough and anchor-free enough to merit
+ * a proactive `deep-interview` redirect. Mirrors the office-manager row
+ * "Brief crispening first": effective words ≤ 25 AND zero concrete anchors.
+ *
+ * "Concrete anchors" here means file paths, symbol names, named APIs/CLIs,
+ * version numbers, or quoted identifiers. The check is lexical and bounded
+ * so it stays free on the UserPromptSubmit hot path.
+ */
+function shouldSuggestDeepInterview(prompt) {
+  const text = String(prompt ?? '').trim();
+  if (text.length === 0) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 25) return false;
+  const anchorPattern = /(?:[./\\][\w./-]+|`[^`]+`|"[^"]+"|'\w+'|\b\d+(?:\.\d+)+\b|\b[A-Z][A-Z0-9_]{2,}\b|\b(?:[a-z]+:[a-z]+|\w+:\/\/\S+))/;
+  return !anchorPattern.test(text);
+}
+
+/**
+ * Returns true when the prompt matches a multi-objective / long-horizon signal.
+ * Lexical and bounded; no regex backtracking.
+ */
+function shouldSuggestUltragoal(prompt) {
+  const text = String(prompt ?? '').trim();
+  if (text.length === 0) return false;
+  return /\b(?:(?:multi|several|multiple)[-\s]?(?:objective|story|stories|goal|goals|task|tasks)|(?:sub[-\s]?stor(?:y|ies)|sub[-\s]?goal|weighted\s+lanes|checkpoint(?:s)?|long[-\s]?horizon))\b/i.test(text);
+}
+
+/**
+ * Returns true when the prompt explicitly asks for a plan / architecture
+ * decision without immediate implementation.
+ */
+function shouldSuggestRalplan(prompt) {
+  const text = String(prompt ?? '').trim();
+  if (text.length === 0) return false;
+  if (/\b(?:implement|build|write|code|scaffold|ship|deploy)\b/i.test(text)) return false;
+  return /\b(?:plan|planning|architect(?:ure)?|design\s+decision|consensus|what\s+should\s+we\s+do|how\s+should\s+we|roadmap|approach)\b/i.test(text);
+}
+
+/**
+ * Returns true when the prompt is a greenfield ideation request — vague
+ * product need with no spec yet.
+ */
+function shouldSuggestBrainstorming(prompt) {
+  const text = String(prompt ?? '').trim();
+  if (text.length === 0) return false;
+  if (/(?:\.[a-z0-9]{1,5}\b|`[^`]+`|"\w+"|\b\d+(?:\.\d+)+\b)/.test(text)) return false;
+  return /\b(?:i\s+want\s+to\s+build|let'?s\s+build|new\s+(?:app|product|feature|tool|service|system|project)|idea\s+for|thinking\s+about\s+building|brainstorm(?:ing)?)\b/i.test(text);
+}
+
+/**
+ * Builds the Phase-6 OMX primitive pivot block. Always emits the gate
+ * reminder so destructive-action surfacing and the ambiguity floor stay
+ * visible on every non-empty prompt. Individual primitive names are added
+ * only when their lexical signal matches; this keeps the block short for
+ * prompts that already have a clear shape.
+ */
+function buildOmxPrimitiveHints(prompt) {
+  const text = String(prompt ?? '').trim();
+  if (text.length === 0) return '';
+
+  const pivots = [];
+  if (shouldSuggestDeepInterview(prompt)) pivots.push('deep-interview (Stage 1-3 spec crispening — prompt is broad or anchor-free)');
+  if (shouldSuggestUltragoal(prompt)) pivots.push('ultragoal (long-horizon multi-objective run with checkpoint steer)');
+  if (shouldSuggestRalplan(prompt)) pivots.push('ralplan (consensus plan only — planner + adversarial reviewer)');
+  if (shouldSuggestBrainstorming(prompt)) pivots.push('brainstorming (greenfield ideation, no spec yet)');
+
+  if (pivots.length === 0) {
+    return OMX_PRIMITIVE_HINTS;
+  }
+
+  return [
+    OMX_PRIMITIVE_HINTS,
+    '',
+    'Matched pivots for this prompt:',
+    ...pivots.map((p) => `- ${p}`),
+  ].join('\n');
+}
+
 let raw = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { raw += chunk; });
@@ -205,6 +300,13 @@ process.stdin.on('end', async () => {
       'Bizar workers suggest the following skills/agents for this prompt:\n' +
       lines.join('\n');
   }
+
+  // Phase 6: append the OMX-derived primitive pivot block. Always emits the
+  // gate reminder so destructive-action surfacing and the ambiguity floor
+  // stay visible on every non-empty prompt; per-primitive entries only
+  // appear when the prompt's lexical signal matches.
+  const omxHints = buildOmxPrimitiveHints(prompt);
+  if (omxHints) note += '\n\n' + omxHints;
 
   // Append only the bounded explicit-learning snapshot. Historical suggestion
   // telemetry is evidence, not an instruction source.
