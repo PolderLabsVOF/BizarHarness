@@ -2,6 +2,61 @@
 
 > Canonical current-work record. Update before and after implementation.
 
+## In Progress - OMX (oh-my-codex) feature adoption (2026-09-03)
+
+### Objective
+
+Adopt four canonical OMX features into Bizar as planned in
+`docs/plans/2026-09-03-omx-features.md`:
+
+1. **Deep-interview** — multi-round Socratic spec synthesizer.
+2. **Ambiguity score** — weighted breakdown across greenfield/brownfield.
+3. **Ultragoal** — long-running goal decomposition with quality gate.
+4. **Ralplan strengthening** — Planner → Architect → Critic 8-step protocol.
+
+### Pre-change evidence
+
+- Plan approved by `@linda` (APPROVED-with-changes verdict: six required
+  corrections C1–C6 applied, nine optional improvements O1/O2/O3/O6/O7/O9
+  applied, O4/O5/O8 deferred as housekeeping).
+- `feature_list.json`: F-201 (`@mike` adaptive orchestration) transitioned
+  to `passing` with fresh `make e2e` 13/13 + `make vcr` 81/81 evidence.
+- Four new F-IDs opened (`F-202`, `F-203`, `F-204`, `F-205`), all
+  `not_started`. WIP=1 invariant preserved — at most one will transition
+  to `in_progress` at a time as each phase begins.
+- Open Q2 (canonical artifact location) resolved by
+  `docs/decisions/DEC-022-omx-canonical-artifact-location.md`: every
+  feature writes to `docs/specs/`.
+
+### Implementation
+
+- **Phase 1 (scaffolding)** dispatched next, in a `wt/karen-f202-omx-phase1`
+  worktree branched from `master` at the 10.23.23 release SHA.
+- **Phases 2–5** land in disjoint worktrees after Phase 1 lands. Phase 4
+  and Phase 5 can run in parallel with Phase 2 and Phase 3 because they
+  touch disjoint file scopes once the SDK modules from Phase 1 are
+  present.
+- **Phase 6** is GATED on F-201 transitioning to `passing` — already
+  satisfied this session — so Phase 6 becomes eligible after Phases 2–5
+  land. (Phase 6 itself extends `office-manager.md` and
+  `worker-suggest.mjs`, both touched by F-201; defer one session to
+  surface any drift.)
+
+### Verification (pre-flight)
+
+- `make e2e`: 13/13 pass.
+- `make vcr`: 81/81 = 1.000 after F-201 transition.
+- `npm test`: 1113/1113 pass (carried over from 10.23.23).
+- `npm run typecheck`: passed.
+- `git diff --check`: passed.
+
+### Status
+
+- Plan file shipped in `docs/plans/2026-09-03-omx-features.md` (still
+  untracked per operator direction at 10.23.23 release; will be added
+  to source control when this objective is `Complete`).
+- Phase 1 dispatch in flight.
+
 ## Complete — 10.23.23 patch release (2026-09-03)
 
 ### Objective
