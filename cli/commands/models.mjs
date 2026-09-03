@@ -18,6 +18,7 @@
  * reject user-selected IDs.
  */
 import chalk from 'chalk';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import readline from 'node:readline';
@@ -1077,6 +1078,13 @@ export const NATIVE_AGENT_ALIASES = Object.freeze(['sonnet', 'opus', 'haiku', 'f
 
 const MODEL_AGENT_WORDS = Object.freeze({ a:'alpha', b:'bravo', c:'charlie', d:'delta', e:'echo', f:'foxtrot', g:'golf', h:'hotel', i:'india', j:'juliet', k:'kilo', l:'lima', m:'mike', n:'november', o:'oscar', p:'papa', q:'quebec', r:'romeo', s:'sierra', t:'tango', u:'uniform', v:'victor', w:'whiskey', x:'xray', y:'yankee', z:'zulu', 0:'zero', 1:'one', 2:'two', 3:'three', 4:'four', 5:'five', 6:'six', 7:'seven', 8:'eight', 9:'nine', '/':'slash', '.':'dot', '-':'dash', '_':'under' });
 
+// Keep generated names below common filesystem component limits and leave
+// enough path budget for the Claude config directory on Windows. The complete
+// gateway ID remains in frontmatter; this limit only affects the native agent
+// name and its filename.
+export const MODEL_AGENT_NAME_MAX_LENGTH = 160;
+const MODEL_AGENT_NAME_HASH_LENGTH = 16;
+
 // These are the stable Bizar role frontmatter names. Model definitions are
 // projected per role so Claude Code's task UI retains a meaningful Bizar agent
 // identity instead of displaying an opaque model-only worker.
@@ -1102,7 +1110,17 @@ export function stableSpecialistAgentNames(agentsDir = join(resolveClaudeConfigD
 
 export function modelAgentName(modelId, role = 'worker') {
   const safeRole = BIZAR_AGENT_ROLES.includes(role) ? role : 'worker';
-  return `${safeRole}-bizar-${[...String(modelId || '').toLowerCase()].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-')}`;
+  const normalizedModelId = String(modelId || '').toLowerCase();
+  const expanded = [...normalizedModelId].map((ch) => MODEL_AGENT_WORDS[ch] || 'unknown').join('-');
+  const fullName = `${safeRole}-bizar-${expanded}`;
+  if (fullName.length <= MODEL_AGENT_NAME_MAX_LENGTH) return fullName;
+
+  const hash = createHash('sha256')
+    .update(`${safeRole}\0${normalizedModelId}`)
+    .digest('hex')
+    .slice(0, MODEL_AGENT_NAME_HASH_LENGTH);
+  const suffix = `-${hash}`;
+  return `${fullName.slice(0, MODEL_AGENT_NAME_MAX_LENGTH - suffix.length)}${suffix}`;
 }
 
 export function isGeneratedModelAgentName(name, modelIds) {
