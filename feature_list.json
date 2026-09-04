@@ -1566,12 +1566,74 @@
       "created": "2026-09-03",
       "commit": "a80211c",
       "passed": "2026-09-03",
-      "evidence": "2026-09-03 ralplan consensus gate: plan-architect (Architect pass) + qa-reviewer RALPLAN-Critic (verdict APPROVED|CHANGES REQUIRED|REJECTED, iteration cap 5) + workflow.mjs --mode ralplan/--deliberate/--advisory flags via resolveStartRouting(flags) helper. Targeted tests 9/9; npm test 1139/1139; typecheck clean; make check-arch 0 failed."
+      "evidence": "2026-09-03 ralplan consensus gate: plan-architect (Architect pass) + qa-reviewer RALPLAN-Critic (verdict APPROVED|CHANGES REQUIRED| REJECTED, iteration cap 5) + workflow.mjs --mode ralplan/--deliberate/--advisory flags via resolveStartRouting(flags) helper. Targeted tests 9/9; npm test 1139/1139; typecheck clean; make check-arch 0 failed."
+    },
+    {
+      "id": "F-206",
+      "title": "`/guard` progress-guarding loop with 15-minute cadence and self-termination on plan completion",
+      "description": "Add a structured progress-guarding loop that an operator launches once with `/guard start <plan-path> --interval 15m` and lets Claude Code's host-side `/loop` primitive re-invoke `bizar guard check --slug <id>` on the configured cadence. Each check inspects plan doc + PROGRESS.md + feature_list.json + recent git log + recent checks.jsonl, returns a verdict (healthy | drift | stuck | done), records drift/stuck to a per-guard `drift-log.md` + a PROGRESS.md next-actions nudge, and self-terminates on `done` (plan closed or feature_list.json WIP=0 with all shipped features). Self-termination writes an archive note; nothing is auto-pushed, auto-committed, or auto-published. Implementation lives in a new SDK module `packages/sdk/src/agent/guard.ts` (state at `.bizar/guards/<slug>/`), a new CLI `cli/commands/guard.mjs`, a new slash command `config/claude/commands/guard.md`, and a lifecycle skill `config/skills/guard/SKILL.md`.",
+      "behavior": "`bizar guard start <plan-path> --interval 15m` exits 0 and prints a copy-pasteable `/loop 15m \"bizar guard check --slug <id> --json\"` invocation; `bizar guard check` performs a bounded read-only audit, writes a verdict row to `.bizar/guards/<slug>/checks.jsonl`, and self-stops on `done`; `bizar guard status` and `bizar guard stop` round out the lifecycle; tests cover all verdicts, drift detection, stuck detection, and self-termination paths.",
+      "verification": "npm test 1213/1213 (17 cli/__tests__/guard + 14 SDK guard + 9 bin-help-dispatch); make check / make test / make check-arch / make verify-removed-surfaces / make verify-repo-structure / make clean-check all green; VCR 86/86 = 1.000 (WIP=1 promoted to passing bumps activated).",
+      "state": "passing",
+      "commit": "ac1773f",
+      "passed": "2026-09-03",
+      "category": "automation",
+      "layer": "harness",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/src/agent/guard.ts",
+        "packages/sdk/src/agent/guard.test.ts",
+        "packages/sdk/src/index.ts",
+        "packages/sdk/src/version.ts",
+        "packages/sdk/package.json",
+        "cli/commands/guard.mjs",
+        "cli/commands/bin.mjs",
+        "cli/__tests__/guard.test.mjs",
+        "cli/__tests__/bin-help-dispatch.test.mjs",
+        "config/claude/commands/guard.md",
+        "config/skills/guard/SKILL.md",
+        "PROGRESS.md",
+        "feature_list.json",
+        "package.json",
+        "CHANGELOG.md"
+      ],
+      "created": "2026-09-03",
+      "evidence": "2026-09-03 /guard F-206: addGuard/getGuard/listGuards/recordGuardCheck/markGuardStopped + GUARD_SCHEMA_VERSION 1.0.0; subcommands start|status|check|stop|list with --json; four verdicts (healthy|drift|stuck|done); self-termination on done writes DONE.md + flips status; drift|stuck append drift-log.md + PROGRESS.md nudge. Targeted tests 17+14=31/31; npm test 1213/1213; typecheck clean; make check-arch 0 failed; clean-check 5/5."
+    },
+    {
+      "id": "F-207",
+      "title": "Mike autonomously bootstraps an ultragoal (or picks the active one) on SessionStart",
+      "description": "Make `office-manager` (Mike) self-seed a durable ultragoal charter on every SessionStart if no goal is already active. The hook reads `feature_list.json` for the active `in_progress` feature and `docs/specs/ultragoal-*.md` for existing charters; when nothing is active AND a `not_started` feature is queued, Mike picks the next not_started feature (deterministic order: smallest F-ID with state != passing) and writes `docs/specs/ultragoal-<feature-id>.md` in aggregate mode with one weighted subgoal. When an active ultragoal or in-progress feature exists, Mike returns `active=<id>` and does nothing. The hook also runs the SDK helper `bootstrapGoal({features, specsDir})` returning a discriminated union: `{action: 'resume', id, source}` for already-active goals, `{action: 'bootstrap', id, charterPath}` for newly seeded goals, `{action: 'idle'}` when no not_started features remain. Mike's prompt gains an explicit `## Autonomous Goal Bootstrap` section that requires invoking the hook on every SessionStart before any other work. CLI surface `bizar goal-bootstrap [--json]` returns the same shape.",
+      "behavior": "`bizar goal-bootstrap` on a repo with no in-progress feature and a not_started queue writes `docs/specs/ultragoal-<id>.md` and exits 0 with `{action: 'bootstrap', id, charterPath}` JSON; on a repo with an existing `docs/specs/ultragoal-*.md` charter exits 0 with `{action: 'resume', id, source: 'spec'}`; on a repo with no not_started features exits 0 with `{action: 'idle'}`; on a malformed `feature_list.json` exits non-zero with `GOAL_BOOTSTRAP_INVALID_FEATURES`. SessionStart hook `goal-bootstrap.mjs` mirrors the same logic and emits its verdict into the SessionStart `additionalContext`. Tests cover all four code paths.",
+      "verification": "npm test green (goal-bootstrap SDK helper + CLI surface tests); make check / make test / make check-arch / make verify-removed-surfaces / make verify-repo-structure / make clean-check / make vcr all green; VCR 87/87 = 1.000 (WIP=1 promoted to passing bumps activated).",
+      "state": "passing",
+      "commit": "847dd0d",
+      "passed": "2026-09-03",
+      "category": "automation",
+      "layer": "harness",
+      "owner": "@todd",
+      "scope": [
+        "packages/sdk/src/agent/goal-bootstrap.ts",
+        "packages/sdk/src/index.ts",
+        "packages/sdk/tests/agent/goal-bootstrap.test.ts",
+        "cli/commands/goal-bootstrap.mjs",
+        "cli/commands/bin.mjs",
+        "cli/__tests__/goal-bootstrap.test.mjs",
+        "cli/__tests__/bin-help-dispatch.test.mjs",
+        "config/claude/hooks/goal-bootstrap.mjs",
+        "config/claude/hooks/sessionstart-prime.mjs",
+        "config/claude/hooks/__tests__/sessionstart-prime.test.mjs",
+        "config/claude/agents/office-manager.md",
+        "config/skills/goal-bootstrap/SKILL.md",
+        ".gitignore"
+      ],
+      "created": "2026-09-03",
+      "evidence": "2026-09-03 /goal-bootstrap F-207: SDK module bootstrapGoal/bootstrapGoalFromFile/renderAggregateCharter + GOAL_BOOTSTRAP_SCHEMA_VERSION 1.0.0; CLI bizar goal-bootstrap prints {action, id?, charterPath?} JSON; SessionStart hook goal-bootstrap.mjs + sessionstart-prime.mjs prefixes briefing with `goal:` line; Mike prompt gains Autonomous Goal Bootstrap section; charter written only on bootstrap path (aggregate mode, single weighted subgoal). 13 files changed, 1185 insertions(+), 8 deletions(-). Targeted tests 14+5+1=20/20; npm test 1219/1219 (was 1213+5+1); typecheck clean; make check-arch 0 failed; clean-check 5/5; .gitignore anchored /agent/ to repo root so packages/sdk/src/agent/ is no longer accidentally shadowed by the generated-agents ignore rule."
     }
   ],
   "vcr": {
-    "passing": 85,
-    "activated": 85,
+    "passing": 87,
+    "activated": 87,
     "ratio": 1
   }
 }

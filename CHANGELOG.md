@@ -1,5 +1,55 @@
 # Changelog
 
+## [10.24.0] - 2026-09-03
+
+### Added
+- **`/guard` progress-guarding loop (F-206)** — `bizar guard
+  start|check|status|stop|list` runs a bounded read-only progress audit
+  against a plan doc + `PROGRESS.md` + `feature_list.json` + recent
+  git log + the per-guard `checks.jsonl`, returns a verdict of
+  `healthy | drift | stuck | done`, records drift/stuck to a
+  per-guard `drift-log.md` and a one-line `> guard@<ts>: …` nudge on
+  the most-recent `## In Progress` block, and self-terminates on
+  `done` (writes `.bizar/guards/<slug>/DONE.md` + flips `status`).
+  Cadence is driven by Claude Code's host-side `/loop` primitive —
+  no persistent background process. Subcommands mirror `bizar cron`
+  ergonomics; interval accepts `15m | 900000 | 1h | 30s`. Slash
+  command `config/claude/commands/guard.md` + lifecycle skill
+  `config/skills/guard/SKILL.md`. SDK module
+  `packages/sdk/src/agent/guard.ts` exports
+  `addGuard / getGuard / listGuards / removeGuard /
+  recordGuardCheck / markGuardStopped / listGuardChecks` and
+  `GUARD_SCHEMA_VERSION = "1.0.0"`.
+- **`/goal-bootstrap` Mike autonomous goal seeding (F-207)** —
+  `bizar goal-bootstrap [--feature-list <p>] [--specs-dir <s>]`
+  reads `feature_list.json` plus `docs/specs/ultragoal-*.md` and
+  emits a discriminated-union verdict: `{action: "resume", id,
+  source}` (existing charter), `{action: "bootstrap", id,
+  charterPath}` (wrote a fresh aggregate-mode charter), or
+  `{action: "idle"}` (no `not_started` features). The same helper
+  runs from the SessionStart hook
+  `config/claude/hooks/goal-bootstrap.mjs` and is wired into
+  `sessionstart-prime.mjs` so the briefing's first line on every
+  turn 1 carries the verdict. Mike's prompt gains a new
+  `## Autonomous Goal Bootstrap (F-207)` section that requires
+  reading the goal line before any other work. The bootstrap is
+  read-only outside `docs/specs/` and never auto-commits,
+  auto-pushes, or auto-publishes. SDK module
+  `packages/sdk/src/agent/goal-bootstrap.ts` exports
+  `bootstrapGoal / bootstrapGoalFromFile / renderAggregateCharter
+  / GoalBootstrapError` and `GOAL_BOOTSTRAP_SCHEMA_VERSION = "1.0.0"`.
+  Lifecycle skill `config/skills/goal-bootstrap/SKILL.md`.
+
+### Fixed
+- **Anchored generated-agents gitignore rule** — `.gitignore` changed
+  `agent/` to `/agent/` so the SDK's `packages/sdk/src/agent/`
+  directory is no longer accidentally shadowed by the
+  generated-agents / orchestration-caches ignore rule. This was a
+  latent bug: previously-added files survived because they were
+  tracked before the rule was added, but new files in
+  `packages/sdk/src/agent/` were silently dropped. F-207 surfaced it
+  by adding `goal-bootstrap.ts` and `goal-bootstrap.test.ts`.
+
 ## [10.23.23] - 2026-09-03
 
 ### Fixed

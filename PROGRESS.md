@@ -474,6 +474,153 @@ actions are advisory log/nudge writes only.
 - WIP=1 invariant preserved — F-206 is the only feature currently
   `in_progress`.
 
+## In Progress — F-207 Mike autonomous goal / ultragoal bootstrap (2026-09-03)
+
+### Objective
+
+Make `office-manager` (`@mike`) self-seed a durable ultragoal
+charter on every SessionStart instead of waiting for an
+operator to drive one. The hook reads `feature_list.json` and
+`docs/specs/ultragoal-*.md`, picks the next not-started feature
+in deterministic F-ID order, and writes an aggregate-mode
+charter at `docs/specs/ultragoal-<feature-id>.md` with one
+weighted subgoal. When an active ultragoal or in-progress
+feature is already present, Mike resumes the existing goal and
+does not write anything. The hook and SDK helper return a
+discriminated union — `bootstrap` | `resume` | `idle` — so the
+orchestrator and `/loop` guard can verify what changed.
+
+### Pre-change evidence
+
+- `feature_list.json` F-207: opened `state: "in_progress"`,
+  scope enumerated, owner `@todd`. WIP=1 invariant preserved —
+  F-206 already promoted to `passing` on master.
+- VCR baseline: 86/86 = 1.000. F-207 promotion to `passing`
+  at integration will bump activated to 87 with ratio 1.000.
+- `config/skills/ultragoal/SKILL.md` already documents the
+  full CLI grammar (`bizar goal start|steer|fail|cancel`) and
+  the four-lane completion fence; Phase 4 of the OMX adoption
+  plan reserved the surface — F-207 is the lightweight bootstrap
+  layer (`docs/specs/ultragoal-<id>.md` charter only; the full
+  CLI ships in a follow-on F-ID so this stays scoped to one
+  commit).
+- `packages/sdk/src/mcp/server.ts` already exports
+  `ultragoal_status` (returns `{state:null}` until Phase 4) and
+  `ultragoal_steer` (returns `{ok:true, deferred:true}`); F-207
+  does NOT modify those — it only seeds the charter file that
+  those tools consume once Phase 4 lands.
+
+### Implementation (planned)
+
+- `packages/sdk/src/agent/goal-bootstrap.ts` — pure module
+  exporting `bootstrapGoal({features, specsDir}): {action: 'resume'|'bootstrap'|'idle', id?, charterPath?, source?}`.
+  Reads existing `docs/specs/ultragoal-*.md` to find active runs,
+  picks the smallest non-passing feature F-ID, writes a charter
+  on `bootstrap`, returns `idle` when none. No I/O surprise:
+  isolated to `specsDir`; no `~/.config/bizar/` writes.
+- `packages/sdk/src/agent/goal-bootstrap.test.ts` — vitest with
+  cases for: empty features → `idle`, all passing → `idle`,
+  one not_started → `bootstrap` + charter file written, existing
+  charter present → `resume`, malformed features JSON → throw
+  `GoalBootstrapError`, charter write failure → throw.
+- `packages/sdk/src/index.ts` — re-export `goal-bootstrap`.
+- `cli/commands/goal-bootstrap.mjs` — thin wrapper over the SDK
+  helper. Subcommands: (default `run` action) prints JSON to
+  stdout. `--json` is the default for this command.
+- `cli/__tests__/goal-bootstrap.test.mjs` — node --test with a
+  `mkdtempSync` fixture for each branch (`bootstrap` / `resume`
+  / `idle` / `invalid-features`).
+- `cli/commands/bin.mjs` — register `goal-bootstrap` in the
+  dispatch switch (mirrors the F-206 `guard` placement).
+- `cli/__tests__/bin-help-dispatch.test.mjs` — add
+  `{cmd:'goal-bootstrap', expect: 'bizar goal-bootstrap — F-207
+  Mike autonomous goal seeding'}` row.
+- `config/claude/hooks/goal-bootstrap.mjs` — SessionStart hook
+  that imports the SDK helper and emits its verdict into the
+  SessionStart `additionalContext` block. Wired through
+  `config/claude/settings.json` (or its operator override).
+- `config/claude/hooks/sessionstart-prime.mjs` — invoke
+  `goal-bootstrap` before other priming steps; surface the
+  verdict in the human-visible SessionStart summary line.
+- `config/claude/agents/office-manager.md` — add an explicit
+  `## Autonomous Goal Bootstrap` section requiring Mike to call
+  this hook on every SessionStart before any other work.
+- `config/skills/goal-bootstrap/SKILL.md` — lifecycle skill
+  mirroring `config/skills/guard/SKILL.md` structure.
+
+### Status
+
+- F-207 dispatched to `@todd` in a `wt/todd-f207-goal-bootstrap`
+  worktree branched from master. WIP=1 invariant preserved.
+- The bootstrap must NOT auto-commit, auto-push, or auto-
+  publish; it writes only the deterministic charter under
+  `docs/specs/ultragoal-<id>.md` and returns the verdict.
+
+## Complete — F-207 Mike autonomous goal / ultragoal bootstrap (2026-09-03)
+
+### Implementation
+
+- `packages/sdk/src/agent/goal-bootstrap.ts` — pure module exporting
+  `bootstrapGoal({features, specsDir})` and `bootstrapGoalFromFile({featureListPath,
+  specsDir})`. Returns the discriminated union
+  `{action: 'resume', id, source: 'spec'} | {action: 'bootstrap', id, charterPath} |
+  {action: 'idle'}` with `GoalBootstrapError` as the typed failure
+  surface. `NON_PASSING_STATES` = `in_progress | blocked | not_started | review |
+  reviewing | verifying | executing | planning | checkpointing | active`. Schema
+  version `GOAL_BOOTSTRAP_SCHEMA_VERSION = "1.0.0"`. `bootstrapGoalFromFile`
+  degrades gracefully on missing/malformed `feature_list.json` and returns
+  `{verdict: 'idle', warning}` instead of throwing.
+- `packages/sdk/src/agent/goal-bootstrap.test.ts` — vitest with 14 cases
+  covering empty features, all passing, one not_started (charter written
+  with deterministic aggregate-mode body), resume path, malformed features,
+  and write-failure.
+- `packages/sdk/src/index.ts` re-exports the new module.
+- `cli/commands/goal-bootstrap.mjs` — single-action CLI
+  (`bizar goal-bootstrap [--feature-list <p>] [--specs-dir <s>]`) that prints
+  the verdict JSON on stdout and exits 0 on `resume` / `bootstrap` / `idle`,
+  1 on `GoalBootstrapError`.
+- `cli/__tests__/goal-bootstrap.test.mjs` — 5 node --test cases.
+- `cli/bin.mjs` — added `goal-bootstrap` to help banner row and dispatch
+  switch; `cli/__tests__/bin-help-dispatch.test.mjs` extended with the new
+  command row.
+- `config/claude/hooks/goal-bootstrap.mjs` — new SessionStart hook that
+  reads stdin, calls `bootstrapGoalFromFile`, and emits the verdict into
+  `hookSpecificOutput.additionalContext`. Always exits 0; degrades on
+  errors and writes `goal: idle (no not_started feature)` as the last
+  fallback.
+- `config/claude/hooks/sessionstart-prime.mjs` — imports
+  `bootstrapGoalFromFile, GoalBootstrapError`; adds `goalBootstrapBrief(cwd)`
+  helper that returns `goal: resume ...` / `goal: bootstrap ...` /
+  `goal: idle ...` line; `MAX_BRIEFING` bumped 800 → 1200 chars; briefing
+  array reordered so `goalLine` is first (survives the clip).
+- `config/claude/agents/office-manager.md` — added
+  `## Autonomous Goal Bootstrap (F-207)` section.
+- `config/skills/goal-bootstrap/SKILL.md` — lifecycle skill mirroring
+  `config/skills/guard/SKILL.md` structure.
+- `.gitignore` — fixed latent `agent/` shadowing `packages/sdk/src/agent/`
+  by anchoring to repo root (`/agent/`).
+- `feature_list.json` — F-207 promoted to `passing` with
+  `commit: "847dd0d"`, `passed: "2026-09-03"`, VCR 87/87 = 1.000.
+
+### Verification
+
+- `npm run typecheck`: clean.
+- `npx vitest run packages/sdk/tests/agent/goal-bootstrap.test.ts`: 14/14.
+- `node --test cli/__tests__/goal-bootstrap.test.mjs`: 5/5.
+- `node --test cli/__tests__/bin-help-dispatch.test.mjs`: 10/10.
+- `node --test config/claude/hooks/__tests__/sessionstart-prime.test.mjs`: 13/13.
+- `npm test`: 1219/1219 pass (98 suites).
+- `make check`: clean (TypeScript gate).
+- `make verify-removed-surfaces`: pass.
+- `make verify-repo-structure`: pass (root/SDK version parity after
+  `packages/sdk/src/version.ts` bumped to `10.24.0`).
+- `make check-arch`: 0 failed.
+- `make clean-check`: 5/5.
+- `make vcr`: 87/87 = 1.000.
+- Manual SessionStart priming observation: goal line appears as the
+  first bullet of the human-readable briefing and survives the
+  `MAX_BRIEFING=1200` clip.
+
 ## In Progress - Ambiguity SDK semantic flip (1.0.0 → 2.0.0, 2026-09-03)
 
 ### Objective
