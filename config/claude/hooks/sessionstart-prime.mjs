@@ -33,8 +33,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildLearningContext } from '../../../cli/commands/learn.mjs';
 import { resolveBizarHome } from '../../../cli/config-paths.mjs';
+import { bootstrapGoalFromFile, GoalBootstrapError } from '../../../packages/sdk/dist/agent/goal-bootstrap.js';
 
-const MAX_BRIEFING = 800; // hard cap, characters
+const MAX_BRIEFING = 1200; // hard cap, characters (was 800; +400 to fit the F-207 goal line)
 const PROJECT_NAME = 'BizarHarness';
 const SESSION_STATE = '.bizar/session-state.json';
 
@@ -230,15 +231,49 @@ function resumeBriefing(cwd, state) {
   return lines.join('\n');
 }
 
+// ── Goal bootstrap (F-207) ─────────────────────────────────────────────────
+
+/**
+ * Run the F-207 bootstrap helper and surface its verdict as a single
+ * briefing line. The verdict is one of `resume | bootstrap | idle`,
+ * and any GoalBootstrapError is degraded to `idle` so SessionStart
+ * never aborts because of a malformed feature_list.json.
+ */
+function goalBootstrapBrief(cwd) {
+  const featureListPath = join(cwd, 'feature_list.json');
+  const specsDir = join(cwd, 'docs', 'specs');
+  let result;
+  try {
+    result = bootstrapGoalFromFile({ featureListPath, specsDir });
+  } catch (err) {
+    if (!(err instanceof GoalBootstrapError)) {
+      return 'goal: idle (bootstrap helper error)';
+    }
+    return `goal: idle (${err.message})`;
+  }
+  const v = result.verdict;
+  if (v.action === 'resume') {
+    return `goal: resume ultragoal ${v.id} (source=${v.source})`;
+  }
+  if (v.action === 'bootstrap') {
+    return `goal: bootstrap ultragoal ${v.id} → ${v.charterPath}`;
+  }
+  return 'goal: idle (no not_started features)';
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function buildBriefing(input) {
   const source = String(input.source || 'startup');
   const cwd = String(input.cwd || process.cwd());
+  // The goal line is always emitted FIRST so the F-207 verdict survives
+  // the MAX_BRIEFING clip even when learning context pushes the briefing
+  // past the cap.
+  const goalLine = goalBootstrapBrief(cwd);
 
   if (source === 'resume') {
     const state = sessionState(cwd);
-    return clip([resumeBriefing(cwd, state), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
+    return clip([goalLine, resumeBriefing(cwd, state), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
   }
 
   const progressSrc = readIfExists(join(cwd, 'PROGRESS.md'));
@@ -248,12 +283,12 @@ function buildBriefing(input) {
   const projectLine = projectSummary(cwd);
 
   if (source === 'clear') {
-    return clip([clearBriefing(cwd, recentCommits, progressLast), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
+    return clip([goalLine, clearBriefing(cwd, recentCommits, progressLast), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
   }
 
   // Default: startup.
   return clip(
-    [startupBriefing(cwd, featureBrief, recentCommits, projectLine, progressLast), buildLearningContext({ cwd })].filter(Boolean).join('\n'),
+    [goalLine, startupBriefing(cwd, featureBrief, recentCommits, projectLine, progressLast), buildLearningContext({ cwd })].filter(Boolean).join('\n'),
     MAX_BRIEFING,
   );
 }

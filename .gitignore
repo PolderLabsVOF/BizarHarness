@@ -20,7 +20,7 @@ dist/
 
 # Generated agent/skill and orchestration caches
 .agents/
-agent/
+/agent/
 .omx/
 
 # Local research and generated artifacts

@@ -286,10 +286,10 @@ test('SessionStart: defaults source to startup when missing', () => {
   }
 });
 
-test('SessionStart: briefing is hard-capped at 800 characters', () => {
+test('SessionStart: briefing is hard-capped at 1200 characters', () => {
   const dir = makeProject();
   try {
-    // Bloat each component individually so the composed briefing exceeds 800 chars.
+    // Bloat each component individually so the composed briefing exceeds 1200 chars.
     const giantProject = ['# BigProject', '', 'A '.repeat(200).trim(), ' that is the one-line summary.'].join('\n');
     writeFileSync(join(dir, '.bizar', 'PROJECT.md'), giantProject);
     const giantProgress = '## Current State\n\nBranch: master | ' + 'filler '.repeat(50) + '\n\n' +
@@ -308,7 +308,7 @@ test('SessionStart: briefing is hard-capped at 800 characters', () => {
     }
     const { stdout } = runHook({ source: 'startup', cwd: dir });
     const ctx = additionalContext(stdout);
-    assert.ok(ctx.length <= 800, `briefing is ${ctx.length} chars, cap is 800`);
+    assert.ok(ctx.length <= 1200, `briefing is ${ctx.length} chars, cap is 1200`);
     assert.match(ctx, /…$/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
