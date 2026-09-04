@@ -119,6 +119,7 @@ function showHelp() {
     spec-list              List SDK schemas, policy docs, and mirror sync status (audit #84)
     ambiguity              Score a deep-interview spec's clarity breakdown (Phase 3 OMX)
     guard <subcommand>     F-206 progress-guarding loop (start/check/status/stop/list)
+    goal-bootstrap        F-207 Mike autonomous goal seeding (resume | bootstrap | idle)
     bench                  Efficiency benchmarks + auto-fan-out rule (audit #85)
     team                   Run the office-manager orchestration agent
     subagent               Run a named agent in read-only plan mode
@@ -541,6 +542,24 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'guard');
+      const code = await mod.run(cmdArgs);
+      if (typeof code === 'number') process.exit(code);
+      break;
+    }
+
+    case 'goal-bootstrap': {
+      // F-207 — Mike autonomous goal / ultragoal bootstrap. Single-action
+      // CLI: read feature_list.json + docs/specs/ and emit a
+      // discriminated-union verdict (resume | bootstrap | idle). The
+      // bootstrap action writes exactly one durable artifact (the
+      // charter) under docs/specs/. See cli/commands/goal-bootstrap.mjs.
+      const mod = await importCommand('goal-bootstrap');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load goal-bootstrap command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'goal-bootstrap');
       const code = await mod.run(cmdArgs);
       if (typeof code === 'number') process.exit(code);
       break;

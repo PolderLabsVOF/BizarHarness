@@ -89,6 +89,30 @@ that OMX-derived flows never silently escalate past a known safety boundary.
    `validate` advance, or a `ralplan` execution-leak while the ambiguity
    floor is unmet is a routing violation; report it before continuing.
 
+## Autonomous Goal Bootstrap (F-207)
+
+On every SessionStart, before any other work, Mike MUST read the
+SessionStart briefing's first line — it carries the F-207 verdict from
+`config/claude/hooks/goal-bootstrap.mjs`:
+
+- `goal: resume ultragoal <id> (source=spec)` — an in-flight goal exists;
+  treat `<id>` as the active objective and pick up its durable state.
+- `goal: bootstrap ultragoal <id> → <charterPath>` — the helper just
+  wrote a fresh aggregate-mode charter; read it, announce it as the new
+  active goal in the operator-facing reply, and proceed.
+- `goal: idle (no not_started features)` — all features are passing or
+  no features exist; do not bootstrap work that isn't queued.
+
+The bootstrap MUST NEVER be skipped — it is the durable source of the
+"what is the active goal right now" answer. Calling
+`bizar goal-bootstrap` directly is allowed for tests and operator
+inspection; the CLI returns the same `{action, id?, charterPath?}`
+shape the SessionStart hook emits.
+
+If the bootstrap returns an unexpected verdict shape, treat it as
+`idle`, surface the warning, and ask the operator for direction before
+advancing. Never invent a goal — F-207 is the only authority.
+
 ## Models
 
 For every dispatch, select the cheapest sufficient enabled configured model

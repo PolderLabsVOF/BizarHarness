@@ -45,6 +45,7 @@ const DIRECT_COMMANDS = [
   { cmd: 'spec-list', expect: 'bizar spec-list — audit #84 schema' },
   { cmd: 'ambiguity', expect: 'bizar ambiguity — score a deep-interview' },
   { cmd: 'guard', expect: 'bizar guard — F-206 progress-guarding loop' },
+  { cmd: 'goal-bootstrap', expect: 'bizar goal-bootstrap — F-207 Mike autonomous goal seeding' },
 ];
 
 // Util-routed commands: still go through the help dispatcher and

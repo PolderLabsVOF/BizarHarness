@@ -141,6 +141,18 @@ export {
   type GuardVerdict,
 } from "./agent/guard.js";
 
+// F-207 — Mike autonomous goal / ultragoal bootstrap.
+export {
+  bootstrapGoal,
+  bootstrapGoalFromFile,
+  renderAggregateCharter,
+  GoalBootstrapError,
+  GOAL_BOOTSTRAP_SCHEMA_VERSION,
+  type BootstrapFeature,
+  type BootstrapGoalInput,
+  type BootstrapVerdict,
+} from "./agent/goal-bootstrap.js";
+
 // F-194 — Autonomy contract (Phase B.1): typed ObjectiveRun,
 // EvidenceBundle, OutcomeLearnerOutcome.
 export * from "./autonomy/index.js";
