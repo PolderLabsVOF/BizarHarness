@@ -1,11 +1,11 @@
 ---
-description: Auto-fill a sprint contract from a goal ID in PROGRESS.md.
+description: Auto-fill a sprint contract from an OpenKan PRD or plan ID.
 allowed-tools: Read, Write, Bash
 ---
 
 # /sprint — Auto-Fill Sprint Contract from Goal
 
-Reads a goal from the canonical root `PROGRESS.md` and pre-fills
+Reads a durable goal from OpenKan `.ok/` and pre-fills
 `templates/sprint-contract.md` with its title and key results.
 
 ## Usage
@@ -18,8 +18,7 @@ Example: `/sprint F-099`
 
 ## What it does
 
-1. Parses `PROGRESS.md` via `cli/progress-parser.mjs`
-2. Finds the goal with matching `id` (e.g. `F-099`)
+1. Reads every PRD under `.ok/prds/` and finds the matching goal id (e.g. `F-099`)
 3. Reads `templates/sprint-contract.md` as the template
 4. Pre-fills:
    - **Feature ID** → `goal-id`
@@ -32,7 +31,7 @@ Example: `/sprint F-099`
 
 ## Error handling
 
-- Goal not found → `Error: goal '<id>' not found in PROGRESS.md`
+- Goal not found → `Error: goal '<id>' not found in OpenKan .ok`
 - No key results → Scope (in) section left blank with a `<fill>` placeholder
 - File write failure → prints the pre-filled content to stdout as fallback
 

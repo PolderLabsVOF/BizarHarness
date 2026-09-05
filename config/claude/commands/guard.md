@@ -7,7 +7,7 @@ allowed-tools: Read, Write, Bash, WebFetch
 
 Manage the F-206 `/guard` progress-guarding loop. The guard is bounded
 and read-only with respect to the host repo: it inspects a plan doc +
-PROGRESS.md + feature_list.json + recent git history, returns a
+OpenKan `.ok/` state + recent git history, returns a
 verdict (`healthy | drift | stuck | done`), and self-terminates on
 `done`. It does NOT auto-commit, auto-push, or auto-publish.
 

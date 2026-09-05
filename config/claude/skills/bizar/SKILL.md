@@ -9,13 +9,13 @@ Bizar is a Claude Code-native autonomous engineering harness. Its control surfac
 
 ## Operating contract
 
-1. Read the repository instructions and `PROGRESS.md` before non-trivial work.
+1. Read the repository instructions and inspect `.ok/` with `bizar task list` and `bizar goals list` before non-trivial work.
 2. Define the target result, success criteria, constraints, available evidence, and stop condition.
 3. Work directly when one agent can complete and verify safely.
 4. Use bounded subagents only when scopes are independent and coordination improves speed or correctness.
-5. Keep WIP at one active feature unless an explicit team plan defines independent lanes.
+5. Claim a scoped OpenKan task before implementation; use OpenKan plans and PRDs for durable progression and goals.
 6. Prefer project files and Semble for repository facts; use official documentation for external APIs.
-7. Update `PROGRESS.md` before and after code changes when the project contract requires it.
+7. Update OpenKan task status and verification evidence at durable handoffs; legacy `PROGRESS.md` and `feature_list.json` are not live planning state.
 8. Run the smallest proving test first, then the repository's required full gates.
 
 ## Autonomy boundary
@@ -37,7 +37,7 @@ When approval is required, present the exact command/action, scope, evidence, an
 - `bizar audit`, `bizar doctor`, `bizar validate` — installation and configuration evidence.
 - `bizar test-gate` — detect and run project tests.
 - `bizar cost` — reserve/commit/release budget.
-- `bizar claim` — feature ownership and state transitions.
+- `bizar openkan`, `bizar task`, `bizar plan`, `bizar goals`, `bizar claim` — default OpenKan planning, progression, goal, and scoped-ownership surfaces.
 - `bizar team` / `bizar subagent` — Claude Code-native coordination wrappers.
 - MCP tools — plans, loops, graph queries, bounded learning evidence, and decisions.
 - `bizar learn` — explicit global preferences and project debugging lessons.

@@ -13,21 +13,21 @@ is verified, and stops.
 | Subsystem | Canonical surfaces |
 | --- | --- |
 | Instructions | `AGENTS.md`, `config/claude/agents/_shared/AGENT_BASELINE.md`, `config/claude/agents/_shared/CLAUDE_TOOLS.md` |
-| State | `PROGRESS.md`, `feature_list.json`, `DECISIONS.md`, bounded `.bizar/` operational records |
+| State | OpenKan `.ok/` tasks, plans, and PRDs; `DECISIONS.md`; bounded `.bizar/` operational records |
 | Verification | `make check`, `make test`, `make e2e`, `make clean-check` |
-| Scope | WIP=1, explicit exclusions, approval boundaries, stop conditions |
-| Lifecycle | `make session-start`, progress/evidence updates, `make session-end` |
+| Scope | claimed OpenKan task/plan/PRD, explicit exclusions, approval boundaries, stop conditions |
+| Lifecycle | `make session-start`, OpenKan status/evidence updates, `make session-end` |
 
 ## Session lifecycle
 
-1. Read the repository instructions and `PROGRESS.md`.
-2. Inspect `feature_list.json`; keep exactly one active feature.
+1. Read the repository instructions and inspect `.ok/` with `bizar task list`, `bizar plan list`, and `bizar goals list`.
+2. Claim the scoped OpenKan task before implementation; create a plan or PRD when the work needs durable progression or goals.
 3. Define the target, exclusions, evidence, and stop condition.
 4. Execute reversible local work without unnecessary handoffs.
 5. Ask before destructive, credential, production, publish, deploy, merge,
    push, release, or irreversible actions.
 6. Run targeted tests, then the required project gates in dependency order.
-7. Update documentation, progress, feature evidence, and eval records.
+7. Update documentation, OpenKan task evidence/status, and eval records.
 8. Let the configured commit workflow perform its simplify and approval gates.
 
 ## Definition of done

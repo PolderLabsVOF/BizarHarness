@@ -14,7 +14,7 @@ Agent teams are experimental. They require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
 
 ## Protocol
 
-1. Read repository instructions, `PROGRESS.md`, and `feature_list.json` when present.
+1. Read repository instructions and the authoritative OpenKan `.ok/` state with `bizar task list`, `bizar plan list`, and `bizar goals list`.
 2. Define the target result, constraints, validation evidence, and stop condition.
 3. Decompose into disjoint file/responsibility scopes. Assign shared root files to one owner only.
 4. Create and claim durable `bizar task` records for editing lanes. Code-writing
