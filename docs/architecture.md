@@ -141,7 +141,8 @@ manifest.
 
 The Bizar stdio MCP server exposes a fixed tool surface to Claude Code. Tools
 are wrappers around typed SDK primitives (plans, loops, graph queries,
-instincts, decisions) plus agent-facing CLI shims (`bizar_task`,
+instincts, decisions) plus an OpenKan-native task tool (the compatibility
+identifier `bizar_task`,
 `bizar_workflow`, `bizar_control`, `bizar_audit`). `bizar_model_list` returns
 ONLY the user-selected models from `model-router.json#userSelected` (plus a
 total-available count for context) — never the raw gateway inventory. This

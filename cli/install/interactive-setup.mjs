@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Writable } from 'node:stream';
 import { createInterface } from 'node:readline/promises';
+import { resolveOpenKanHome } from '../openkan.mjs';
 
 export function providerSettingsPath(env = process.env) {
   const root = env.CLAUDE_CONFIG_DIR?.trim()
@@ -28,6 +29,16 @@ export function detectProviderConfiguration({ env = process.env, settings = {} }
     || settingsEnv.ANTHROPIC_API_KEY?.trim()
     || '';
   return { url, key, missing: [...(!url ? ['url'] : []), ...(!key ? ['key'] : [])] };
+}
+
+export function detectAdvancedConfiguration({ env = process.env, settings = {} } = {}) {
+  const settingsEnv = settings?.env && typeof settings.env === 'object' ? settings.env : {};
+  return {
+    model: env.ANTHROPIC_MODEL?.trim() || settingsEnv.ANTHROPIC_MODEL?.trim() || '',
+    teams: env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS?.trim()
+      || settingsEnv.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS?.trim()
+      || '',
+  };
 }
 
 export function isValidProviderUrl(value) {
@@ -67,6 +78,30 @@ function writeLine(output, value = '') {
   output.write(`${value}\n`);
 }
 
+function answer(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+async function askYesNo(prompt, defaultValue, deps) {
+  while (true) {
+    const suffix = defaultValue ? '[Y/n]' : '[y/N]';
+    const value = answer(await deps.askText(`${prompt} ${suffix} `, deps.io));
+    if (!value) return defaultValue;
+    if (['y', 'yes'].includes(value.toLowerCase())) return true;
+    if (['n', 'no'].includes(value.toLowerCase())) return false;
+    writeLine(deps.output, '  ! Please answer yes or no.');
+  }
+}
+
+function expandHome(value, env) {
+  const home = env.HOME?.trim() || homedir();
+  return value === '~' ? home : value.startsWith('~/') ? join(home, value.slice(2)) : value;
+}
+
+export function isValidOpenKanHome(value) {
+  return Boolean(value && !value.includes('\0'));
+}
+
 /**
  * Guided install preflight. Credentials are placed only in the current
  * process; the provisioner's settings writer persists them globally with the
@@ -77,6 +112,7 @@ export async function runInteractiveSetup({
   input = process.stdin,
   output = process.stdout,
   enabled = true,
+  cwd = process.cwd(),
   readSettings = readProviderSettings,
   askText = askLine,
   askHidden = askSecret,
@@ -89,6 +125,7 @@ export async function runInteractiveSetup({
   }
 
   const detected = detectProviderConfiguration({ env, settings });
+  const advanced = detectAdvancedConfiguration({ env, settings });
   const interactive = enabled && input.isTTY === true && output.isTTY === true;
   if (!interactive) {
     if (detected.missing.length > 0) {
@@ -111,7 +148,7 @@ export async function runInteractiveSetup({
 
   writeLine(output, '');
   writeLine(output, '  Interactive setup');
-  const confirmation = (await askText('  Continue with the installation? [Y/n] ', { input, output })).trim().toLowerCase();
+  const confirmation = answer(await askText('  Continue with the installation? [Y/n] ', { input, output })).toLowerCase();
   if (confirmation === 'n' || confirmation === 'no') {
     writeLine(output, '  Installation cancelled.');
     return { ok: true, interactive: true, cancelled: true, configured: detected.missing.length === 0 };
@@ -121,12 +158,12 @@ export async function runInteractiveSetup({
   let key = detected.key;
   if (url) writeLine(output, `  ✓ Provider URL detected: ${url}`);
   while (!url) {
-    const answer = (await askText('  Provider URL (for example https://gateway.example/v1): ', { input, output })).trim();
-    if (!isValidProviderUrl(answer)) {
+    const value = answer(await askText('  Provider URL (for example https://gateway.example/v1): ', { input, output }));
+    if (!isValidProviderUrl(value)) {
       writeLine(output, '  ! Enter a valid http:// or https:// URL.');
       continue;
     }
-    url = answer.replace(/\/+$/, '');
+    url = value.replace(/\/+$/, '');
   }
 
   if (key) writeLine(output, '  ✓ Provider key detected (hidden)');
@@ -139,5 +176,62 @@ export async function runInteractiveSetup({
   env.BIZAR_MODEL_ROUTER_URL = url;
   env.ANTHROPIC_AUTH_TOKEN = key;
   writeLine(output, '  ✓ Provider configuration ready; the key will be stored in global Claude settings.');
-  return { ok: true, interactive: true, cancelled: false, configured: true, missing: detected.missing };
+
+  // Keep the common already-configured path quick. Fresh provider setup gets
+  // the extra choices that materially affect the first Bizar session.
+  let model = advanced.model;
+  let teams = advanced.teams
+    ? advanced.teams === '1' || advanced.teams.toLowerCase() === 'true'
+    : null;
+  let openkanHome = resolveOpenKanHome({ cwd, env });
+  let initializeOpenKanProject = false;
+  if (detected.missing.length > 0) {
+    if (model) writeLine(output, `  ✓ Default model detected: ${model}`);
+    else {
+      model = answer(await askText('  Default Claude model (optional; press Enter to choose later): ', { input, output }));
+      if (model) writeLine(output, `  ✓ Default model: ${model}`);
+    }
+
+    const teamsEnabled = await askYesNo('  Enable Claude Code agent teams?', true, {
+      askText: async (prompt, io) => askText(prompt, io), io: { input, output }, output,
+    });
+    teams = teamsEnabled;
+    writeLine(output, `  ✓ Agent teams ${teams ? 'enabled' : 'disabled'}.`);
+
+    const homeAnswer = answer(await askText(`  OpenKan install directory [${openkanHome}]: `, { input, output }));
+    if (homeAnswer) {
+      const expanded = expandHome(homeAnswer, env);
+      if (!isValidOpenKanHome(expanded)) {
+        writeLine(output, '  ! OpenKan directory cannot be empty or contain NUL bytes; using the default.');
+      } else {
+        openkanHome = resolve(cwd, expanded);
+      }
+    }
+    writeLine(output, `  ✓ OpenKan will be installed at ${openkanHome}.`);
+
+    const projectHasOpenKan = existsSync(join(cwd, '.ok', 'index.json'));
+    if (projectHasOpenKan) {
+      writeLine(output, '  ✓ OpenKan project workspace already exists.');
+    } else {
+      initializeOpenKanProject = await askYesNo('  Initialise OpenKan planning in this project?', true, {
+        askText: async (prompt, io) => askText(prompt, io), io: { input, output }, output,
+      });
+    }
+  }
+  if (detected.missing.length > 0) {
+    if (model) env.ANTHROPIC_MODEL = model;
+    env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS = teams ? '1' : '0';
+  }
+  env.BIZAR_OPENKAN_HOME = openkanHome;
+  return {
+    ok: true,
+    interactive: true,
+    cancelled: false,
+    configured: true,
+    missing: detected.missing,
+    model: model || null,
+    agentTeams: teams,
+    openkanHome,
+    initializeOpenKanProject,
+  };
 }

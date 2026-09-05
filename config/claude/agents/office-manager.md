@@ -104,10 +104,11 @@ SessionStart briefing's first line — it carries the F-207 verdict from
   no features exist; do not bootstrap work that isn't queued.
 
 The bootstrap MUST NEVER be skipped — it is the durable source of the
-"what is the active goal right now" answer. Calling
-`bizar goal-bootstrap` directly is allowed for tests and operator
-inspection; the CLI returns the same `{action, id?, charterPath?}`
-shape the SessionStart hook emits.
+"what is the active goal right now" answer. For goal work, inspect and
+mutate the native OpenKan PRD surface with `ok prd`; do not call the retired
+`bizar goal-bootstrap` compatibility alias from agent workflows. Tests may
+exercise the alias to verify compatibility, but it is not an agent task or
+planning path.
 
 If the bootstrap returns an unexpected verdict shape, treat it as
 `idle`, surface the warning, and ask the operator for direction before

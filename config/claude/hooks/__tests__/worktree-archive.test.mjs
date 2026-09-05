@@ -178,7 +178,7 @@ test('SubagentStop: extracts the branch from the agent transcript when cwd is no
     transcript,
     [
       JSON.stringify({ type: 'user', message: { content: [
-        { type: 'tool_result', tool_use_id: 'x1', content: 'Bizar: this editing agent is isolated in a worktree; claim a bizar task scope before modifying shared project paths.\n\nAgent is working on branch wt/todd-transcript. On completion, run `bizar worktree-merge wt/todd-transcript`.' },
+        { type: 'tool_result', tool_use_id: 'x1', content: 'Bizar: this editing agent is isolated in a worktree; claim an OpenKan task scope with `ok task claim` before modifying shared project paths.\n\nAgent is working on branch wt/todd-transcript. On completion, run `bizar worktree-merge wt/todd-transcript`.' },
       ] } }),
     ].join('\n'),
   );

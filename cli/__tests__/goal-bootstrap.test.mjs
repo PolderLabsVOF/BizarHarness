@@ -30,8 +30,8 @@ test('goal-bootstrap is a documented OpenKan PRD compatibility alias', () => {
   const { root, home } = fixture();
   const result = run(root, home, ['--help']);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /bizar goals — OpenKan prd lifecycle/);
-  assert.match(result.stdout, /bizar goals/);
+  assert.match(result.stdout, /compatibility alias for OpenKan prd/);
+  assert.match(result.stdout, /ok prd/);
 });
 
 test('goal-bootstrap forwards non-help arguments to OpenKan PRDs', () => {

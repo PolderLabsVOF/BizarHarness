@@ -54,8 +54,8 @@ test('startup tells the agent how to select ready OpenKan work', () => {
   try {
     const value = context(dir);
     assert.match(value, /no active task/);
-    assert.match(value, /bizar task list/);
-    assert.match(value, /bizar goals list/);
+    assert.match(value, /ok task list/);
+    assert.match(value, /ok prd list/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -76,7 +76,7 @@ test('missing .ok remains a helpful, non-blocking briefing', () => {
     rmSync(join(dir, '.ok'), { recursive: true, force: true });
     const value = context(dir);
     assert.match(value, /\.ok\/ is not initialised/);
-    assert.match(value, /bizar openkan init/);
+    assert.match(value, /ok init/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

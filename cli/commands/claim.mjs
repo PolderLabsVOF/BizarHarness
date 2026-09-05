@@ -3,16 +3,16 @@ import { OpenKanError, runOpenKanOk } from '../openkan.mjs';
 
 function help() {
   process.stdout.write(`
-  bizar claim — claim an OpenKan task lease
+  ok task claim — claim an OpenKan task lease
 
   Usage:
-    bizar claim <task-id> [--who <agent>] [--lease-ms <ms>]
-    bizar claim release <task-id> [--who <agent>]
-    bizar claim heartbeat <task-id> [--who <agent>] [--lease-ms <ms>]
-    bizar claim list [--status <status>] [--json]
+    ok task claim <task-id> [--who <agent>] [--lease-ms <ms>]
+    ok task release <task-id> [--who <agent>]
+    ok task heartbeat <task-id> [--who <agent>] [--lease-ms <ms>]
+    ok task list [--status <status>] [--json]
 
   Claims are OpenKan .ok locks, not feature_list.json annotations. Use
-  \`bizar task update\` for status transitions and \`bizar goals\` for PRDs.
+  \`ok task update\` for status transitions and \`ok prd\` for PRDs.
 `);
 }
 

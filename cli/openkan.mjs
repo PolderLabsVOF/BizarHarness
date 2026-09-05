@@ -14,13 +14,18 @@
  */
 import {
   existsSync,
+  lstatSync,
+  mkdirSync,
   readFileSync,
   realpathSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { resolveBizarHome, resolveClaudeConfigDir } from './config-paths.mjs';
 
 export const OPENKAN_NPM_PACKAGE = '@polderlabs/openkan';
 export const OPENKAN_NPM_VERSION_SPEC = 'latest';
@@ -34,6 +39,12 @@ export const OPENKAN_DEFAULT_LAUNCHER = join(
   'ok.mjs',
 );
 export const OPENKAN_VERSION_MARKER = '.installed-version';
+export const OPENKAN_INSTALL_CONFIG = 'openkan-install.json';
+
+function nodeMajorVersion() {
+  const match = process.versions.node.match(/^(\d+)/);
+  return match ? Number(match[1]) : 0;
+}
 
 export class OpenKanError extends Error {
   constructor(code, message, details = {}) {
@@ -74,6 +85,23 @@ export function resolveOpenKanOk(options = {}) {
     return candidate;
   }
 
+  const configuredBin = options.openkanBin || process.env.BIZAR_OPENKAN_BIN;
+  if (configuredBin) {
+    if (!existsSync(configuredBin)) {
+      throw new OpenKanError('OPENKAN_NOT_FOUND', `OpenKan command does not exist: ${configuredBin}`);
+    }
+    let canonical = configuredBin;
+    try { canonical = realpathSync(configuredBin); } catch { /* preserve configured path */ }
+    const launcher = okLauncherFromOpenKanBin(canonical);
+    if (!launcher) {
+      throw new OpenKanError(
+        'OPENKAN_INCOMPLETE',
+        `OpenKan at ${canonical} does not provide bin/ok.mjs. Run \`bizar openkan install\` to update it.`,
+      );
+    }
+    return launcher;
+  }
+
   const home = options.home || process.env.BIZAR_OPENKAN_HOME;
   if (home) {
     const candidates = [
@@ -90,18 +118,32 @@ export function resolveOpenKanOk(options = {}) {
     );
   }
 
-  const configuredBin = options.openkanBin || process.env.BIZAR_OPENKAN_BIN || executableOnPath('openkan');
-  if (!configuredBin) {
+  // The npm prefix does not put its `ok` shim on the operator's PATH. Look
+  // in Bizar's managed default home before falling back to a standalone
+  // OpenKan installation. This keeps `ok task`, hooks, and MCP consumers
+  // working after a plain `bizar install` without requiring shell changes.
+  const managedHome = resolveOpenKanHome({ cwd });
+  const managedCandidates = [
+    join(managedHome, 'node_modules', '@polderlabs', 'openkan', 'bin', 'ok.mjs'),
+    join(managedHome, 'node_modules', '@polderlabs', 'openkan', 'bin', 'ok.ts'),
+    join(managedHome, 'bin', 'ok.mjs'),
+    join(managedHome, 'bin', 'ok.ts'),
+  ];
+  const managedLauncher = managedCandidates.find((path) => existsSync(path));
+  if (managedLauncher) return managedLauncher;
+
+  const configuredPathBin = executableOnPath('openkan');
+  if (!configuredPathBin) {
     throw new OpenKanError(
       'OPENKAN_NOT_FOUND',
       'OpenKan is required for Bizar planning. Run `bizar openkan install`, then retry.',
     );
   }
-  if (!existsSync(configuredBin)) {
-    throw new OpenKanError('OPENKAN_NOT_FOUND', `OpenKan command does not exist: ${configuredBin}`);
+  if (!existsSync(configuredPathBin)) {
+    throw new OpenKanError('OPENKAN_NOT_FOUND', `OpenKan command does not exist: ${configuredPathBin}`);
   }
-  let canonical = configuredBin;
-  try { canonical = realpathSync(configuredBin); } catch { /* preserve configured path */ }
+  let canonical = configuredPathBin;
+  try { canonical = realpathSync(configuredPathBin); } catch { /* preserve configured path */ }
   const launcher = okLauncherFromOpenKanBin(canonical);
   if (!launcher) {
     throw new OpenKanError(
@@ -110,6 +152,24 @@ export function resolveOpenKanOk(options = {}) {
     );
   }
   return launcher;
+}
+
+function openKanPackageRoot(home) {
+  return join(home, 'node_modules', '@polderlabs', 'openkan');
+}
+
+/** Resolve OpenKan's dashboard launcher from the managed npm install. */
+export function resolveOpenKanDashboard(options = {}) {
+  const cwd = resolve(options.cwd || process.cwd());
+  const explicitHome = options.home || process.env.BIZAR_OPENKAN_HOME;
+  const home = explicitHome ? resolve(explicitHome) : resolveOpenKanHome({ cwd });
+  const managed = join(openKanPackageRoot(home), 'bin', 'openkan.mjs');
+  if (existsSync(managed)) return managed;
+  const legacy = join(home, 'bin', 'openkan.mjs');
+  if (existsSync(legacy)) return legacy;
+  const configuredBin = options.openkanBin || process.env.BIZAR_OPENKAN_BIN || executableOnPath('openkan');
+  if (configuredBin && existsSync(configuredBin)) return configuredBin;
+  throw new OpenKanError('OPENKAN_NOT_FOUND', 'OpenKan is required. Run `bizar openkan install`.');
 }
 
 function nodeArgs(launcher, args) {
@@ -179,8 +239,9 @@ export function installOpenKan(options = {}) {
 }
 
 /** Read the installed OpenKan version marker from the home directory, if any. */
-export function readInstalledOpenKanVersion(home = OPENKAN_HOME_DEFAULT) {
-  const marker = join(home, OPENKAN_VERSION_MARKER);
+export function readInstalledOpenKanVersion(home) {
+  const installHome = home ? resolve(home) : resolveOpenKanHome();
+  const marker = join(installHome, OPENKAN_VERSION_MARKER);
   if (!existsSync(marker)) return null;
   try {
     return readFileSync(marker, 'utf8').trim() || null;
@@ -191,9 +252,123 @@ export function readInstalledOpenKanVersion(home = OPENKAN_HOME_DEFAULT) {
 
 /** Resolve the default install root for the native installer. */
 export function resolveOpenKanHome(options = {}) {
+  const env = options.env || process.env;
   if (options.home) return resolve(options.home);
-  if (process.env.BIZAR_OPENKAN_HOME) return resolve(process.env.BIZAR_OPENKAN_HOME);
-  return OPENKAN_HOME_DEFAULT;
+  if (env.BIZAR_OPENKAN_HOME) return resolve(env.BIZAR_OPENKAN_HOME);
+  const cwd = options.cwd || process.cwd();
+  const configRoot = resolveBizarHome({ env, cwd });
+  const configPath = join(configRoot, OPENKAN_INSTALL_CONFIG);
+  if (existsSync(configPath)) {
+    try {
+      const configured = JSON.parse(readFileSync(configPath, 'utf8')).home;
+      if (typeof configured === 'string' && configured.trim()) return resolve(configured);
+    } catch { /* use the default when the optional config is corrupt */ }
+  }
+  return join(configRoot, 'openkan');
+}
+
+function writeOpenKanInstallConfig({ home, packageSpec, cwd, env = process.env }) {
+  const configRoot = resolveBizarHome({ env, cwd });
+  mkdirSync(configRoot, { recursive: true });
+  writeFileSync(join(configRoot, OPENKAN_INSTALL_CONFIG), JSON.stringify({
+    schema: 1,
+    home,
+    packageSpec,
+    updatedAt: new Date().toISOString(),
+  }, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+}
+
+/** Install OpenKan's package-owned Claude agent and skill without npm hooks. */
+export function installOpenKanAgent({ home, cwd = process.cwd(), env = process.env, force = false } = {}) {
+  if (env.BIZAR_SKIP_OPENKAN_AGENT_INSTALL === '1') {
+    return { ok: true, skipped: true, installed: [], preserved: [], message: 'OpenKan agent and skill installation skipped' };
+  }
+  const script = join(openKanPackageRoot(home), 'bin', 'install-agent.mjs');
+  if (!existsSync(script)) {
+    return {
+      ok: true,
+      skipped: true,
+      installed: [],
+      preserved: [],
+      message: `OpenKan package has no bundled agent installer; runtime remains usable (${script})`,
+    };
+  }
+  const result = spawnSync(process.execPath, [script], {
+    cwd: resolve(cwd),
+    encoding: 'utf8',
+    shell: false,
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: resolveClaudeConfigDir({ env, cwd }),
+      ...(force ? { OPENKAN_AGENT_INSTALL_FORCE: '1' } : {}),
+    },
+  });
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      message: (result.stderr || result.stdout || '').trim() || 'OpenKan agent and skill installation failed',
+    };
+  }
+  return {
+    ok: true,
+    installed: ['agents/openkan.md', 'skills/openkan'],
+    preserved: [],
+    output: (result.stdout || '').trim(),
+    message: `OpenKan agent and skill ready in ${resolveClaudeConfigDir({ env, cwd })}`,
+  };
+}
+
+/** Make the native OpenKan commands available to agent shell sessions. */
+export function installOpenKanCommandShims({ home, env = process.env } = {}) {
+  const root = env.HOME?.trim() || env.USERPROFILE?.trim() || homedir();
+  const binDir = join(root, '.local', 'bin');
+  const packageBin = join(openKanPackageRoot(home), 'bin');
+  const commands = [];
+  try { mkdirSync(binDir, { recursive: true, mode: 0o755 }); } catch (error) {
+    return { ok: false, installed: [], preserved: [], message: `OpenKan command directory unavailable: ${error.message}` };
+  }
+  for (const name of ['ok', 'openkan']) {
+    const target = join(packageBin, `${name}.mjs`);
+    const shim = join(binDir, process.platform === 'win32' ? `${name}.cmd` : name);
+    if (!existsSync(target)) continue;
+    if (existsSync(shim)) {
+      let replaceStaleOpenKanShim = false;
+      if (process.platform !== 'win32') {
+        try {
+          replaceStaleOpenKanShim = lstatSync(shim).isSymbolicLink()
+            && realpathSync(shim) !== realpathSync(target)
+            && realpathSync(shim).toLowerCase().includes('openkan');
+        } catch { /* preserve an unreadable or user-owned command */ }
+      }
+      if (!replaceStaleOpenKanShim) {
+        commands.push({ name, path: shim, status: 'preserved' });
+        continue;
+      }
+      try { unlinkSync(shim); } catch (error) {
+        commands.push({ name, path: shim, status: 'failed', error: error.message });
+        continue;
+      }
+    }
+    try {
+      if (process.platform === 'win32') {
+        writeFileSync(shim, `@echo off\r\n"${process.execPath}" "${target}" %*\r\n`, { encoding: 'utf8', mode: 0o755 });
+      } else {
+        symlinkSync(target, shim);
+      }
+      commands.push({ name, path: shim, status: 'installed' });
+    } catch (error) {
+      commands.push({ name, path: shim, status: 'failed', error: error.message });
+    }
+  }
+  const failed = commands.filter((entry) => entry.status === 'failed');
+  return {
+    ok: failed.length === 0,
+    installed: commands.filter((entry) => entry.status === 'installed'),
+    preserved: commands.filter((entry) => entry.status === 'preserved'),
+    message: failed.length === 0
+      ? `OpenKan native commands ready in ${binDir}`
+      : `OpenKan command shims failed: ${failed.map((entry) => `${entry.name}: ${entry.error}`).join('; ')}`,
+  };
 }
 
 /**
@@ -221,9 +396,21 @@ export async function installOpenKanPromise(options = {}) {
   const pkgSpec = options.packageSpec || `${OPENKAN_NPM_PACKAGE}@${OPENKAN_NPM_VERSION_SPEC}`;
   const previousVersion = options.refresh ? null : readInstalledOpenKanVersion(home);
 
+  if (nodeMajorVersion() < 22) {
+    throw new OpenKanError(
+      'OPENKAN_NODE_VERSION_UNSUPPORTED',
+      `OpenKan requires Node.js 22 or newer; found ${process.version}. Upgrade Node.js and run the installer again.`,
+    );
+  }
+
   if (process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL === '1' || options.skipNpmInstall) {
     if (previousVersion) {
       const launcher = resolveOpenKanOk({ cwd, home });
+      const agent = installOpenKanAgent({ home, cwd, env: options.env, force: options.force });
+      if (!agent.ok) throw new OpenKanError('OPENKAN_AGENT_INSTALL_FAILED', agent.message, { agent });
+      const commands = installOpenKanCommandShims({ home, env: options.env });
+      if (!commands.ok) throw new OpenKanError('OPENKAN_COMMAND_INSTALL_FAILED', commands.message, { commands });
+      if (options.persistConfig === true) writeOpenKanInstallConfig({ home, packageSpec: pkgSpec, cwd, env: options.env });
       return {
         ok: true,
         installed: false,
@@ -231,6 +418,8 @@ export async function installOpenKanPromise(options = {}) {
         home,
         version: previousVersion,
         launcher,
+        agent,
+        commands,
         message: `OpenKan install skipped; ${previousVersion} already present at ${home}`,
       };
     }
@@ -255,6 +444,9 @@ export async function installOpenKanPromise(options = {}) {
     shell: false,
     timeout: options.npmTimeoutMs || 240_000,
   });
+  if (npm.error) {
+    throw new OpenKanError('OPENKAN_NPM_INSTALL_FAILED', npm.error.message, { cause: npm.error });
+  }
   if (process.env.BIZAR_OPENKAN_TEST_FAIL_NPM === '1') {
     // Test seam: force a deterministic failure path without hitting the network.
     throw new OpenKanError(
@@ -285,6 +477,14 @@ export async function installOpenKanPromise(options = {}) {
 
   writeFileSync(join(home, OPENKAN_VERSION_MARKER), `${installedVersion}\n`, { encoding: 'utf8' });
 
+  const agent = installOpenKanAgent({ home, cwd, env: options.env, force: options.force });
+  if (!agent.ok) {
+    throw new OpenKanError('OPENKAN_AGENT_INSTALL_FAILED', agent.message, { agent });
+  }
+  const commands = installOpenKanCommandShims({ home, env: options.env });
+  if (!commands.ok) throw new OpenKanError('OPENKAN_COMMAND_INSTALL_FAILED', commands.message, { commands });
+  if (options.persistConfig === true) writeOpenKanInstallConfig({ home, packageSpec: pkgSpec, cwd, env: options.env });
+
   let launcher;
   try {
     launcher = verifyOpenKanRuntime({ cwd, home }).launcher;
@@ -303,6 +503,8 @@ export async function installOpenKanPromise(options = {}) {
     launcher,
     version: installedVersion,
     previousVersion,
+    agent,
+    commands,
     message: `OpenKan ${installedVersion} installed at ${launcher}`,
   };
 }

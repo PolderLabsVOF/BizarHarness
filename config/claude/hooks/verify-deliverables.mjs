@@ -4,7 +4,7 @@
  *
  * Claude Code supplies `agent_id`, `agent_type`, `agent_transcript_path`, and
  * `last_assistant_message`. This hook accepts only bounded, correlated tool
- * evidence from the agent transcript or a completed Bizar task claim; it never
+ * evidence from the agent transcript or a completed OpenKan task claim; it never
  * treats success-sounding final prose by itself as proof of delivery.
  */
 

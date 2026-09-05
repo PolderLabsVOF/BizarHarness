@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -8,10 +8,13 @@ import test, { afterEach } from 'node:test';
 import {
   OpenKanError,
   OPENKAN_NPM_PACKAGE,
+  installOpenKanAgent,
+  installOpenKanCommandShims,
   installOpenKanPromise,
   readInstalledOpenKanVersion,
   readOpenKanJson,
   resolveOpenKanHome,
+  resolveOpenKanDashboard,
   resolveOpenKanOk,
   runOpenKanOk,
 } from '../openkan.mjs';
@@ -93,6 +96,30 @@ test('provisioner treats OpenKan as a default runtime without mutating in dry-ru
   }
 });
 
+test('provisioner repairs native OpenKan commands for an already-installed runtime', async () => {
+  const { home } = fixture();
+  const packageBin = join(home, 'node_modules', '@polderlabs', 'openkan', 'bin');
+  mkdirSync(packageBin, { recursive: true });
+  writeFileSync(join(packageBin, 'ok.mjs'), '#!/usr/bin/env node\n');
+  writeFileSync(join(packageBin, 'openkan.mjs'), '#!/usr/bin/env node\n');
+  writeFileSync(join(home, 'node_modules', '@polderlabs', 'openkan', 'package.json'), JSON.stringify({ version: 'test' }));
+  const userHome = mkdtempSync(join(tmpdir(), 'bizar-openkan-user-'));
+  roots.push(userHome);
+  const previousHome = process.env.HOME;
+  try {
+    process.env.HOME = userHome;
+    const { ensureOpenKanRuntime } = await import('../provision.mjs');
+    const result = await ensureOpenKanRuntime({ home });
+    assert.equal(result.ok, true);
+    assert.equal(result.installed, false);
+    assert.equal(existsSync(join(userHome, '.local', 'bin', 'ok')), true);
+    assert.equal(existsSync(join(userHome, '.local', 'bin', 'openkan')), true);
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
 // ── npm installer tests ────────────────────────────────────────────────────
 
 /**
@@ -122,6 +149,74 @@ test('resolveOpenKanOk discovers the npm-installed launcher at node_modules/@pol
   roots.push(home);
   const { launcher } = stageFakeOpenKan(home);
   assert.equal(resolveOpenKanOk({ cwd: home, home }), launcher);
+});
+
+test('managed npm installation is discoverable without BIZAR_OPENKAN_HOME', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bizar-openkan-managed-'));
+  roots.push(root);
+  const home = join(root, 'openkan');
+  const { launcher } = stageFakeOpenKan(home);
+  const previousHome = process.env.BIZAR_OPENKAN_HOME;
+  const previousBizarHome = process.env.BIZAR_HOME;
+  process.env.BIZAR_HOME = root;
+  delete process.env.BIZAR_OPENKAN_HOME;
+  try {
+    assert.equal(resolveOpenKanOk({ cwd: root }), launcher);
+  } finally {
+    if (previousHome === undefined) delete process.env.BIZAR_OPENKAN_HOME;
+    else process.env.BIZAR_OPENKAN_HOME = previousHome;
+    if (previousBizarHome === undefined) delete process.env.BIZAR_HOME;
+    else process.env.BIZAR_HOME = previousBizarHome;
+  }
+});
+
+test('managed npm installation exposes the dashboard launcher', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-dashboard-'));
+  roots.push(home);
+  const packageRoot = join(home, 'node_modules', '@polderlabs', 'openkan', 'bin');
+  mkdirSync(packageRoot, { recursive: true });
+  const dashboard = join(packageRoot, 'openkan.mjs');
+  writeFileSync(dashboard, '#!/usr/bin/env node\n');
+  assert.equal(resolveOpenKanDashboard({ home }), dashboard);
+});
+
+test('OpenKan package-owned agent installer is run with the configured Claude directory', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bizar-openkan-agent-'));
+  roots.push(root);
+  const home = join(root, 'openkan');
+  const packageBin = join(home, 'node_modules', '@polderlabs', 'openkan', 'bin');
+  const claudeDir = join(root, 'claude');
+  mkdirSync(packageBin, { recursive: true });
+  writeFileSync(join(packageBin, 'install-agent.mjs'), `
+    import { mkdirSync, writeFileSync } from 'node:fs';
+    import { join } from 'node:path';
+    mkdirSync(join(process.env.CLAUDE_CONFIG_DIR, 'skills', 'openkan'), { recursive: true });
+    writeFileSync(join(process.env.CLAUDE_CONFIG_DIR, 'skills', 'openkan', 'SKILL.md'), '# openkan\\n');
+  `);
+  const result = installOpenKanAgent({ home, cwd: root, env: { CLAUDE_CONFIG_DIR: claudeDir, HOME: root } });
+  assert.equal(result.ok, true);
+  assert.equal(result.skipped, undefined);
+  assert.equal(existsSync(join(claudeDir, 'skills', 'openkan', 'SKILL.md')), true);
+});
+
+test('OpenKan native command shims expose ok and openkan to agent shells', () => {
+  const { root, home } = fixture();
+  const packageBin = join(home, 'node_modules', '@polderlabs', 'openkan', 'bin');
+  mkdirSync(packageBin, { recursive: true });
+  writeFileSync(join(packageBin, 'ok.mjs'), '#!/usr/bin/env node\n');
+  writeFileSync(join(packageBin, 'openkan.mjs'), '#!/usr/bin/env node\n');
+  const env = { ...process.env, HOME: join(root, 'user-home') };
+  mkdirSync(join(root, 'old-openkan', 'bin'), { recursive: true });
+  const oldOpenKan = join(root, 'old-openkan', 'bin', 'openkan.mjs');
+  writeFileSync(oldOpenKan, '#!/usr/bin/env node\n');
+  mkdirSync(join(env.HOME, '.local', 'bin'), { recursive: true });
+  symlinkSync(oldOpenKan, join(env.HOME, '.local', 'bin', 'openkan'));
+  const result = installOpenKanCommandShims({ home, env });
+  assert.equal(result.ok, true);
+  assert.equal(result.installed.length, 2);
+  assert.equal(existsSync(join(env.HOME, '.local', 'bin', 'ok')), true);
+  assert.equal(existsSync(join(env.HOME, '.local', 'bin', 'openkan')), true);
+  assert.equal(realpathSync(join(env.HOME, '.local', 'bin', 'openkan')), realpathSync(join(packageBin, 'openkan.mjs')));
 });
 
 test('resolveOpenKanOk falls back to bin/ok.mjs when the npm layout is missing', () => {
@@ -160,7 +255,7 @@ test('installOpenKanPromise skips the network and returns the staged version whe
   const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
   roots.push(home);
   const { launcher, version } = stageFakeOpenKan(home);
-  const result = await installOpenKanPromise({ home, skipNpmInstall: true });
+  const result = await installOpenKanPromise({ home, skipNpmInstall: true, env: { ...process.env, HOME: join(home, 'user-home') } });
   assert.equal(result.ok, true);
   assert.equal(result.installed, false);
   assert.equal(result.skipped, true);
@@ -184,7 +279,7 @@ test('installOpenKanPromise respects BIZAR_SKIP_OPENKAN_NPM_INSTALL when a marke
   const previous = process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL;
   process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL = '1';
   try {
-    const result = await installOpenKanPromise({ home });
+    const result = await installOpenKanPromise({ home, env: { ...process.env, HOME: join(home, 'user-home') } });
     assert.equal(result.ok, true);
     assert.equal(result.skipped, true);
     assert.equal(result.version, version);

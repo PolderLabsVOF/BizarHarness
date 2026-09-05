@@ -9,7 +9,7 @@ function usage() {
   bizar goal-bootstrap — retired compatibility alias
 
   OpenKan PRDs are Bizar's default durable goal system.
-  Use: bizar goals list | bizar goals add <title> | bizar goals update <id> ...
+  Use: ok prd list | ok prd add <title> | ok prd update <id> ...
 `);
 }
 

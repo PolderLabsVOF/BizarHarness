@@ -191,7 +191,7 @@ function detectActiveTask(cwd) {
 
 function inferNextStep(summary, activeTask) {
   if (summary.errors.length > 0) return `Resolve ${summary.errors[0]} from the prior session.`;
-  if (!activeTask) return 'Pick and claim the next ready OpenKan task with `bizar task list`.';
+  if (!activeTask) return 'Pick and claim the next ready OpenKan task with `ok task list`.';
   return `Continue with OpenKan task ${activeTask}.`;
 }
 

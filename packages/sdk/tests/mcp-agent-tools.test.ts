@@ -1,10 +1,10 @@
 /**
  * mcp-agent-tools.test.ts — end-to-end regression for the F-146 agent-facing
- * MCP tool wrappers (bizar_task, bizar_workflow, bizar_control, bizar_audit,
+ * MCP tool wrappers (OpenKan-native bizar_task, bizar_workflow, bizar_control, bizar_audit,
  * bizar_model_list).
  *
  * Each test invokes the tool's `handler` directly against the compiled SDK,
- * which shells out to `bizar <surface> <action> --json`. We assert the
+ * which shells out to native `ok task <action> --json` for task state. We assert the
  * returned text is either a JSON object (parseable, correct shape) or an
  * `error: ...` payload — never an unhandled exception.
  */

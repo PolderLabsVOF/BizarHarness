@@ -3,7 +3,7 @@ import { OpenKanError, runOpenKanOk } from '../openkan.mjs';
 
 function usage(name) {
   const resource = name === 'goals' ? 'prd' : 'plan';
-  process.stdout.write(`\n  bizar ${name} — OpenKan ${resource} lifecycle\n\n  Usage: bizar ${name} <ok ${resource} args...>\n  Run \`bizar openkan ${name} --help\` for the canonical OpenKan surface.\n`);
+  process.stdout.write(`\n  bizar ${name} — compatibility alias for OpenKan ${resource}\n\n  Usage: ok ${resource} <args...>\n  Run \`ok ${resource} --help\` for the canonical OpenKan surface.\n`);
 }
 
 export async function run(name, args, isHelpRequest) {

@@ -355,26 +355,80 @@ const graphPathTool = defineTool<{ from: string; to: string }>(
 );
 
 // ---------------------------------------------------------------------------
-// Agent-facing CLI wrappers (F-146) — thin `bizar <surface> --json` shells.
+// Agent-facing CLI wrappers (F-146) — thin local CLI shells.
 // ---------------------------------------------------------------------------
 
-// Forward action + arbitrary key/value args to `bizar task <action> --json`.
-// Valid actions: create, ready, list, show, claim, heartbeat, complete,
-// cancel, sweep.
+function resolveOpenKanLauncher(): { command: string; prefix: string[] } | null {
+  const home = process.env.HOME || homedir();
+  const configHome = process.env.XDG_CONFIG_HOME || join(home, ".config");
+  const configuredHome = process.env.BIZAR_OPENKAN_HOME?.trim();
+  const bizarHome = process.env.BIZAR_HOME?.trim() || join(configHome, "bizar");
+  const homes = [
+    configuredHome,
+    join(bizarHome, "openkan"),
+    join(configHome, "bizar", "openkan"),
+  ].filter((value, index, all): value is string => Boolean(value) && all.indexOf(value) === index);
+  const configuredBin = process.env.BIZAR_OPENKAN_OK_BIN?.trim();
+  const candidates = [
+    configuredBin,
+    ...homes.flatMap((root) => [
+      join(root, "node_modules", "@polderlabs", "openkan", "bin", "ok.mjs"),
+      join(root, "node_modules", "@polderlabs", "openkan", "bin", "ok.ts"),
+      join(root, "bin", "ok.mjs"),
+      join(root, "bin", "ok.ts"),
+    ]),
+  ].filter((value): value is string => value !== undefined && existsSync(value));
+  const launcher = candidates[0];
+  if (launcher) {
+    return {
+      command: process.execPath,
+      prefix: launcher.endsWith(".ts") ? ["--experimental-strip-types", launcher] : [launcher],
+    };
+  }
+
+  const delimiter = process.platform === "win32" ? ";" : ":";
+  for (const directory of (process.env.PATH || "").split(delimiter).filter(Boolean)) {
+    for (const name of process.platform === "win32" ? ["ok.exe", "ok.cmd", "ok"] : ["ok"]) {
+      const path = join(directory, name);
+      if (existsSync(path)) return { command: path, prefix: [] };
+    }
+  }
+  return null;
+}
+
+function runOpenKan(args: string[]): { ok: true; stdout: string } | { ok: false; error: string } {
+  const launcher = resolveOpenKanLauncher();
+  if (!launcher) return { ok: false, error: "OpenKan native CLI is not installed; run `bizar openkan install` once" };
+  const r = spawnSync(launcher.command, [...launcher.prefix, ...args, "--json"], {
+    encoding: "utf8",
+    timeout: 30_000,
+    cwd: process.cwd(),
+    env: process.env,
+  });
+  if (r.status !== 0) return { ok: false, error: `ok ${args.join(" ")} exited ${r.status}: ${r.stderr || r.stdout}` };
+  return { ok: true, stdout: r.stdout };
+}
+
+// Forward action + arbitrary key/value args to native OpenKan `ok task`.
+// Native actions: add, list, show, update, claim, heartbeat, complete,
+// cancel, release. Legacy create/ready names are normalized below so the
+// public MCP tool remains compatible without routing task state through Bizar.
 const bizarTaskTool = defineTool<Record<string, string>>(
   "bizar_task",
-  "Wrapper around `bizar task <action> --json`. Actions: create, ready, list, show, claim, heartbeat, complete, cancel, sweep. Pass other CLI flags (e.g. --title, --scope, --depends-on, --owner, --workspace, --lease-ms, --evidence, --reason) as string fields.",
+  "OpenKan-native task tool. Runs `ok task <action> --json`; actions: add, list, show, update, claim, heartbeat, complete, cancel, release. Legacy create maps to add and ready maps to list --status pending. Pass other CLI flags (e.g. --title, --scope, --depends-on, --owner, --workspace, --lease-ms, --evidence, --reason) as string fields.",
   { action: "string" },
   async (args) => {
     try {
       const { action, ...rest } = args;
       if (!action) return err("missing action");
-      const flat: string[] = [action];
+      const normalizedAction = action === "create" ? "add" : action;
+      const flat: string[] = [normalizedAction];
+      if (action === "ready" && !Object.hasOwn(rest, "status")) flat.push("--status", "pending");
       for (const [k, v] of Object.entries(rest)) {
         if (v === undefined || v === null || v === "") continue;
         flat.push(`--${k}`, String(v));
       }
-      const r = runBizar(["task", ...flat]);
+      const r = runOpenKan(["task", ...flat]);
       if (!r.ok) return err(r.error);
       const parsed = readJsonSafe<unknown>(r.stdout);
       return ok(parsed !== null ? JSON.stringify(parsed) : r.stdout);

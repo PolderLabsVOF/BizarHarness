@@ -14,15 +14,16 @@ Agent teams are experimental. They require `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
 
 ## Protocol
 
-1. Read repository instructions and the authoritative OpenKan `.ok/` state with `bizar task list`, `bizar plan list`, and `bizar goals list`.
+1. Read repository instructions and the authoritative OpenKan `.ok/` state with `ok task list`, `ok plan list`, and `ok prd list`.
 2. Define the target result, constraints, validation evidence, and stop condition.
 3. Decompose into disjoint file/responsibility scopes. Assign shared root files to one owner only.
-4. Create and claim durable `bizar task` records for editing lanes. Code-writing
+4. Create and claim durable `ok task` records for editing lanes. Code-writing
    agents run with `isolation: worktree`; their claimed path scopes remain
    authoritative even though the checkouts are physically separate.
 5. Launch bounded agents through Claude Code's Agent tool. Every prompt names ownership, deliverable, validation, and the rule not to revert sibling work.
-6. Submit verified task commits to `bizar task integrate enqueue`. The designated
-   integrator serializes application of completed work and records pass/failure.
+6. Complete each verified task with `ok task complete <id> --owner <agent>
+   --evidence "..."`. The designated integrator serializes application of
+   completed work and records pass/failure in the team runtime.
 7. The leader runs the final repository gates and owns the completion claim.
 8. Use `SendMessage` for coordination; stop or reassign stalled work rather than duplicating edits.
 9. Treat `TaskCreated`, `TaskCompleted`, and `TeammateIdle` hooks as advisory evidence only. They never block or force retries. A teammate that fails or idles twice is escalated to the lead, not restarted through model aliases.

@@ -9,6 +9,7 @@ import chalk from 'chalk';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { resolveClaudeConfigDir } from '../config-paths.mjs';
+import { resolveOpenKanHome } from '../openkan.mjs';
 
 /** Resolve the Claude Code config directory.
  *   1. `process.env.CLAUDE_CONFIG_DIR`
@@ -35,6 +36,7 @@ export const PATHS = {
   hooksDir:      join(CLAUDE_DIR, 'hooks'),
   settingsFile:  join(CLAUDE_DIR, 'settings.json'),
   bizarHome:     BIZAR_HOME,
+  openkanHome:   resolveOpenKanHome(),
   loopsDir:      join(BIZAR_HOME, 'loops'),
   installMarker: join(BIZAR_HOME, 'installed.json'),
 };
@@ -60,6 +62,8 @@ export function printInstallLocations(_opts = {}) {
   console.log(chalk.bold('│') + `  Bizar runtime state   ${PATHS.bizarHome}`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + `    ├─ loops/           autonomous loop state`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + `    └─ installed.json   install manifest (version, hash)`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `  OpenKan runtime      ${PATHS.openkanHome}`.padEnd(69) + chalk.bold('│'));
+  console.log(chalk.bold('│') + `    └─ npm package      @polderlabs/openkan@latest + agent/skill`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('│') + ' '.repeat(68) + chalk.bold('│'));
   console.log(chalk.bold('│') + `  Override with: ${dim('CLAUDE_CONFIG_DIR=/path/to/dir')}`.padEnd(69) + chalk.bold('│'));
   console.log(chalk.bold('└──────────────────────────────────────────────────────────────────────┘'));

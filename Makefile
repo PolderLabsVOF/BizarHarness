@@ -19,9 +19,9 @@ help:  ## Show this help message
 
 # ── Setup / dev ─────────────────────────────────────────────────────────────
 setup:  ## Install Claude Code CLI + Bizar deps
-	npm install -g @anthropic-ai/claude-code
+	curl -fsSL https://claude.ai/install.sh | bash
 	npm install
-	@echo "✓ Claude Code CLI + Bizar deps installed"
+	@echo "✓ Native Claude Code + Bizar deps installed"
 
 dev:  ## Run the SDK test watcher
 	npm run test:sdk:watch

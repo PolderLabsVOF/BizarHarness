@@ -67,7 +67,7 @@ process.stdin.on('end', () => {
     hookSpecificOutput: {
       hookEventName: 'SubagentStart',
       additionalContext: [
-        'Bizar: this editing agent is isolated in a worktree; claim a bizar task scope before modifying shared project paths.',
+        'Bizar: this editing agent is isolated in a worktree; claim an OpenKan task scope with `ok task claim` before modifying shared project paths.',
         branchLine,
       ].join('\n\n'),
     },

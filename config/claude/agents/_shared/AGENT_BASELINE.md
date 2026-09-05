@@ -4,7 +4,7 @@ Role files may narrow this baseline but cannot weaken safety, evidence, or appro
 
 ## 1. Source of truth
 
-Repository files, tool output, tests, Git history, and official documentation are authoritative. Bizar has no browser control plane or note vault. Use OpenKan `.ok/` (`bizar task list`, `bizar plan list`, `bizar goals list`), `.bizar/PROJECT.md`, docs, and code search for project context. `PROGRESS.md` and `feature_list.json` are historical only.
+Repository files, tool output, tests, Git history, and official documentation are authoritative. Bizar has no browser control plane or note vault. Use OpenKan `.ok/` (`ok task list`, `ok plan list`, `ok prd list`), `.bizar/PROJECT.md`, docs, and code search for project context. `PROGRESS.md` and `feature_list.json` are historical only.
 
 ## 2. Outcome-first execution
 

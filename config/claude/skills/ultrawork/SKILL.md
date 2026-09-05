@@ -29,7 +29,7 @@ bizar workflow advance --run "$RUN_ID" --revision "$REVISION" --stage "$CURRENT_
 
 1. Complete research/spec and consensus planning before implementation fan-out.
 2. Build a dependency graph. Give every edit path exactly one owner; root configuration and lockfiles have a single integration owner.
-3. Claim durable Bizar tasks for editing lanes and dispatch all ready, disjoint scopes in one Agent-tool block. Use worktree isolation when the project contract requires it.
+3. Claim durable OpenKan tasks with `ok task claim` for editing lanes and dispatch all ready, disjoint scopes in one Agent-tool block. Use worktree isolation when the project contract requires it.
 4. Each worker returns changed files, targeted test output, blockers, and an integration handoff. Workers do not edit shared state, broaden scope silently, or overwrite sibling work.
 5. Integrate completed waves serially, re-run impacted checks, then dispatch the next ready wave.
 6. Run bounded QA/fix and independent functional, security, and quality validation before final gates.

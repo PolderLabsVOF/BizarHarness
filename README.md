@@ -54,8 +54,17 @@ bizar models
 
 Restart Claude Code after installation. The installer adds Bizar's agents, skills, commands, hooks, settings, and the
 default OpenKan planning runtime to your user-level Claude configuration.
+Claude Code itself is installed with Anthropic's native installer; npm is used
+for Bizar and OpenKan, not for the Claude Code CLI.
 It preserves your configured gateway endpoint and credential values during a
 clean reinstall.
+
+On a new interactive install, Bizar also asks for an optional default model,
+whether Claude Code agent teams should be enabled, the OpenKan install
+directory, and whether the current project should receive a `.ok/` workspace.
+OpenKan is installed from npm as `@polderlabs/openkan@latest`; its package-owned
+agent and skill are installed into the same Claude configuration. Use
+`bizar install --yes` for CI or a prompt-free refresh.
 
 For a completely fresh Bizar-managed Claude setup while retaining endpoint and
 authentication settings:
@@ -190,6 +199,8 @@ point where an external or difficult-to-reverse decision belongs to you.
 
 ~/.config/bizar/
 ├── installed.json   install record
+├── openkan/          managed @polderlabs/openkan npm runtime
+├── openkan-install.json  selected OpenKan home/package settings
 ├── evidence/        local dispatch and verification evidence
 ├── telemetry/       local routing and rejected-action feedback
 └── worktree-queue.json  completed worktree integration queue
@@ -203,11 +214,14 @@ plane, background daemon, or general-purpose note vault.
 
 | Command | When to use it |
 | --- | --- |
-| `bizar install` | Install or refresh Bizar in your global Claude configuration |
+| `bizar install` | Install or refresh Bizar, OpenKan, and the global Claude configuration |
+| `bizar openkan install` | Refresh the managed `@polderlabs/openkan` npm runtime and its agent/skill |
+| `bizar openkan init` | Initialise `.ok/` planning state in the current project |
 | `bizar models` | Discover and select the models Bizar may dispatch |
 | `bizar doctor` | Diagnose the global installation and provider connectivity |
 | `bizar validate` | Run an install-focused health check |
-| `bizar task` | Inspect or coordinate scoped worktree tasks |
+| `ok task` | Inspect or coordinate scoped worktree tasks (OpenKan-native) |
+| `ok plan` / `ok prd` | Manage OpenKan plans and PRD goals |
 | `bizar worktree-merge --all` | Review and merge completed isolated work, surfacing conflicts |
 | `bizar control snapshot --json` | Read the machine-friendly current harness state |
 | `bizar evidence` | Inspect local dispatch and verification evidence |

@@ -10,15 +10,16 @@ Bizar previously split live progression across a feature ledger, `PROGRESS.md`, 
 ## Decision
 
 1. OpenKan `.ok/` is the sole durable source for Bizar tasks, scoped ownership, plans, PRD goals, progression, and verification evidence.
-2. `bizar install` and `bizar update` ensure a working OpenKan runtime; `bizar openkan`, `bizar task`, `bizar plan`, `bizar goals`, and `bizar claim` are Bizar convenience surfaces over the canonical OpenKan CLI.
+2. `bizar install` and `bizar update` ensure a working OpenKan runtime; `bizar openkan`, `ok task`, `ok plan`, `ok prd`, and `ok task claim` are Bizar convenience surfaces over the canonical OpenKan CLI.
 3. Bizar retains Claude Code orchestration, hooks, agent metadata, bounded session handoff, and control messages. It never imports or forks OpenKan storage.
 4. Session hooks, control snapshots, workflow cleanup, and the progress guard read `.ok/`. The legacy feature list, `PROGRESS.md`, and Bizar SQLite task ledger are historical compatibility artifacts, not live state.
 5. The OpenKan runtime probe is required after installation so a partial OpenKan install fails visibly rather than creating a second Bizar state store.
-6. The OpenKan installer (`bizar openkan install`, also run as part of `bizar install`) is **native**: it downloads the OpenKan tarball with Node 18+ `fetch`, decompresses with `node:zlib`, parses USTAR with an in-process parser, and only shells out to `npm install --omit=dev --ignore-scripts` for runtime dependencies. The previous `curl | bash` pipeline against `https://raw.githubusercontent.com/PolderLabsVOF/openkan/main/install.sh` is removed — no remote shell script executes on the operator's machine.
+6. The OpenKan installer (`bizar openkan install`, also run as part of `bizar install`) installs the published `@polderlabs/openkan@latest` package with npm into Bizar's managed OpenKan home. Npm lifecycle scripts stay disabled; Bizar explicitly runs the package-owned agent/skill installer after verifying the package layout. No remote shell script executes on the operator's machine.
 
 ## Consequences
 
-- New Bizar projects start with `bizar openkan init` and claim OpenKan tasks before implementation.
+- New Bizar projects start with `ok init` and claim OpenKan tasks before implementation.
 - Existing historical files remain readable for audit history but must not be updated for new work.
 - OpenKan can evolve independently because Bizar crosses the boundary with supported CLI calls and read-only `.ok/` adapters.
+- The managed npm home is resolved automatically by Bizar, so its `ok` and dashboard launchers work without adding another directory to `PATH`. A custom home selected in the interactive installer is persisted under Bizar's global configuration.
 - The existing OpenKan UI/control-plane decision remains valid for presentation; this decision supersedes its Bizar-side task ownership wording.

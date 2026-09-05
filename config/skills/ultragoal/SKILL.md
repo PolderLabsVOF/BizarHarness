@@ -25,9 +25,9 @@ adapts that shape to its own runtime:
   additive values: `reviewing | checkpointing | blocked`. `blocked` is
   **non-terminal** and returns to `executing` on resume; `done | failed |
   cancelled` keep their terminal semantics.
-- Subgoals reuse `bizar task` records (parent = ultragoal run id) rather than
+- Subgoals reuse `ok task` records (parent = ultragoal run id) rather than
   introducing a new task primitive. Subgoal leases are coordinated with the
-  `bizar task` 30-second lease window.
+  `ok task` 30-second lease window.
 - Completion claims pass through a four-lane quality gate (`cleaner`,
   `verification`, `review`, `architecture_invariant`) — never through OMX
   state alone.
@@ -119,7 +119,7 @@ checkpoint, or phase advance using the returned `revision`.
    stop condition, and hard-approval carve-outs that apply to this run
    (push-only, deploy-only, etc.). Advance to `executing` only after the
    charter exists.
-2. **executing** — claim `bizar task` records for each subgoal, dispatch
+2. **executing** — claim `ok task` records for each subgoal, dispatch
    bounded worker agents with disjoint ownership, and append every steer
    event to the ledger. Long-running subgoals renew their leases inside the
    30-second window so they are not reaped mid-execution.

@@ -154,7 +154,7 @@ function showHelp() {
 
   Install:
     npm install -g @polderlabs/bizar
-    npm install -g @anthropic-ai/claude-code
+    curl -fsSL https://claude.ai/install.sh | bash
   `);
 }
 
@@ -399,7 +399,7 @@ async function main() {
       dbg('loaded command module:', 'claim');
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) {
-        console.error(chalk.red(`  ✗ Usage: bizar claim <subcommand> — run 'bizar claim --help'`));
+        console.error(chalk.red(`  ✗ Usage: ok task claim <task-id> — run 'ok task --help'`));
         process.exit(EXIT_USAGE);
       }
       break;
@@ -415,7 +415,7 @@ async function main() {
       dbg('loaded command module:', 'task');
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) {
-        console.error(chalk.red(`  ✗ Usage: bizar task <subcommand> — run 'bizar task --help'`));
+        console.error(chalk.red(`  ✗ Usage: ok task <subcommand> — run 'ok task --help'`));
         process.exit(EXIT_USAGE);
       }
       break;

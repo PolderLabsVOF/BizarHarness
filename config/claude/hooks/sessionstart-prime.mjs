@@ -163,7 +163,7 @@ function startupBriefing(cwd, planning, recentCommits, projectLine) {
   const lines = ['Bizar SessionStart (startup):'];
   if (projectLine) lines.push(`- Project: ${projectLine}.`);
   if (!planning?.exists) {
-    lines.push('- OpenKan: .ok/ is not initialised. First move: run `bizar openkan init`, then create a scoped task or PRD.');
+    lines.push('- OpenKan: .ok/ is not initialised. First move: run `ok init`, then create a scoped task or PRD.');
   } else if (planning.active.length === 0) {
     lines.push(`- OpenKan: ${planning.tasks.length} task(s), ${planning.plans.length} plan(s), ${planning.goals.length} PRD(s); no active task.`);
   } else {
@@ -180,7 +180,7 @@ function startupBriefing(cwd, planning, recentCommits, projectLine) {
   lines.push('- TaskCompleted/SubagentStop/<task-notification> is terminal: consume its original <result> once, mark done/failed, merge queued work, and continue the objective. Never turn a terminal notification into a worker follow-up or replace that result with a later status reply.');
   // Default-first-stop hint when nothing is active yet.
   if (planning && planning.active.length === 0) {
-    lines.push('- First move: inspect `bizar task list` and `bizar goals list`, claim the selected task, then form the default team when the outcome is clear.');
+    lines.push('- First move: inspect `ok task list` and `ok prd list`, claim the selected task, then form the default team when the outcome is clear.');
   }
   return lines.join('\n');
 }
@@ -211,7 +211,7 @@ function resumeBriefing(cwd, state) {
     lines.push('- WARNING: context may have been compacted since the last run; verify scope before continuing.');
   } else {
     lines.push('- No prior session-state.json found — treating as fresh start.');
-    lines.push('- First move: read OpenKan .ok state with `bizar task list` and `bizar goals list` to orient.');
+    lines.push('- First move: read OpenKan .ok state with `ok task list` and `ok prd list` to orient.');
   }
   return lines.join('\n');
 }

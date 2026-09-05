@@ -9,10 +9,10 @@ argument-hint: "[list | add <title> | show <id>]"
 OpenKan PRDs replace Bizar’s retired feature-list / ultragoal bootstrap. SessionStart reads `.ok/prds/` and reports active goals without creating parallel goal artifacts.
 
 ```sh
-bizar goals list
-bizar goals add "Outcome title"
-bizar goals show <prd-id>
-bizar goals update <prd-id> --status active
+ok prd list
+ok prd add "Outcome title"
+ok prd show <prd-id>
+ok prd update <prd-id> --status active
 ```
 
-Use a PRD for durable outcomes, link plans and tasks through canonical OpenKan fields, and keep task evidence current. `bizar goal-bootstrap` is only a compatibility alias; new automation must use `bizar goals`.
+Use a PRD for durable outcomes, link plans and tasks through canonical OpenKan fields, and keep task evidence current. `bizar goal-bootstrap` is only a compatibility alias; new automation must use `ok prd`.

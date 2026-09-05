@@ -6,7 +6,7 @@ description: Autonomous local execution with explicit human approval boundaries.
 
 Execute the requested local work end-to-end without pausing for ordinary reversible steps.
 
-1. Read repository instructions, `.ok/` state (`bizar task list`, `bizar goals list`), and relevant project files.
+1. Read repository instructions, `.ok/` state (`ok task list`, `ok prd list`), and relevant project files.
 2. Infer reasonable details from evidence; record material assumptions.
 3. Form the default native Agent team with bounded research, implementation,
    and review/integration ownership. Use direct execution only for an explicit

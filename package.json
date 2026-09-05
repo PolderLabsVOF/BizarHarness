@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "10.25.1",
+  "version": "10.25.2",
   "description": "Autonomous, human-in-the-loop multi-agent harness for Claude Code with guarded workflows, typed SDK primitives, and MCP tools.",
   "type": "module",
   "bin": {
@@ -59,7 +59,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=18",
+    "node": ">=22",
     "bun": ">=1.1.0"
   },
   "dependencies": {

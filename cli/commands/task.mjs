@@ -3,18 +3,18 @@ import { OpenKanError, runOpenKanOk } from '../openkan.mjs';
 
 function help() {
   process.stdout.write(`
-  bizar task — OpenKan-backed task lifecycle
+  ok task — OpenKan-backed task lifecycle
 
   Usage:
-    bizar task add <title> [--owner agent] [--priority p0|p1|p2|p3]
-    bizar task list [--status pending|in_progress|review|done|cancelled] [--json]
-    bizar task show <id> [--json]
-    bizar task claim <id> --owner <agent> [--lease-ms <ms>]
-    bizar task heartbeat <id> --owner <agent> [--lease-ms <ms>]
-    bizar task update <id> --status <status> [--evidence <text>]
-    bizar task complete <id> --owner <agent> --evidence <text>
-    bizar task cancel <id> --owner <agent> --reason <text>
-    bizar task release <id> --owner <agent>
+    ok task add <title> [--owner agent] [--priority p0|p1|p2|p3]
+    ok task list [--status pending|in_progress|review|done|cancelled] [--json]
+    ok task show <id> [--json]
+    ok task claim <id> --owner <agent> [--lease-ms <ms>]
+    ok task heartbeat <id> --owner <agent> [--lease-ms <ms>]
+    ok task update <id> --status <status> [--evidence <text>]
+    ok task complete <id> --owner <agent> --evidence <text>
+    ok task cancel <id> --owner <agent> --reason <text>
+    ok task release <id> --owner <agent>
 
   This is an exact convenience alias for \`ok task\`. OpenKan persists task
   state, scoped ownership, dependencies, evidence, plans, and goals under

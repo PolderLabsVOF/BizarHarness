@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { executableOnPath, ensureOpenKanProject, installOpenKanPromise, OpenKanError, runOpenKanOk } from '../openkan.mjs';
+import { ensureOpenKanProject, installOpenKanPromise, OpenKanError, resolveOpenKanDashboard, runOpenKanOk } from '../openkan.mjs';
 
 function print(result) {
   if (result.stdout) process.stdout.write(result.stdout);
@@ -13,23 +13,28 @@ bizar openkan — default durable planning and goals surface
 
 Usage:
   bizar openkan install                 Install @polderlabs/openkan@latest from npm
-  bizar openkan init                    Initialise .ok/ in this project
-  bizar openkan task <ok task args...>  Manage durable tasks
-  bizar openkan plan <ok plan args...>  Manage plans and phases
-  bizar openkan goals <ok prd args...>  Manage PRDs, goals, and milestones
-  bizar openkan doctor                  Validate the .ok/ workspace
+  ok init                                Initialise .ok/ in this project
+  ok task <add|list|show|update|...>     Manage durable tasks
+  ok plan <add|list|show|update>         Manage plans and phases
+  ok prd <add|list|show|update>          Manage PRDs, goals, and milestones
+  ok doctor                              Validate the .ok/ workspace
   bizar openkan dashboard [args...]     Forward to the OpenKan dashboard CLI
 
-Shortcuts: \`bizar task\`, \`bizar plan\`, and \`bizar goals\` use this
-same OpenKan workspace. Bizar no longer creates a SQLite task ledger or
+Canonical commands are \`ok task\`, \`ok plan\`, and \`ok prd\`; they use this
+same OpenKan workspace. The Bizar planning aliases remain compatibility-only.
+Bizar no longer creates a SQLite task ledger or
 feature/progress files for live planning.
 `);
 }
 
 function runDashboard(args) {
-  const bin = process.env.BIZAR_OPENKAN_BIN || executableOnPath('openkan');
-  if (!bin) throw new OpenKanError('OPENKAN_NOT_FOUND', 'OpenKan is required. Run `bizar openkan install`.');
-  const result = spawnSync(bin, args, { cwd: process.cwd(), encoding: 'utf8', shell: false });
+  const launcher = resolveOpenKanDashboard();
+  const command = launcher.endsWith('.ts')
+    ? [process.execPath, '--experimental-strip-types', launcher, ...args]
+    : launcher.endsWith('.mjs')
+      ? [process.execPath, launcher, ...args]
+      : [launcher, ...args];
+  const result = spawnSync(command[0], command.slice(1), { cwd: process.cwd(), encoding: 'utf8', shell: false });
   if (result.error) throw result.error;
   print({ ok: result.status === 0, status: result.status ?? 1, stdout: result.stdout || '', stderr: result.stderr || '' });
 }
@@ -40,8 +45,9 @@ export async function run(name, args, isHelpRequest) {
   if (isHelpRequest || !subcommand || subcommand === 'help') { help(); return true; }
   try {
     if (subcommand === 'install') {
-      const result = await installOpenKanPromise();
-      print(result);
+      const result = await installOpenKanPromise({ persistConfig: true });
+      process.stdout.write(`  ✓ ${result.message}\n`);
+      if (result.agent?.skipped) process.stdout.write('  ! OpenKan agent/skill installation was skipped by configuration.\n');
       return true;
     }
     if (subcommand === 'init') {

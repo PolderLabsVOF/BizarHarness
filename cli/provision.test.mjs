@@ -55,6 +55,13 @@ test('haveCmd detects commands using the host platform resolver', async () => {
   assert.equal(haveCmd('bizar-command-that-does-not-exist'), false);
 });
 
+test('Claude Code provisioning uses Anthropic native installer instead of npm', async () => {
+  const { CLAUDE_NATIVE_INSTALL_COMMAND, claudeNativeInstallCommand } = await import('./provision.mjs');
+  assert.equal(CLAUDE_NATIVE_INSTALL_COMMAND, 'curl -fsSL https://claude.ai/install.sh | bash');
+  assert.doesNotMatch(CLAUDE_NATIVE_INSTALL_COMMAND, /npm|@anthropic-ai\/claude-code/);
+  assert.equal(claudeNativeInstallCommand('win32'), 'irm https://claude.ai/install.ps1 | iex');
+});
+
 test('resolveClaudeDir defaults to Claude home config directory', async () => {
   const { resolveClaudeDir } = await import('./provision.mjs');
   const orig = process.env.CLAUDE_CONFIG_DIR;

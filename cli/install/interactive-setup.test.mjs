@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, test } from 'node:test';
 import {
+  detectAdvancedConfiguration,
   detectProviderConfiguration,
+  isValidOpenKanHome,
   isValidProviderUrl,
   providerSettingsPath,
   runInteractiveSetup,
@@ -42,6 +44,51 @@ describe('interactive installer provider setup', () => {
     assert.equal(isValidProviderUrl('http://localhost:3000/v1'), true);
     assert.equal(isValidProviderUrl('gateway.example/v1'), false);
     assert.equal(isValidProviderUrl('file:///tmp/provider'), false);
+  });
+
+  test('detects optional model and agent-team settings without exposing secrets', () => {
+    assert.deepEqual(detectAdvancedConfiguration({
+      env: { ANTHROPIC_MODEL: 'claude-sonnet', CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' },
+      settings: {},
+    }), { model: 'claude-sonnet', teams: '1' });
+  });
+
+  test('collects fresh-install defaults for model, teams, OpenKan home, and project init', async () => {
+    const io = terminal();
+    const home = mkdtempSync(join(tmpdir(), 'bizar-interactive-openkan-'));
+    const cwd = join(home, 'project');
+    const env = { HOME: home };
+    const textAnswers = [
+      'yes',
+      'https://gateway.example/v1',
+      'claude-sonnet',
+      'no',
+      '~/.local/share/bizar-openkan',
+      'yes',
+    ];
+    try {
+      const result = await runInteractiveSetup({
+        env,
+        cwd,
+        input: io.input,
+        output: io.output,
+        readSettings: () => ({}),
+        askText: async () => textAnswers.shift(),
+        askHidden: async () => 'top-secret-value',
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.model, 'claude-sonnet');
+      assert.equal(result.agentTeams, false);
+      assert.equal(result.openkanHome, join(home, '.local/share/bizar-openkan'));
+      assert.equal(result.initializeOpenKanProject, true);
+      assert.equal(env.ANTHROPIC_MODEL, 'claude-sonnet');
+      assert.equal(env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '0');
+      assert.equal(env.BIZAR_OPENKAN_HOME, result.openkanHome);
+      assert.equal(isValidOpenKanHome(result.openkanHome), true);
+      assert.doesNotMatch(io.read(), /top-secret-value/);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   test('prompts only for missing values and never prints the key', async () => {

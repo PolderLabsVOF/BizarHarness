@@ -20,7 +20,7 @@ is verified, and stops.
 
 ## Session lifecycle
 
-1. Read the repository instructions and inspect `.ok/` with `bizar task list`, `bizar plan list`, and `bizar goals list`.
+1. Read the repository instructions and inspect `.ok/` with `ok task list`, `ok plan list`, and `ok prd list`.
 2. Claim the scoped OpenKan task before implementation; create a plan or PRD when the work needs durable progression or goals.
 3. Define the target, exclusions, evidence, and stop condition.
 4. Execute reversible local work without unnecessary handoffs.

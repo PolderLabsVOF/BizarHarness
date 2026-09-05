@@ -173,7 +173,7 @@ function windowsInstallCmd(name) {
   switch (name) {
     case 'node':   return 'winget install OpenJS.NodeJS.LTS 2>nul || choco install nodejs -y 2>nul || npm install -g n 2>nul';
     case 'bun':    return 'powershell -c "iwr bun.sh/install.ps1 -useb | iex"';
-    case 'claude': return 'npm install -g @anthropic-ai/claude-code 2>nul';
+    case 'claude': return 'irm https://claude.ai/install.ps1 | iex';
     case 'tmux':   return 'winget install mintty.tmux 2>nul || choco install tmux -y 2>nul';
     case 'git':    return 'winget install Git.Git 2>nul || choco install git -y 2>nul';
     case 'python3': return 'winget install Python.Python.3.12 2>nul || choco install python -y 2>nul';
@@ -187,9 +187,9 @@ function windowsInstallCmd(name) {
 
 function macInstallCmd(name) {
   switch (name) {
-    case 'node':   return 'brew install node@18';
+    case 'node':   return 'brew install node@22';
     case 'bun':    return 'brew install oven-sh/bun/bun';
-    case 'claude': return 'npm install -g @anthropic-ai/claude-code';
+    case 'claude': return 'curl -fsSL https://claude.ai/install.sh | bash';
     case 'tmux':   return 'brew install tmux';
     case 'git':    return null; // pre-installed on macOS
     case 'python3': return 'brew install python@3.12';
@@ -227,13 +227,12 @@ function linuxInstallCmd(name) {
   switch (name) {
     case 'node': {
       // Prefer the official NodeSource script; fallback to distro packages.
-      return `curl -fsSL https://deb.nodesource.com/setup_20.x | ${sudo}bash - && ${sudo}${pm} install -y nodejs`;
+      return `curl -fsSL https://deb.nodesource.com/setup_22.x | ${sudo}bash - && ${sudo}${pm} install -y nodejs`;
     }
     case 'bun':
       return 'curl -fsSL https://bun.sh/install | bash';
     case 'claude':
-      // Claude Code CLI is npm-published; works on any distro with node + npm.
-      return `npm install -g @anthropic-ai/claude-code`;
+      return 'curl -fsSL https://claude.ai/install.sh | bash';
     case 'tmux':
       return `${sudo}${pm} install -y tmux`;
     case 'git':
@@ -264,7 +263,7 @@ function linuxInstallCmd(name) {
 // ── Required versions ──────────────────────────────────────────────────────────
 
 const REQUIRED = {
-  node:    { raw: '>=18',    min: '18.0.0' },
+  node:    { raw: '>=22',    min: '22.0.0' },
   bun:     { raw: '>=1.1.0', min: '1.1.0' },
   claude:  { raw: '>=1.0.0', min: '1.0.0' },
 };

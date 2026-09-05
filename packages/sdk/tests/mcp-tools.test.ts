@@ -53,6 +53,11 @@ describe("BIZAR_TOOLS surface", () => {
     }
   });
 
+  test("task wrapper delegates to native OpenKan", () => {
+    expect(findTool("bizar_task").description).toContain("OpenKan-native");
+    expect(findTool("bizar_task").description).toContain("ok task");
+  });
+
   test("ships the Pillar D read-back tools", () => {
     const names = new Set(BIZAR_TOOLS.map((t) => t.name));
     expect(names.has("list_instincts")).toBe(true);

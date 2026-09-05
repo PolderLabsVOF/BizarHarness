@@ -10,25 +10,25 @@ OpenKan is the default Bizar control plane. Bizar orchestrates Claude Code agent
 ## Start work
 
 ```sh
-bizar openkan init              # only when .ok/ is absent
-bizar task list
-bizar goals list
-bizar task claim <task-id> --owner <agent>
+ok init              # only when .ok/ is absent
+ok task list
+ok prd list
+ok task claim <task-id> --owner <agent>
 ```
 
-Use `bizar task add` for bounded deliverables, `bizar plan add` for staged implementation, and `bizar goals add` for a PRD-level outcome. Attach scopes, dependencies, and verification evidence through the canonical OpenKan CLI arguments.
+Use `ok task add` for bounded deliverables, `ok plan add` for staged implementation, and `ok prd add` for a PRD-level outcome. Attach scopes, dependencies, and verification evidence through the canonical OpenKan CLI arguments.
 
 ## During work
 
 - Keep the claimed task’s status truthful: `pending`, `in_progress`, `review`, `done`, or `cancelled`.
-- Record meaningful state transitions and evidence with `bizar task update` or `bizar task complete`.
-- Use `bizar claim heartbeat` for long-running claimed work and `bizar claim release` only when returning it to the pool.
-- Read `.ok/` or use Bizar aliases; do not import, fork, or manually mutate OpenKan storage formats.
+- Record meaningful state transitions and evidence with `ok task update` or `ok task complete`.
+- Use `ok task heartbeat` for long-running claimed work and `ok task release` only when returning it to the pool.
+- Read `.ok/` or use the native `ok` / `openkan` commands; do not use Bizar planning aliases, import, fork, or manually mutate OpenKan storage formats.
 
 ## Finish
 
 ```sh
-bizar task complete <task-id> --owner <agent> --evidence "targeted test + required gates"
+ok task complete <task-id> --owner <agent> --evidence "targeted test + required gates"
 ```
 
 Completion requires fresh verification evidence. Bizar session hooks use `.ok/` to resume active tasks and PRDs automatically.

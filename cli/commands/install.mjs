@@ -53,18 +53,23 @@ export function showInstallHelp() {
     while the prior ANTHROPIC_* and BIZAR_* env vars are merged back
     in from the stash.
 
-    1. Installs @polderlabs/bizar via npm (skipped if already current).
-    2. Installs or updates OpenKan from its official installer as Bizar's
-       default durable planning, progression, and PRD-goal runtime.
-    3. Shells to ./install.sh for platform-specific system dependencies.
-    4. Syncs agent files, slash commands, and bundled skills into
+    1. Uses the already-installed @polderlabs/bizar package.
+    2. Installs or updates Claude Code with Anthropic's native installer
+       (never npm) when the native launcher is absent.
+    3. Installs or updates OpenKan from npm as Bizar's default durable
+       planning, progression, and PRD-goal runtime.
+    4. Uses platform dependencies prepared by ./install.sh when invoked
+       through that bootstrap.
+    5. Syncs agent files, slash commands, and bundled skills into
        ~/.claude/ (or $CLAUDE_CONFIG_DIR).
-    5. Registers the Bizar MCP server in ~/.claude/settings.json.
-    6. Wires Claude Code lifecycle hooks (SessionStart / PreToolUse /
+    6. Registers the Bizar MCP server in ~/.claude/settings.json.
+    7. Wires Claude Code lifecycle hooks (SessionStart / PreToolUse /
        PostToolUse / UserPromptSubmit) under ~/.claude/hooks/.
-    7. In a terminal, confirms the install and securely asks for a provider
-       URL and key only when they are not already configured.
-    8. Runs 'bizar doctor' as a post-install health check.
+    8. In a terminal, confirms the install and securely asks for a provider
+       URL and key only when they are not already configured. Fresh setups
+       can also choose a default model, agent teams, OpenKan home, and whether
+       to initialise the current project's .ok/ workspace.
+    9. Runs 'bizar doctor' as a post-install health check.
 
     Provider settings are global (~/.claude/settings.json), so they work from
     every project. Key input is hidden. Use --yes or --non-interactive to skip

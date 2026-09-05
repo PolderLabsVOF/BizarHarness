@@ -10,6 +10,7 @@ note() { echo -e "  ${G}✓${N} $1"; }
 warn() { echo -e "  ${Y}⚠${N} $1"; }
 err()  { echo -e "  ${R}✗${N} $1"; }
 cmd()  { command -v "$1" >/dev/null 2>&1; }
+node_22_or_newer() { cmd node && node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)'; }
 dry()  { [ "${DRY:-0}" -eq 0 ] && "$@" || echo "  would $*" >&2; }
 sudo_if_needed() { [ "$(id -u)" -ne 0 ] && cmd sudo && SUDO="sudo" || SUDO=""; }
 
@@ -128,6 +129,10 @@ EOF
     Darwin) macos;;
     *) err "Unsupported OS — use install.ps1 on Windows"; exit 1;;
   esac
+  if [ "${DRY:-0}" -eq 0 ] && ! node_22_or_newer; then
+    err "OpenKan requires Node.js 22 or newer — found $(node --version 2>/dev/null || echo 'no Node.js')"
+    exit 1
+  fi
   # Auto-install the repo-local git hooks (pre-commit, pre-push, commit-msg).
   # The commit-msg hook strips Claude/agent co-author trailers from commits
   # so the human author identity is the only one on every Bizar commit.
@@ -150,20 +155,20 @@ linux() {
     ubuntu|debian|pop|linuxmint|elementary)
       dry $SUDO apt-get update
       dry $SUDO apt-get install -y ca-certificates curl gnupg
-      cmd node || dry curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash -
+      node_22_or_newer || dry curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash -
       dry $SUDO apt-get install -y nodejs
       dry $SUDO apt-get install -y --no-install-recommends python3 jq git curl
       ;;
     fedora|rhel|rocky|almalinux|centos)
-      cmd node || dry $SUDO dnf install -y https://rpm.nodesource.com/pub_20.x/nodesource-release-nodesource-1.noarch.rpm
-      cmd node || dry $SUDO dnf install -y nodejs
+      node_22_or_newer || dry $SUDO dnf install -y https://rpm.nodesource.com/pub_22.x/nodesource-release-nodesource-1.noarch.rpm
+      node_22_or_newer || dry $SUDO dnf install -y nodejs
       dry $SUDO dnf install -y python3 jq git curl gh
       ;;
     arch|manjaro|endeavouros)
       dry $SUDO pacman -Sy --noconfirm --needed nodejs npm python jq git curl
       ;;
     opensuse*|sles)
-      dry $SUDO zypper install -y nodejs20 npm20 python3 jq git curl gh
+      dry $SUDO zypper install -y nodejs22 npm22 python3 jq git curl gh
       ;;
     alpine)  dry $SUDO apk add --no-cache nodejs npm python3 jq git curl ;;
     void)    dry $SUDO xbps-install -S nodejs python3 jq git curl ;;
@@ -182,6 +187,11 @@ linux() {
 macos() {
   note "Detected macOS"
   cmd brew || { err "Homebrew not found — install from https://brew.sh"; exit 1; }
+  if ! node_22_or_newer; then
+    note "Installing Node.js 22 (required by OpenKan)..."
+    dry brew install node@22
+    dry brew link --overwrite --force node@22
+  fi
   dry brew install uv jq gh
   note "OS dependencies ready"
 }

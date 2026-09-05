@@ -43,6 +43,7 @@ import {
 } from './commands/validate.mjs';
 import { configuredEnabledModels, listModels, resolveEndpoint } from './commands/models.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
+import { resolveOpenKanHome, verifyOpenKanRuntime } from './openkan.mjs';
 
 const REQUIRED_RULES = [
   'general.md', 'git.md', 'javascript.md', 'python.md',
@@ -188,6 +189,12 @@ async function checkBizarHome() {
   return `BIZAR_HOME present at ${dir}`;
 }
 
+async function checkOpenKanRuntime() {
+  const home = resolveOpenKanHome();
+  const result = verifyOpenKanRuntime();
+  return `OpenKan ${home} is runnable (${result.launcher})`;
+}
+
 async function checkProviderReachable() {
   const { endpoint, authToken } = resolveEndpoint();
   if (!endpoint) {
@@ -227,6 +234,7 @@ const CHECKS = [
   { name: 'native-workflows-valid',    run: checkNativeWorkflowsInstalled },
   { name: 'tools-on-path',             run: checkToolsAvailable },
   { name: 'bizar-home',                run: checkBizarHome },
+  { name: 'openkan-runtime',           run: checkOpenKanRuntime },
   { name: 'provider-reachable',        run: checkProviderReachable },
 ];
 

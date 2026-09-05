@@ -48,7 +48,7 @@ export async function runInstaller(opts = {}) {
   // via --yes / --non-interactive, and update runs never request credentials.
   let interactive = null;
   if (mode !== 'update' && !dryRun) {
-    interactive = await runInteractiveSetup({ enabled: !yes });
+    interactive = await runInteractiveSetup({ enabled: !yes, cwd: process.cwd() });
     if (!interactive.ok) return { ok: false, interactive };
     if (interactive.cancelled) return { ok: true, cancelled: true, interactive };
   }
@@ -78,7 +78,14 @@ export async function runInstaller(opts = {}) {
   // Always pass `force: true` downstream so `runProvision` re-emits the
   // template-owned keys (permissions.allow wildcards, mcpServers, hooks)
   // into the freshly-empty settings file.
-  const provisionResult = await runProvision({ mode, dryRun, force: true, yes });
+  const provisionResult = await runProvision({
+    mode,
+    dryRun,
+    force: true,
+    yes,
+    openkanHome: interactive?.openkanHome,
+    initializeOpenKanProject: interactive?.initializeOpenKanProject === true,
+  });
 
   // F-183 — post-install health check. Surfaced as a warning rather
   // than a hard failure so a forced install that completes without

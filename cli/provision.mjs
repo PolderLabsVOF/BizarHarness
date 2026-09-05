@@ -29,7 +29,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   resolveBizarHome,
@@ -44,7 +44,15 @@ import {
   syncStableRoleModelAgents,
 } from './commands/models.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
-import { installOpenKanPromise, resolveOpenKanOk, verifyOpenKanRuntime } from './openkan.mjs';
+import {
+  ensureOpenKanProject,
+  installOpenKanAgent,
+  installOpenKanCommandShims,
+  installOpenKanPromise,
+  resolveOpenKanHome,
+  resolveOpenKanOk,
+  verifyOpenKanRuntime,
+} from './openkan.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -106,6 +114,32 @@ export function haveCmd(cmd) {
   } catch {
     return false;
   }
+}
+
+export const CLAUDE_NATIVE_INSTALL_URL = 'https://claude.ai/install.sh';
+export const CLAUDE_NATIVE_INSTALL_COMMAND = `curl -fsSL ${CLAUDE_NATIVE_INSTALL_URL} | bash`;
+
+export function claudeNativeInstallCommand(platform = process.platform) {
+  return platform === 'win32'
+    ? 'irm https://claude.ai/install.ps1 | iex'
+    : CLAUDE_NATIVE_INSTALL_COMMAND;
+}
+
+function nativeClaudeBin() {
+  const root = process.platform === 'win32'
+    ? (process.env.USERPROFILE || process.env.HOME || homedir())
+    : (process.env.HOME || homedir());
+  return join(root, '.local', 'bin', process.platform === 'win32' ? 'claude.exe' : 'claude');
+}
+
+function preferNativeClaudeOnPath() {
+  const bin = nativeClaudeBin();
+  if (!existsSync(bin)) return false;
+  const dir = dirname(bin);
+  const delimiter = process.platform === 'win32' ? ';' : ':';
+  const pathParts = (process.env.PATH || '').split(delimiter).filter(Boolean);
+  if (!pathParts.includes(dir)) process.env.PATH = [dir, ...pathParts].join(delimiter);
+  return true;
 }
 
 function readTextSafe(file, fallback = '') {
@@ -334,27 +368,43 @@ export function ensureBizarHome({ dryRun = false } = {}) {
 function checkToolchain() {
   section('Toolchain');
   if (haveCmd('node')) logOk(`node ${execSync('node --version').toString().trim()}`);
-  else { logErr('node not on PATH — install Node.js 18+'); process.exit(1); }
+  else { logErr('node not on PATH — install Node.js 22+ (required by OpenKan)'); process.exit(1); }
   if (haveCmd('npm'))  logOk(`npm ${execSync('npm --version').toString().trim()}`);
   else logWarn('npm not on PATH');
   if (haveCmd('git'))  logOk(`git ${execSync('git --version').toString().trim().split(' ')[2]}`);
   else logWarn('git not on PATH');
-  if (haveCmd('claude')) logOk(`claude ${execSync('claude --version').toString().trim().split('\n')[0]}`);
-  else logWarn('claude not on PATH — will install via npm');
+  if (haveCmd('claude')) {
+    logOk(`claude ${execSync('claude --version').toString().trim().split('\n')[0]}`);
+    if (!existsSync(nativeClaudeBin())) logInfo('existing Claude Code installation will be migrated to the native installer');
+  } else logWarn('claude not on PATH — will install with Anthropic\'s native installer');
 }
 
-/** Install Claude Code CLI globally via npm. Idempotent. */
-function installClaudeCli({ force = false, dryRun = false } = {}) {
-  if (haveCmd('claude') && !force) return;
+/** Install Claude Code CLI with Anthropic's native installer. Idempotent. */
+export function installClaudeCli({ force = false, dryRun = false } = {}) {
+  // Do not treat an npm-global `claude` as satisfying this check: a normal
+  // Bizar install should migrate that setup to Anthropic's native launcher.
+  if (!force && preferNativeClaudeOnPath()) return { ok: true, installed: false, method: 'native' };
   section('Installing Claude Code CLI');
-  logInfo('npm install -g @anthropic-ai/claude-agent-sdk @anthropic-ai/claude-code');
-  if (dryRun) return;
+  const installCommand = claudeNativeInstallCommand();
+  logInfo(installCommand);
+  if (dryRun) return { ok: true, installed: false, dryRun: true };
   try {
-    execSync('npm install -g @anthropic-ai/claude-agent-sdk @anthropic-ai/claude-code', { stdio: 'inherit' });
-    logOk('Claude Code CLI installed');
+    if (process.platform === 'win32') {
+      execFileSync('powershell.exe', [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+        installCommand,
+      ], { stdio: 'inherit' });
+    } else {
+      execFileSync('bash', ['-lc', `set -o pipefail; ${installCommand}`], { stdio: 'inherit' });
+    }
+    preferNativeClaudeOnPath();
+    if (!haveCmd('claude')) throw new Error(`native installer completed but ${nativeClaudeBin()} is not available`);
+    logOk('Claude Code CLI installed with the native installer');
+    return { ok: true, installed: true, method: 'native' };
   } catch (err) {
-    logErr(`npm install failed: ${err.message}`);
-    logWarn('retry manually: npm install -g @anthropic-ai/claude-code');
+    logErr(`native Claude Code install failed: ${err.message}`);
+    logWarn(`retry manually: ${installCommand}`);
+    return { ok: false, installed: false, error: err };
   }
 }
 
@@ -1162,24 +1212,43 @@ export function detectStateJson() {
 export async function ensureOpenKanRuntime({
   dryRun = false,
   install = installOpenKanPromise,
+  home,
+  packageSpec,
+  force = false,
 } = {}) {
+  const installHome = resolveOpenKanHome({ home, cwd: process.cwd() });
   try {
-    const launcher = resolveOpenKanOk();
-    verifyOpenKanRuntime();
-    return { ok: true, installed: false, launcher, message: `OpenKan ready (${launcher})` };
+    const launcher = resolveOpenKanOk(home ? { home: installHome } : {});
+    verifyOpenKanRuntime({ okBin: launcher });
+    const agent = installOpenKanAgent({ home: installHome, cwd: process.cwd(), force });
+    if (!agent.ok) return { ok: false, home: installHome, launcher, message: agent.message };
+    const commands = installOpenKanCommandShims({ home: installHome });
+    if (!commands.ok) return { ok: false, home: installHome, launcher, agent, commands, message: commands.message };
+    return {
+      ok: true,
+      installed: false,
+      home: installHome,
+      launcher,
+      agent,
+      commands,
+      message: `OpenKan ready (${launcher}); native commands available via ok/openkan`,
+    };
   } catch (error) {
     if (process.env.BIZAR_SKIP_OPENKAN_INSTALL === '1') {
       return { ok: false, skipped: true, message: `OpenKan unavailable and installation skipped: ${error.message}` };
     }
     if (dryRun) {
-      return { ok: true, installed: false, message: '[dry-run] would install OpenKan natively from its tarball' };
+      return { ok: true, installed: false, home: installHome, message: `[dry-run] would install OpenKan natively via npm (${packageSpec || '@polderlabs/openkan@latest'}) under ${installHome}` };
     }
     try {
-      const result = await install();
-      const launcher = result.launcher || resolveOpenKanOk();
+      const result = await install({ home: installHome, packageSpec, force, persistConfig: true });
+      const launcher = result.launcher || resolveOpenKanOk({ home: installHome });
       return {
         ok: true,
         installed: true,
+        home: installHome,
+        version: result.version,
+        agent: result.agent,
         launcher,
         message: result.message || `OpenKan installed (${launcher})`,
       };
@@ -1196,7 +1265,14 @@ export async function ensureOpenKanRuntime({
  * Every step is idempotent.
  */
 export async function runProvision(opts = {}) {
-  const { mode = 'install', dryRun = false, force = false } = opts;
+  const {
+    mode = 'install',
+    dryRun = false,
+    force = false,
+    openkanHome,
+    openkanPackageSpec,
+    initializeOpenKanProject = false,
+  } = opts;
   const effectiveMode = mode === 'update' ? 'update' : 'install';
 
   console.log('');
@@ -1222,7 +1298,23 @@ export async function runProvision(opts = {}) {
     return r;
   };
 
-  await runStep('Ensuring OpenKan planning runtime', () => ensureOpenKanRuntime({ dryRun }));
+  const openKanStep = await runStep('Ensuring OpenKan planning runtime', () => ensureOpenKanRuntime({
+    dryRun,
+    home: openkanHome,
+    packageSpec: openkanPackageSpec,
+    force,
+  }));
+  if (initializeOpenKanProject && openKanStep.ok) {
+    await runStep('Initialising OpenKan project workspace', () => {
+      if (dryRun) return { ok: true, message: '[dry-run] would initialise .ok/ in the current project' };
+      try {
+        const result = ensureOpenKanProject({ home: openKanStep.home });
+        return { ok: true, message: result.stdout.trim() || '.ok/ is ready' };
+      } catch (error) {
+        return { ok: false, message: error.message || String(error) };
+      }
+    });
+  }
   await runStep('Syncing skills',    () => syncSkillFiles({ dryRun, force }));
   await runStep('Syncing commands',   () => syncCommandFiles({ dryRun, force }));
   await runStep('Syncing rules',      () => syncRulesFiles({ dryRun, force }));

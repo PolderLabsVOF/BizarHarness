@@ -39,7 +39,8 @@ echo "  image:   $IMAGE"
       bash build-essential ca-certificates curl git make python3 unzip
     curl -fsSL https://bun.sh/install | bash
     export PATH="$HOME/.bun/bin:$PATH"
-    npm install --global @anthropic-ai/claude-code
+    curl -fsSL https://claude.ai/install.sh | bash
+    export PATH="$HOME/.local/bin:$PATH"
     bun install --frozen-lockfile
 
     make check
