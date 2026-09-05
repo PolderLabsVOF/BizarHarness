@@ -52,8 +52,8 @@ bizar install
 bizar models
 ```
 
-Restart Claude Code after installation. The installer adds Bizar's agents,
-skills, commands, hooks, and settings to your user-level Claude configuration.
+Restart Claude Code after installation. The installer adds Bizar's agents, skills, commands, hooks, settings, and the
+default OpenKan planning runtime to your user-level Claude configuration.
 It preserves your configured gateway endpoint and credential values during a
 clean reinstall.
 
@@ -242,7 +242,7 @@ make check
 - [Documentation index](docs/INDEX.md)
 - [Architecture](docs/architecture.md)
 - [Model routing decisions](docs/decisions/)
-- [Current progress and evidence](PROGRESS.md)
+- [Durable project progress, plans, and goals](.ok/)
 - [MIT license](LICENSE)
 
 ## License

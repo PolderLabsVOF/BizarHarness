@@ -11,9 +11,9 @@
 ---
 
 
-Bizar Harness is a Claude Code-native, guarded-autonomy harness. It ships project and user-level agents, skills, slash commands, hooks, an MCP server, CLI utilities, and verification scripts. It has no embedded web control plane and no Bizar note-vault subsystem; OpenKan can consume the explicit `bizar control` CLI boundary as an optional external UI.
+Bizar Harness is a Claude Code-native, guarded-autonomy harness. It ships project and user-level agents, skills, slash commands, hooks, an MCP server, CLI utilities, and verification scripts. OpenKan is bundled as Bizar’s default durable planning, progression, task, and PRD-goal system; Bizar integrates with it only through the `.ok/` workspace and its supported CLI boundary.
 
-If you are an agent: read this file, read `PROGRESS.md`, inspect `feature_list.json`, then run `make check` before changing code.
+If you are an agent: read this file, inspect `.ok/` with `bizar task list` and `bizar goals list`, then run `make check` before changing code.
 
 ## Commands
 
@@ -26,15 +26,17 @@ make check-arch               # architectural and removed-surface checks
 make verify-removed-surfaces  # prove deleted subsystems are absent
 make verify-repo-structure    # prove tracked/package paths are clean
 make clean-check              # debug-artifact/static hygiene gate
-make vcr                      # feature-ledger reality ratio
+bizar task list               # OpenKan task progression
+bizar plan list               # OpenKan plans
+bizar goals list              # OpenKan PRD goals
 make session-start            # lifecycle compatibility target
 make session-end              # lifecycle compatibility target
 ```
 
 ## Hard constraints
 
-- **MUST** update `PROGRESS.md` before and after each logical code change.
-- **MUST** keep WIP=1 in `feature_list.json`.
+- **MUST** keep the scoped OpenKan task current in `.ok/`: claim before implementation, update status/evidence at each durable handoff, and complete only with verification evidence.
+- **MUST** use OpenKan PRDs and plans for durable goals and progression; `PROGRESS.md` and `feature_list.json` are legacy historical records, not live control state.
 - **MUST** keep one logical operation per commit and keep its docs in the same commit.
 - **MUST** run targeted tests, then `make check`; run `make e2e` for cross-component changes.
 - **MUST** verify evidence before claiming completion.
@@ -63,7 +65,7 @@ Agents execute clear, local, reversible work autonomously — they inspect,
 edit, test, and iterate without pausing for routine decisions. Routine
 decisions (file layout, naming, scope of a single commit, choosing between
 two equivalent stdlib calls, picking a verification command from the Makefile,
-or marking a task `passing` after `make check` is green) do NOT require
+or completing an OpenKan task after `make check` is green) do NOT require
 human approval and MUST NOT trigger a permission handoff. PreToolUse hooks
 still deny prohibited actions and escalate externally visible or irreversible
 actions with `permissionDecision: "ask"`; that escalation list is the
@@ -187,16 +189,16 @@ isolation.
 - `scripts/` + `.harness/` + `templates/` — verification, feature/eval state, audit output, and reusable contracts.
 
 The harness has no embedded browser/server UI layer or local web editor.
-`bizar control` is a machine-readable subprocess boundary for optional OpenKan
-integration; OpenKan owns HTTP, WebSocket, and presentation concerns. Session
+`bizar control` is a machine-readable subprocess boundary over the default OpenKan
+workspace; OpenKan owns durable task/plan/PRD state, HTTP, WebSocket, and presentation concerns. Session
 handoff, control inbox, and learning logs are bounded operational records for
 autonomy; they are not a general note vault, semantic search service, or
 knowledge-base API.
 
 ## State and evidence
 
-- `PROGRESS.md` — current objective, evidence, next actions, blockers.
-- `feature_list.json` — WIP=1 feature state.
+- `.ok/` — authoritative OpenKan tasks, plans, PRDs, progression, evidence, and scoped ownership.
+- `PROGRESS.md` and `feature_list.json` — legacy historical records; do not use them for new work.
 - `DECISIONS.md` and `docs/decisions/` — current architecture decisions.
 - `.harness/evals/` — feature evaluation records.
 - `~/.config/bizar/telemetry/` — local correlation and rejected-action feedback.
@@ -205,7 +207,7 @@ knowledge-base API.
 ## Definition of done
 
 1. Behavior is implemented with a regression test.
-2. Documentation and feature state describe the actual code.
+2. Documentation and OpenKan task/plan/PRD state describe the actual code.
 3. `make verify-removed-surfaces`, `make verify-repo-structure`, `make check-arch`, `make test`, `make e2e`, `make clean-check`, and `make check` pass as applicable.
-4. `PROGRESS.md` records fresh evidence and no required work remains.
+4. The OpenKan task records fresh verification evidence and no required work remains.
 5. `/simplify` reviews the staged diff before the approval-gated commit.
