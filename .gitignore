@@ -22,6 +22,8 @@ dist/
 .agents/
 /agent/
 .omx/
+.ok/
+.omc/
 
 # Local research and generated artifacts
 research/

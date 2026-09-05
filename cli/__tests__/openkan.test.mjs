@@ -2,15 +2,14 @@ import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { gunzipSync, gzipSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import test, { afterEach } from 'node:test';
 
 import {
   OpenKanError,
-  OPENKAN_TARBALL_PREFIX,
+  OPENKAN_NPM_PACKAGE,
   installOpenKanPromise,
-  parseTarEntries,
+  readInstalledOpenKanVersion,
   readOpenKanJson,
   resolveOpenKanHome,
   resolveOpenKanOk,
@@ -94,165 +93,121 @@ test('provisioner treats OpenKan as a default runtime without mutating in dry-ru
   }
 });
 
-// ── Native installer tests ─────────────────────────────────────────────────
+// ── npm installer tests ────────────────────────────────────────────────────
 
-/** Build a USTAR tar.gz containing the minimal OpenKan shape. */
-function buildFixtureTarball() {
-  const files = {
-    'README.md': Buffer.from('# fixture'),
-    'package.json': Buffer.from(JSON.stringify({ name: 'openkan-fixture', version: '0.0.0' })),
-    'bin/ok.mjs': Buffer.from('#!/usr/bin/env node\nconsole.log("ok");\n'),
-    'bin/openkan.mjs': Buffer.from('#!/usr/bin/env node\nconsole.log("openkan");\n'),
-    'src/index.ts': Buffer.from('// ts source\n'),
-    '.github/workflows/ci.yml': Buffer.from('name: ci\n'),
-  };
-  const BLOCK = 512;
-  const TAR = [];
-  for (const [rawName, content] of Object.entries(files)) {
-    // Real OpenKan tarballs are nested under `openkan-main/`; mirror that.
-    const name = `${OPENKAN_TARBALL_PREFIX}${rawName}`;
-    const header = Buffer.alloc(BLOCK);
-    const nameBuf = Buffer.from(name, 'utf8');
-    if (nameBuf.length <= 100) {
-      nameBuf.copy(header, 0, 0, nameBuf.length);
-    } else {
-      // Use GNU tar prefix split (name up to 100 + prefix up to 155).
-      const slash = name.lastIndexOf('/');
-      const file = name.slice(slash + 1);
-      const prefix = name.slice(0, slash);
-      Buffer.from(prefix, 'utf8').copy(header, 345, 0, Math.min(prefix.length, 155));
-      Buffer.from(file, 'utf8').copy(header, 0, 0, Math.min(file.length, 100));
-    }
-    const sizeOctal = content.length.toString(8).padStart(11, '0') + ' ';
-    Buffer.from(sizeOctal, 'utf8').copy(header, 124, 0, 12);
-    header[156] = 0x30; // '0' = regular file
-    header[257] = 0x75; // u = USTAR magic
-    Buffer.from('ustar  \0', 'utf8').copy(header, 257, 0, 8);
-    TAR.push(header);
-    TAR.push(content);
-    const pad = (BLOCK - (content.length % BLOCK)) % BLOCK;
-    TAR.push(Buffer.alloc(pad));
-  }
-  TAR.push(Buffer.alloc(BLOCK)); // terminator
-  TAR.push(Buffer.alloc(BLOCK));
-  const tar = Buffer.concat(TAR);
-  return gzipSync(tar);
+/**
+ * Stage a fake npm-installed OpenKan under <home>. Mimics the layout that
+ * `npm install --prefix <home> @polderlabs/openkan@latest` produces:
+ *   <home>/node_modules/@polderlabs/openkan/bin/ok.mjs
+ *   <home>/node_modules/@polderlabs/openkan/package.json
+ *   <home>/.installed-version
+ */
+function stageFakeOpenKan(home, version = '0.4.2-test') {
+  const pkgBin = join(home, 'node_modules', '@polderlabs', 'openkan', 'bin');
+  const pkgRoot = join(home, 'node_modules', '@polderlabs', 'openkan');
+  mkdirSync(pkgBin, { recursive: true });
+  const launcher = join(pkgBin, 'ok.mjs');
+  writeFileSync(launcher, '#!/usr/bin/env node\nconsole.log("ok");\n');
+  chmodSync(launcher, 0o755);
+  writeFileSync(
+    join(pkgRoot, 'package.json'),
+    JSON.stringify({ name: OPENKAN_NPM_PACKAGE, version, bin: { ok: launcher } }),
+  );
+  writeFileSync(join(home, '.installed-version'), `${version}\n`);
+  return { launcher, version };
 }
 
-function fakeFetch(tarball) {
-  return async () => ({
-    ok: true,
-    status: 200,
-    async arrayBuffer() { return tarball.buffer.slice(tarball.byteOffset, tarball.byteOffset + tarball.byteLength); },
-  });
-}
-
-test('parseTarEntries returns one entry per file with correct size and content', () => {
-  const tarball = buildFixtureTarball();
-  const decompressed = gunzipSync(tarball);
-  const entries = parseTarEntries(decompressed);
-  const fileNames = entries.filter((e) => e.content.length > 0).map((e) => e.name).sort();
-  assert.deepEqual(fileNames, [
-    'openkan-main/.github/workflows/ci.yml',
-    'openkan-main/README.md',
-    'openkan-main/bin/ok.mjs',
-    'openkan-main/bin/openkan.mjs',
-    'openkan-main/package.json',
-    'openkan-main/src/index.ts',
-  ]);
-  const okMjs = entries.find((e) => e.name === 'openkan-main/bin/ok.mjs');
-  assert.equal(okMjs.size, Buffer.byteLength('#!/usr/bin/env node\nconsole.log("ok");\n'));
+test('resolveOpenKanOk discovers the npm-installed launcher at node_modules/@polderlabs/openkan/bin/ok.mjs', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
+  roots.push(home);
+  const { launcher } = stageFakeOpenKan(home);
+  assert.equal(resolveOpenKanOk({ cwd: home, home }), launcher);
 });
 
-test('installOpenKanPromise extracts the tarball with native fetch + zlib and verifies the launcher', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-install-'));
+test('resolveOpenKanOk falls back to bin/ok.mjs when the npm layout is missing', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
   roots.push(home);
-  const tarball = buildFixtureTarball();
-  const result = await installOpenKanPromise({
-    home,
-    fetchImpl: fakeFetch(tarball),
-    skipNpmInstall: true,
-  });
+  mkdirSync(join(home, 'bin'), { recursive: true });
+  const launcher = join(home, 'bin', 'ok.mjs');
+  writeFileSync(launcher, '#!/usr/bin/env node\nconsole.log("ok");\n');
+  chmodSync(launcher, 0o755);
+  assert.equal(resolveOpenKanOk({ cwd: home, home }), launcher);
+});
+
+test('resolveOpenKanOk errors clearly when no launcher is present', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
+  roots.push(home);
+  assert.throws(
+    () => resolveOpenKanOk({ cwd: home, home }),
+    (error) => error instanceof OpenKanError && error.code === 'OPENKAN_NOT_FOUND',
+  );
+});
+
+test('readInstalledOpenKanVersion returns null when no marker is present', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
+  roots.push(home);
+  assert.equal(readInstalledOpenKanVersion(home), null);
+});
+
+test('readInstalledOpenKanVersion returns the trimmed version from the marker', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
+  roots.push(home);
+  stageFakeOpenKan(home, '0.4.2-fixture');
+  assert.equal(readInstalledOpenKanVersion(home), '0.4.2-fixture');
+});
+
+test('installOpenKanPromise skips the network and returns the staged version when skipNpmInstall is set', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
+  roots.push(home);
+  const { launcher, version } = stageFakeOpenKan(home);
+  const result = await installOpenKanPromise({ home, skipNpmInstall: true });
   assert.equal(result.ok, true);
-  assert.equal(result.installed, true);
-  assert.equal(result.home, home);
-  assert.equal(result.launcher, join(home, 'bin', 'ok.mjs'));
-  // Files extracted (with the tarball prefix stripped)
-  assert.equal(result.skipped.length, 0);
+  assert.equal(result.installed, false);
+  assert.equal(result.skipped, true);
+  assert.equal(result.version, version);
+  assert.equal(result.launcher, launcher);
 });
 
-test('installOpenKanPromise surfaces an actionable error when the fetch fails', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-install-'));
+test('installOpenKanPromise errors clearly when skipNpmInstall is set but no version marker is present', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
   roots.push(home);
   await assert.rejects(
-    () => installOpenKanPromise({
-      home,
-      fetchImpl: async () => { throw new Error('ECONNREFUSED'); },
-      skipNpmInstall: true,
-    }),
-    (error) => error instanceof OpenKanError && error.code === 'OPENKAN_DOWNLOAD_FAILED',
+    () => installOpenKanPromise({ home, skipNpmInstall: true }),
+    (error) => error instanceof OpenKanError && error.code === 'OPENKAN_SKIP_BUT_MISSING',
   );
 });
 
-test('installOpenKanPromise surfaces an HTTP error when the response is not ok', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-install-'));
+test('installOpenKanPromise respects BIZAR_SKIP_OPENKAN_NPM_INSTALL when a marker exists', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
   roots.push(home);
-  await assert.rejects(
-    () => installOpenKanPromise({
-      home,
-      fetchImpl: async () => ({ ok: false, status: 503, async arrayBuffer() { return new ArrayBuffer(0); } }),
-      skipNpmInstall: true,
-    }),
-    (error) => error instanceof OpenKanError && /HTTP 503/.test(error.message),
-  );
+  const { version } = stageFakeOpenKan(home, '0.4.2-ci');
+  const previous = process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL;
+  process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL = '1';
+  try {
+    const result = await installOpenKanPromise({ home });
+    assert.equal(result.ok, true);
+    assert.equal(result.skipped, true);
+    assert.equal(result.version, version);
+  } finally {
+    if (previous === undefined) delete process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL;
+    else process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL = previous;
+  }
 });
 
-test('installOpenKanPromise fails clearly when the tarball contains no entries under the prefix', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-install-'));
+test('installOpenKanPromise surfaces an actionable error when the npm subprocess fails', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
   roots.push(home);
-  const emptyTar = gzipSync(Buffer.alloc(1024));
-  await assert.rejects(
-    () => installOpenKanPromise({
-      home,
-      fetchImpl: fakeFetch(emptyTar),
-      skipNpmInstall: true,
-    }),
-    (error) => error instanceof OpenKanError && error.code === 'OPENKAN_EXTRACT_FAILED',
-  );
-});
-
-test('installOpenKanPromise refuses to extract entries that escape the install root', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-install-'));
-  roots.push(home);
-  const BLOCK = 512;
-  const header = Buffer.alloc(BLOCK);
-  Buffer.from('escape.txt', 'utf8').copy(header, 0, 0, 11);
-  Buffer.from('14', 'utf8').copy(header, 124, 0, 12);
-  header[156] = 0x30;
-  header[257] = 0x75;
-  Buffer.from('ustar', 'utf8').copy(header, 257, 0, 5);
-  // Build an entry that tries to escape via "../"
-  const escapeHeader = Buffer.alloc(BLOCK);
-  Buffer.from('../escape.txt', 'utf8').copy(escapeHeader, 0, 0, 14);
-  Buffer.from('14', 'utf8').copy(escapeHeader, 124, 0, 12);
-  escapeHeader[156] = 0x30;
-  escapeHeader[257] = 0x75;
-  Buffer.from('ustar', 'utf8').copy(escapeHeader, 257, 0, 5);
-  const content = Buffer.from('hello\nworld\n');
-  const tar = Buffer.concat([header, content, Buffer.alloc(BLOCK - content.length), escapeHeader, content, Buffer.alloc(BLOCK - content.length), Buffer.alloc(BLOCK * 2)]);
-  const tarball = gzipSync(tar);
-  // We expect extraction to NOT write outside home. The launcher probe should still
-  // fail cleanly because the fixture provides no ok.mjs at the expected path.
-  await assert.rejects(
-    () => installOpenKanPromise({
-      home,
-      fetchImpl: fakeFetch(tarball),
-      skipNpmInstall: true,
-    }),
-    (error) => error instanceof OpenKanError,
-  );
-  // The escape entry must not have been written outside the install root.
-  assert.equal(await import('node:fs').then(({ existsSync }) => existsSync(join(home, '..', 'escape.txt'))), false);
+  const previous = process.env.BIZAR_OPENKAN_TEST_FAIL_NPM;
+  process.env.BIZAR_OPENKAN_TEST_FAIL_NPM = '1';
+  try {
+    await assert.rejects(
+      () => installOpenKanPromise({ home, packageSpec: 'this-package-definitely-does-not-exist@99.99.99' }),
+      (error) => error instanceof OpenKanError && error.code === 'OPENKAN_NPM_INSTALL_FAILED',
+    );
+  } finally {
+    if (previous === undefined) delete process.env.BIZAR_OPENKAN_TEST_FAIL_NPM;
+    else process.env.BIZAR_OPENKAN_TEST_FAIL_NPM = previous;
+  }
 });
 
 test('resolveOpenKanHome honours BIZAR_OPENKAN_HOME before the default', () => {
@@ -265,22 +220,6 @@ test('resolveOpenKanHome honours BIZAR_OPENKAN_HOME before the default', () => {
     if (previous === undefined) delete process.env.BIZAR_OPENKAN_HOME;
     else process.env.BIZAR_OPENKAN_HOME = previous;
   }
-});
-
-test('installOpenKanPromise resolves ok.mjs content from the extracted fixture', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-install-'));
-  roots.push(home);
-  const tarball = buildFixtureTarball();
-  await installOpenKanPromise({
-    home,
-    fetchImpl: fakeFetch(tarball),
-    skipNpmInstall: true,
-  });
-  const { existsSync, readFileSync } = await import('node:fs');
-  const launcher = join(home, 'bin', 'ok.mjs');
-  assert.equal(existsSync(launcher), true);
-  const content = readFileSync(launcher, 'utf8');
-  assert.match(content, /console\.log\("ok"\)/);
 });
 
 test('native installer no longer pipes a remote shell script (regression: curl|bash removed)', async () => {

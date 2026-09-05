@@ -5,30 +5,35 @@
  * `.ok/`. Keeping this bridge subprocess-only means Bizar never imports or
  * forks OpenKan's storage implementation, and upgrades remain independent.
  *
- * The native installer (`installOpenKan`) avoids the previous `curl | bash`
- * pipeline. Bizar now downloads the OpenKan tarball with Node's built-in
- * `fetch`, decompresses with `node:zlib`, parses USTAR with a tiny
- * in-process parser, and only shells out to `npm install --omit=dev
- * --ignore-scripts` for runtime dependencies. No remote shell script ever
- * runs on the operator's machine — the install is fully driven by the
- * Bizar provisioning code path.
+ * The native installer (`installOpenKanPromise`) installs the latest
+ * `@polderlabs/openkan` from the public npm registry via `npm install
+ * --prefix <home> @polderlabs/openkan@latest`. No remote shell script
+ * ever runs on the operator's machine; the version is resolved by npm
+ * itself. Each `bizar openkan install` invocation resolves the latest
+ * tag at call time, so Bizar tracks upstream automatically.
  */
 import {
   existsSync,
-  mkdirSync,
+  readFileSync,
   realpathSync,
-  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { gunzipSync } from 'node:zlib';
 
-export const OPENKAN_TARBALL_URL = 'https://codeload.github.com/PolderLabsVOF/openkan/tar.gz/refs/heads/main';
-export const OPENKAN_TARBALL_PREFIX = 'openkan-main/';
+export const OPENKAN_NPM_PACKAGE = '@polderlabs/openkan';
+export const OPENKAN_NPM_VERSION_SPEC = 'latest';
 export const OPENKAN_HOME_DEFAULT = join(homedir(), '.config', 'bizar', 'openkan');
-export const OPENKAN_DEFAULT_LAUNCHER = join(OPENKAN_HOME_DEFAULT, 'bin', 'ok.mjs');
+export const OPENKAN_DEFAULT_LAUNCHER = join(
+  OPENKAN_HOME_DEFAULT,
+  'node_modules',
+  '@polderlabs',
+  'openkan',
+  'bin',
+  'ok.mjs',
+);
+export const OPENKAN_VERSION_MARKER = '.installed-version';
 
 export class OpenKanError extends Error {
   constructor(code, message, details = {}) {
@@ -71,10 +76,18 @@ export function resolveOpenKanOk(options = {}) {
 
   const home = options.home || process.env.BIZAR_OPENKAN_HOME;
   if (home) {
-    const candidate = [join(home, 'bin', 'ok.mjs'), join(home, 'bin', 'ok.ts')]
-      .find((path) => existsSync(path));
+    const candidates = [
+      join(home, 'bin', 'ok.mjs'),
+      join(home, 'bin', 'ok.ts'),
+      join(home, 'node_modules', '@polderlabs', 'openkan', 'bin', 'ok.mjs'),
+      join(home, 'node_modules', '@polderlabs', 'openkan', 'bin', 'ok.ts'),
+    ];
+    const candidate = candidates.find((path) => existsSync(path));
     if (candidate) return candidate;
-    throw new OpenKanError('OPENKAN_NOT_FOUND', `OpenKan launcher missing under ${resolve(home)}/bin`);
+    throw new OpenKanError(
+      'OPENKAN_NOT_FOUND',
+      `OpenKan launcher missing under ${resolve(home)} (expected node_modules/@polderlabs/openkan/bin/ok.mjs or bin/ok.mjs)`,
+    );
   }
 
   const configuredBin = options.openkanBin || process.env.BIZAR_OPENKAN_BIN || executableOnPath('openkan');
@@ -165,31 +178,15 @@ export function installOpenKan(options = {}) {
   );
 }
 
-/** Parse a USTAR tar buffer into { name, content } entries. */
-export function parseTarEntries(buffer) {
-  if (!Buffer.isBuffer(buffer)) {
-    throw new TypeError('parseTarEntries expects a Buffer');
+/** Read the installed OpenKan version marker from the home directory, if any. */
+export function readInstalledOpenKanVersion(home = OPENKAN_HOME_DEFAULT) {
+  const marker = join(home, OPENKAN_VERSION_MARKER);
+  if (!existsSync(marker)) return null;
+  try {
+    return readFileSync(marker, 'utf8').trim() || null;
+  } catch {
+    return null;
   }
-  const entries = [];
-  const BLOCK = 512;
-  let offset = 0;
-  while (offset + BLOCK <= buffer.length) {
-    const header = buffer.subarray(offset, offset + BLOCK);
-    if (header.every((byte) => byte === 0)) break; // tar terminator
-    const name = header.subarray(0, 100).toString('utf8').replace(/\0+$/, '');
-    const prefix = header.subarray(345, 500).toString('utf8').replace(/\0+$/, '');
-    const sizeOctal = header.subarray(124, 136).toString('utf8').trim();
-    const size = Number.parseInt(sizeOctal, 8) || 0;
-    const typeFlag = String.fromCharCode(header[156] || 0x30);
-    const fullName = prefix ? `${prefix}/${name}` : name;
-    const paddedSize = Math.ceil(size / BLOCK) * BLOCK;
-    const content = size > 0
-      ? Buffer.from(buffer.subarray(offset + BLOCK, offset + BLOCK + size))
-      : Buffer.alloc(0);
-    entries.push({ name: fullName, typeFlag, size, content });
-    offset += BLOCK + paddedSize;
-  }
-  return entries;
 }
 
 /** Resolve the default install root for the native installer. */
@@ -203,99 +200,100 @@ export function resolveOpenKanHome(options = {}) {
  * Native install — runs entirely inside the Bizar provisioning code path.
  *
  * Steps:
- *   1. `fetch(OPENKAN_TARBALL_URL)` (Node 18+) — no `curl` binary.
- *   2. `zlib.gunzipSync` — no remote shell.
- *   3. `parseTarEntries` + `mkdirSync`/`writeFileSync` — no `tar` binary.
- *   4. Optional `npm install --omit=dev --ignore-scripts --prefix <home>`
- *      via `spawnSync('npm', ...)` to fetch runtime deps; skipped when
- *      `BIZAR_SKIP_OPENKAN_NPM_INSTALL=1`.
- *   5. `verifyOpenKanRuntime` — launcher probe.
+ *   1. `npm install --prefix <home> @polderlabs/openkan@latest`
+ *      via `spawnSync('npm', ...)` — npm resolves `@latest` against the
+ *      public registry on every call, so Bizar always tracks the newest
+ *      upstream OpenKan.
+ *   2. Record the resolved version under `<home>/.installed-version` so
+ *      operators can inspect what shipped and `bizar update` can detect
+ *      drift.
+ *   3. `verifyOpenKanRuntime` — launcher probe; surfaces a clear error
+ *      if npm installed something but the `ok` binary does not start.
+ *
+ * The npm path replaces the previous `codeload` tarball + USTAR parser.
+ * Operators no longer need `curl`, `tar`, or `gunzip` on PATH; npm is
+ * the only subprocess. Set `BIZAR_SKIP_OPENKAN_NPM_INSTALL=1` to skip the
+ * network call (handy for air-gapped installs that pre-stage the home).
  */
 export async function installOpenKanPromise(options = {}) {
   const home = resolveOpenKanHome(options);
   const cwd = resolve(options.cwd || process.cwd());
-  const fetchImpl = options.fetchImpl || (typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null);
-  if (typeof fetchImpl !== 'function') {
-    throw new OpenKanError('OPENKAN_FETCH_UNAVAILABLE', 'Node 18+ global fetch is required for the native installer');
-  }
+  const pkgSpec = options.packageSpec || `${OPENKAN_NPM_PACKAGE}@${OPENKAN_NPM_VERSION_SPEC}`;
+  const previousVersion = options.refresh ? null : readInstalledOpenKanVersion(home);
 
-  let response;
-  try {
-    response = await fetchImpl(OPENKAN_TARBALL_URL, { redirect: 'follow' });
-  } catch (error) {
-    throw new OpenKanError('OPENKAN_DOWNLOAD_FAILED', error?.message || 'fetch failed', { cause: error });
-  }
-  if (!response?.ok) {
-    throw new OpenKanError('OPENKAN_DOWNLOAD_FAILED', `HTTP ${response?.status || '???'} fetching ${OPENKAN_TARBALL_URL}`);
-  }
-  const compressed = Buffer.from(await response.arrayBuffer());
-
-  let tarBuffer;
-  try {
-    tarBuffer = gunzipSync(compressed);
-  } catch (error) {
-    throw new OpenKanError('OPENKAN_EXTRACT_FAILED', `Could not decompress tarball: ${error?.message || error}`, { cause: error });
-  }
-
-  let entries;
-  try {
-    entries = parseTarEntries(tarBuffer);
-  } catch (error) {
-    throw new OpenKanError('OPENKAN_EXTRACT_FAILED', `Could not parse tar entries: ${error?.message || error}`, { cause: error });
-  }
-  const extracted = entries.filter((entry) => entry.name.startsWith(OPENKAN_TARBALL_PREFIX));
-  if (extracted.length === 0) {
-    throw new OpenKanError('OPENKAN_EXTRACT_FAILED', `Tarball contained no entries under ${OPENKAN_TARBALL_PREFIX}`);
-  }
-
-  if (options.refresh && existsSync(home)) {
-    rmSync(home, { recursive: true, force: true });
-  }
-  mkdirSync(home, { recursive: true });
-
-  const skipped = [];
-  for (const entry of entries) {
-    if (!entry.name.startsWith(OPENKAN_TARBALL_PREFIX)) continue;
-    const relative = entry.name.slice(OPENKAN_TARBALL_PREFIX.length);
-    if (!relative || relative.startsWith('..') || relative.includes(`..${sep}`)) {
-      skipped.push(entry.name);
-      continue;
+  if (process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL === '1' || options.skipNpmInstall) {
+    if (previousVersion) {
+      const launcher = resolveOpenKanOk({ cwd, home });
+      return {
+        ok: true,
+        installed: false,
+        skipped: true,
+        home,
+        version: previousVersion,
+        launcher,
+        message: `OpenKan install skipped; ${previousVersion} already present at ${home}`,
+      };
     }
-    const target = join(home, relative);
-    if (entry.typeFlag === '5' || entry.name.endsWith('/')) {
-      mkdirSync(target, { recursive: true });
-      continue;
-    }
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, entry.content);
+    throw new OpenKanError(
+      'OPENKAN_SKIP_BUT_MISSING',
+      'BIZAR_SKIP_OPENKAN_NPM_INSTALL=1 but no .installed-version marker is present at ' + home,
+    );
   }
 
-  let installResult = null;
-  if (process.env.BIZAR_SKIP_OPENKAN_NPM_INSTALL !== '1' && !options.skipNpmInstall) {
-    const packageJson = join(home, 'package.json');
-    if (existsSync(packageJson)) {
-      const npm = spawnSync('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--silent'], {
-        cwd: home,
-        encoding: 'utf8',
-        shell: false,
-        timeout: options.npmTimeoutMs || 240_000,
-      });
-      if (npm.status !== 0) {
-        throw new OpenKanError(
-          'OPENKAN_NPM_INSTALL_FAILED',
-          (npm.stderr || npm.stdout || '').trim() || 'npm install failed',
-          { npmStatus: npm.status },
-        );
-      }
-      installResult = { stdout: npm.stdout || '', stderr: npm.stderr || '' };
-    }
+  const npm = spawnSync('npm', [
+    'install',
+    '--prefix', home,
+    '--no-audit',
+    '--no-fund',
+    '--omit=dev',
+    '--ignore-scripts',
+    '--silent',
+    pkgSpec,
+  ], {
+    cwd,
+    encoding: 'utf8',
+    shell: false,
+    timeout: options.npmTimeoutMs || 240_000,
+  });
+  if (process.env.BIZAR_OPENKAN_TEST_FAIL_NPM === '1') {
+    // Test seam: force a deterministic failure path without hitting the network.
+    throw new OpenKanError(
+      'OPENKAN_NPM_INSTALL_FAILED',
+      `npm install ${pkgSpec} failed (test seam)`,
+      { npmStatus: 1 },
+    );
   }
+  if (npm.status !== 0) {
+    throw new OpenKanError(
+      'OPENKAN_NPM_INSTALL_FAILED',
+      (npm.stderr || npm.stdout || '').trim() || `npm install ${pkgSpec} failed`,
+      { npmStatus: npm.status },
+    );
+  }
+
+  const pkgJsonPath = join(home, 'node_modules', '@polderlabs', 'openkan', 'package.json');
+  let installedVersion = 'unknown';
+  try {
+    installedVersion = JSON.parse(readFileSync(pkgJsonPath, 'utf8')).version;
+  } catch (error) {
+    throw new OpenKanError(
+      'OPENKAN_INSTALL_INCOMPLETE',
+      `npm reported success but ${pkgJsonPath} is missing or unreadable`,
+      { cause: error },
+    );
+  }
+
+  writeFileSync(join(home, OPENKAN_VERSION_MARKER), `${installedVersion}\n`, { encoding: 'utf8' });
 
   let launcher;
   try {
     launcher = verifyOpenKanRuntime({ cwd, home }).launcher;
   } catch (error) {
-    throw new OpenKanError('OPENKAN_INSTALL_INCOMPLETE', `OpenKan installed but did not start: ${error.message || String(error)}`, { cause: error });
+    throw new OpenKanError(
+      'OPENKAN_INSTALL_INCOMPLETE',
+      `OpenKan ${installedVersion} installed but did not start: ${error.message || String(error)}`,
+      { cause: error },
+    );
   }
 
   return {
@@ -303,9 +301,9 @@ export async function installOpenKanPromise(options = {}) {
     installed: true,
     home,
     launcher,
-    skipped,
-    npm: installResult,
-    message: `OpenKan installed (${launcher})`,
+    version: installedVersion,
+    previousVersion,
+    message: `OpenKan ${installedVersion} installed at ${launcher}`,
   };
 }
 
