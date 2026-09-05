@@ -8,7 +8,7 @@
  *
  * The outcome record is intentionally minimal so it stays append-only
  * and easy to replay. Heavy state (the full posterior) lives in the
- * router; the outcome record carries only the delta so an auditor can
+ * autonomy tier; the outcome record carries only the delta so an auditor can
  * reconstruct the chain.
  *
  * Invariants:

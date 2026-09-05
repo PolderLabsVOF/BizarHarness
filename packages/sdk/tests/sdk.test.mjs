@@ -29,10 +29,6 @@ describe("SDK build", () => {
       "fingerprint.js", "fingerprint.d.ts",
       "mcp/server.js", "mcp/server.d.ts",
       "mcp/bin.js", "mcp/bin.d.ts",
-      // v6.4.0 — F-033 Self-Learning (codemod + bandit).
-      "router/codemod-intent.js", "router/codemod-intent.d.ts",
-      "router/model-router.js", "router/model-router.d.ts",
-      "router/q-learning-router.js", "router/q-learning-router.d.ts",
       // v10.1.1 — F-034 Self-Learning (Pillar D): instincts + decisions.
       "learning/index.js", "learning/index.d.ts",
       "learning/instincts.js", "learning/instincts.d.ts",
@@ -68,10 +64,12 @@ describe("SDK module surface", () => {
   test("MCP server module exposes only the retained tool surface", async () => {
     const mod = await import("../dist/mcp/server.js");
     expect(Array.isArray(mod.BIZAR_TOOLS)).toBe(true);
-    // 14 retained tools + 5 OMX Phase 1 scaffolding tools (F-202):
+    // 13 retained tools + 5 OMX Phase 1 scaffolding tools (F-202):
     //   ambiguity_score, deep_interview_status, ultragoal_status,
     //   ultragoal_steer, ralplan_handoff_validate.
-    expect(mod.BIZAR_TOOLS.length).toBe(19);
+    // The gateway inventory tool was removed with the model-selection
+    // SDK surface in Phase 2 of the OmniRoute alias routing overhaul.
+    expect(mod.BIZAR_TOOLS.length).toBe(18);
     expect(typeof mod.createBizarMcpServer).toBe("function");
     expect(typeof mod.createBizarMcpServerConfig).toBe("function");
     expect(typeof mod.defineTool).toBe("function");
@@ -85,7 +83,7 @@ describe("SDK module surface", () => {
       "list_instincts", "list_decisions",
       // F-146 — agent-facing CLI wrappers.
       "bizar_task", "bizar_workflow", "bizar_control",
-      "bizar_audit", "bizar_model_list",
+      "bizar_audit",
       // F-202 Phase 1 — OMX adoption scaffolding tools.
       "ambiguity_score",
       "deep_interview_status",
@@ -97,19 +95,6 @@ describe("SDK module surface", () => {
     for (const n of expectedNames) {
       expect(have.has(n)).toBe(true);
     }
-  });
-
-  test("F-033 router modules export the expected API", async () => {
-    const cm = await import("../dist/router/codemod-intent.js");
-    expect(typeof cm.detectCodemodIntent).toBe("function");
-
-    const mr = await import("../dist/router/model-router.js");
-    expect(typeof mr.ModelRouter).toBe("function");
-
-    const ql = await import("../dist/router/q-learning-router.js");
-    expect(typeof ql.QLearningRouter).toBe("function");
-    expect(Array.isArray(ql.AGENT_ACTIONS)).toBe(true);
-
   });
 });
 
