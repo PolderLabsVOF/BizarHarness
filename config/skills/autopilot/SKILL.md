@@ -10,7 +10,7 @@ Use Autopilot for a clear, non-trivial outcome that should be delivered locally 
 
 ## Start or resume
 
-1. Read repository instructions, `PROGRESS.md`, and the feature ledger.
+1. Read repository instructions and authoritative OpenKan `.ok/` state with `bizar task list`, `bizar plan list`, and `bizar goals list`.
 2. Query durable state first:
 
    ```sh

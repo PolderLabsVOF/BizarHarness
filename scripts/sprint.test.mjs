@@ -108,10 +108,19 @@ test('sprint generator throws an actionable error when the goal is missing from 
       goals: [],
       status: 'active',
     });
-    await assert.rejects(
-      () => fillSprintContract('F-999', root),
-      /goal 'F-999' not found under \.ok\/prds\./,
-    );
+    let caught;
+    try {
+      await fillSprintContract('F-999', root);
+    } catch (error) {
+      caught = error;
+    }
+    assert.ok(caught, 'fillSprintContract should reject when the goal is absent');
+    // Substring assertion keeps the test resilient against any future
+    // help-message formatting (backticks, line breaks, etc.).
+    assert.ok(caught.message.includes("goal 'F-999' not found under .ok/prds/."),
+      `error message should mention the missing .ok/prds/ path; got: ${caught.message}`);
+    assert.ok(caught.message.includes('bizar goals list'),
+      `error message should hint at the goals list CLI; got: ${caught.message}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
