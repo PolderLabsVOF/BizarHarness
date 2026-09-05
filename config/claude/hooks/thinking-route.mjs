@@ -263,7 +263,7 @@ process.stdin.on('end', () => {
     { cmd: '/init',            note: 'Run `bizar init` to scaffold project context and graph state in this repo.' },
     { cmd: '/cron',            note: 'Manage scheduled tasks via the Bizar SDK cron API — list / add / remove / pause.' },
     { cmd: '/spec',            note: 'Generate a 5-section spec (Goal, Scope, DoD, Out-of-Scope, Open Questions); checks for duplicates first.' },
-    { cmd: '/sprint',          note: 'Read a feature from root `PROGRESS.md` and pre-fill `templates/sprint-contract.md`.' },
+    { cmd: '/sprint',          note: 'Read an OpenKan PRD or plan and pre-fill `templates/sprint-contract.md`.' },
     { cmd: '/learn',           note: 'Review bounded instincts and decisions with explicit operator approval.' },
   ];
 

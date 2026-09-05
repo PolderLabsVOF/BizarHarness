@@ -8,10 +8,10 @@
  * treats success-sounding final prose by itself as proof of delivery.
  */
 
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-import { TaskLedger, resolveTaskDatabase } from '../../../cli/task-ledger.mjs';
+import { activeOpenKanTask } from '../../../cli/openkan-store.mjs';
 
 const EDITING_AGENTS = new Set([
   'senior-engineer',
@@ -122,17 +122,11 @@ function taskCompletion(input) {
   const taskId = String(input.task_id || input.task?.id || process.env.BIZAR_TASK_ID || '').trim();
   if (!taskId) return null;
   const cwd = String(input.cwd || process.cwd());
-  let ledger;
   try {
-    const dbPath = resolveTaskDatabase(cwd, process.env.BIZAR_TASK_DB);
-    if (!existsSync(dbPath)) return false;
-    ledger = new TaskLedger({ dbPath });
-    const task = ledger.getTask(taskId);
-    return ['completed', 'integrated'].includes(task.state) && Boolean(String(task.evidence || '').trim());
+    const task = activeOpenKanTask(cwd, taskId);
+    return task?.status === 'done' && Array.isArray(task.evidence) && task.evidence.some((item) => String(item || '').trim());
   } catch {
     return false;
-  } finally {
-    try { ledger?.close(); } catch { /* fail open cleanup */ }
   }
 }
 
@@ -154,7 +148,7 @@ export function verifyDeliverables(input) {
   else if (!hasConcreteEvidence && completedTask !== true) {
     problems.push('provide a bounded transcript with a concrete changed path and a successful verification command/result');
   }
-  if (completedTask === false) problems.push('complete the bound Bizar task claim with evidence');
+  if (completedTask === false) problems.push('complete the bound OpenKan task with evidence');
   if (problems.length === 0) return {};
 
   return {

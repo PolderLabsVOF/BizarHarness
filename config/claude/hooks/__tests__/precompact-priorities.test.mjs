@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -11,9 +11,9 @@ const HOOK = join(ROOT, 'precompact-priorities.sh');
 test('precompact hook checkpoints bounded state and emits recovery instructions', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bizar-compact-'));
   const project = mkdtempSync(join(tmpdir(), 'bizar-project-'));
-  writeFileSync(join(project, 'PROGRESS.md'), 'current objective and exact evidence\n'.repeat(2000));
+  mkdirSync(join(project, '.ok'), { recursive: true });
   writeFileSync(join(project, 'DECISIONS.md'), 'decision record\n'.repeat(2000));
-  writeFileSync(join(project, 'feature_list.json'), '{"wip":1}');
+  writeFileSync(join(project, '.ok', 'index.json'), '{"tasks":["tsk-1"]}');
   const result = spawnSync('bash', [HOOK], {
     input: JSON.stringify({
       hook_event_name: 'PreCompact',
@@ -37,8 +37,9 @@ test('precompact hook checkpoints bounded state and emits recovery instructions'
   assert.equal('customInstructions' in checkpoint, false);
   assert.match(checkpoint.customInstructionsHash, /^[a-f0-9]{64}$/);
   assert.ok(checkpoint.customInstructionsBytes > 100);
-  assert.equal(checkpoint.featureList, '{"wip":1}');
-  assert.ok(checkpoint.progress.length <= 16000);
+  assert.equal(checkpoint.openKanIndex, '{"tasks":["tsk-1"]}');
+  assert.equal('featureList' in checkpoint, false);
+  assert.equal('progress' in checkpoint, false);
   assert.ok(checkpoint.decisions.length <= 16000);
   assert.ok(readFileSync(checkpointPath).length < 60_000);
   assert.match(checkpoint.contentHash, /^[a-f0-9]{64}$/);

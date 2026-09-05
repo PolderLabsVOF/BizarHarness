@@ -1,10 +1,9 @@
 import { afterEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { TaskLedger } from '../../../../cli/task-ledger.mjs';
 
 const hooksDir = join(import.meta.dirname, '..');
 const roots = [];
@@ -243,11 +242,10 @@ test('SubagentStop verifier requires evidence and honors completed task claims',
     assert.equal(unverified.decision, 'block');
   }
 
-  const ledger = new TaskLedger({ dbPath });
-  ledger.createTask({ id: 'task-1', title: 'deliver', scopes: ['src/example.ts'] });
-  ledger.claimTask({ taskId: 'task-1', owner: 'agent-1', workspace: root });
-  ledger.completeTask({ taskId: 'task-1', owner: 'agent-1', evidence: 'targeted test passed' });
-  ledger.close();
+  mkdirSync(join(root, '.ok', 'tasks'), { recursive: true });
+  writeFileSync(join(root, '.ok', 'tasks', 'task-1.json'), JSON.stringify({
+    schema: 'ok.task.v1', id: 'task-1', title: 'deliver', status: 'done', evidence: ['targeted test passed'],
+  }));
   const claimed = runHook('verify-deliverables.mjs', {
     hook_event_name: 'SubagentStop',
     agent_type: 'senior-engineer',
@@ -255,7 +253,7 @@ test('SubagentStop verifier requires evidence and honors completed task claims',
     task_id: 'task-1',
     cwd: root,
     last_assistant_message: 'Work is complete.',
-  }, { BIZAR_TASK_DB: dbPath });
+  });
   assert.deepEqual(claimed, {});
 
   const malformed = spawnSync('node', [join(hooksDir, 'verify-deliverables.mjs')], {

@@ -6,14 +6,13 @@
  * can ship instead of spending 5 turns orienting.
  *
  * Reads (lazily, best-effort — never throws):
- *   1. PROGRESS.md            → "Current State" line + last `## In Progress` paragraph
- *   2. feature_list.json      → totals + active feature (WIP=1 guard)
- *   3. git log --oneline -10  → recent commits
- *   4. .bizar/PROJECT.md      → project name + one-line summary
+ *   1. OpenKan `.ok/`         → active tasks, plans, and PRD goals
+ *   2. git log --oneline -10  → recent commits
+ *   3. .bizar/PROJECT.md      → project name + one-line summary
  *
  * Branches on `source`:
  *   - startup  → all 4 sources, full briefing
- *   - clear    → PROGRESS.md + last commit only
+ *   - clear    → last commit only (OpenKan remains durable state)
  *   - resume   → reads .bizar/session-state.json (handoff from SessionEnd)
  *
  * Claude Code SessionStart input:
@@ -33,7 +32,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildLearningContext } from '../../../cli/commands/learn.mjs';
 import { resolveBizarHome } from '../../../cli/config-paths.mjs';
-import { bootstrapGoalFromFile, GoalBootstrapError } from '../../../packages/sdk/dist/agent/goal-bootstrap.js';
+import { listOpenKanGoals, listOpenKanPlans, listOpenKanTasks } from '../../../cli/openkan-store.mjs';
 
 const MAX_BRIEFING = 1200; // hard cap, characters (was 800; +400 to fit the F-207 goal line)
 const PROJECT_NAME = 'BizarHarness';
@@ -132,22 +131,19 @@ function projectSummary(cwd) {
   return summary;
 }
 
-function featureListBrief(cwd) {
-  const path = join(cwd, 'feature_list.json');
-  const src = readIfExists(path);
-  if (!src) return null;
+function openKanBrief(cwd) {
   try {
-    const data = JSON.parse(src);
-    const features = Array.isArray(data.features) ? data.features : [];
-    const total = features.length;
-    const passing = features.filter((f) => f && f.state === 'passing').length;
-    const active = features
-      .filter((f) => f && f.state === 'active')
-      .map((f) => ({ id: f.id, behavior: clip(f.behavior || '', 120) }));
-    return { total, passing, active };
-  } catch {
-    return null;
-  }
+    const tasks = listOpenKanTasks(cwd);
+    const plans = listOpenKanPlans(cwd);
+    const goals = listOpenKanGoals(cwd);
+    return {
+      exists: tasks.length + plans.length + goals.length > 0 || existsSync(join(cwd, '.ok')),
+      tasks,
+      plans,
+      goals,
+      active: tasks.filter((task) => ['in_progress', 'review'].includes(task.status)),
+    };
+  } catch { return null; }
 }
 
 function sessionState(cwd) {
@@ -163,22 +159,15 @@ function sessionState(cwd) {
 
 // ── Briefing builders ──────────────────────────────────────────────────────
 
-function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progressLast) {
+function startupBriefing(cwd, planning, recentCommits, projectLine) {
   const lines = ['Bizar SessionStart (startup):'];
   if (projectLine) lines.push(`- Project: ${projectLine}.`);
-  if (featureBrief) {
-    if (featureBrief.active.length === 0) {
-      lines.push(
-        `- Features: ${featureBrief.passing}/${featureBrief.total} passing. No active feature — pick next from not_started.`,
-      );
-    } else if (featureBrief.active.length === 1) {
-      const a = featureBrief.active[0];
-      lines.push(`- Active feature: ${a.id} — ${a.behavior}.`);
-    } else {
-      lines.push(
-        `- WIP VIOLATION: ${featureBrief.active.length} active features (${featureBrief.active.map((a) => a.id).join(', ')}). WIP=1 requires resolving extras to passing/not_started.`,
-      );
-    }
+  if (!planning?.exists) {
+    lines.push('- OpenKan: .ok/ is not initialised. First move: run `bizar openkan init`, then create a scoped task or PRD.');
+  } else if (planning.active.length === 0) {
+    lines.push(`- OpenKan: ${planning.tasks.length} task(s), ${planning.plans.length} plan(s), ${planning.goals.length} PRD(s); no active task.`);
+  } else {
+    lines.push(`- OpenKan active: ${planning.active.map((task) => `${task.id} — ${clip(task.title || '', 100)}`).join(' | ')}.`);
   }
   if (recentCommits.length > 0) {
     lines.push(`- Last commit: ${recentCommits[0]}.`);
@@ -186,22 +175,18 @@ function startupBriefing(cwd, featureBrief, recentCommits, projectLine, progress
       lines.push(`- Recent: ${recentCommits.slice(1, 6).join(' | ')}.`);
     }
   }
-  if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   lines.push('- You are @mike. For non-tiny work, do bounded read-only orientation, then form a native Agent team by default. Ask one concise clarification only when a material choice, acceptance criterion, or safety boundary remains unresolved; otherwise continue autonomously. /quick is the explicit direct-execution exception. Use worktrees for editors and explicit Bizar models for every Agent.');
-  lines.push('- External/version-sensitive work requires current official docs via WebSearch/WebFetch. Use relevant installed skills; apply i-have-adhd to user output. WIP=1.');
+  lines.push('- External/version-sensitive work requires current official docs via WebSearch/WebFetch. Use relevant installed skills. OpenKan .ok is the sole task/progress/goals authority.');
   lines.push('- TaskCompleted/SubagentStop/<task-notification> is terminal: consume its original <result> once, mark done/failed, merge queued work, and continue the objective. Never turn a terminal notification into a worker follow-up or replace that result with a later status reply.');
   // Default-first-stop hint when nothing is active yet.
-  if (featureBrief && featureBrief.active.length === 0) {
-    lines.push(
-      '- First move: read PROGRESS.md and feature_list.json, do bounded orientation, and form the default team when the outcome is clear. Ask only if a material decision remains unresolved.',
-    );
+  if (planning && planning.active.length === 0) {
+    lines.push('- First move: inspect `bizar task list` and `bizar goals list`, claim the selected task, then form the default team when the outcome is clear.');
   }
   return lines.join('\n');
 }
 
-function clearBriefing(cwd, recentCommits, progressLast) {
+function clearBriefing(cwd, recentCommits) {
   const lines = ['Bizar SessionStart (clear):'];
-  if (progressLast) lines.push(`- Progress: ${progressLast}.`);
   if (recentCommits.length > 0) lines.push(`- Last commit: ${recentCommits[0]}.`);
   lines.push('- Context preserved in same repo / cwd — only the model turn was reset.');
   lines.push('- You are @mike: continue the active coordination plan; adapt it when new evidence changes the fit.');
@@ -213,7 +198,7 @@ function resumeBriefing(cwd, state) {
   const lines = ['Bizar SessionStart (resume):'];
   lines.push('- You are @mike: restore state, then continue the active coordination plan and adapt it if the evidence changed.');
   if (state) {
-    if (state.activeFeature) lines.push(`- Last active feature: ${state.activeFeature}.`);
+    if (state.activeTask) lines.push(`- Last active OpenKan task: ${state.activeTask}.`);
     if (state.reason) lines.push(`- Last session ended with: ${state.reason}.`);
     if (state.nextStep) lines.push(`- Last nextStep: ${state.nextStep}.`);
     if (Array.isArray(state.filesTouched) && state.filesTouched.length > 0) {
@@ -226,39 +211,9 @@ function resumeBriefing(cwd, state) {
     lines.push('- WARNING: context may have been compacted since the last run; verify scope before continuing.');
   } else {
     lines.push('- No prior session-state.json found — treating as fresh start.');
-    lines.push('- First move: read PROGRESS.md and feature_list.json to orient.');
+    lines.push('- First move: read OpenKan .ok state with `bizar task list` and `bizar goals list` to orient.');
   }
   return lines.join('\n');
-}
-
-// ── Goal bootstrap (F-207) ─────────────────────────────────────────────────
-
-/**
- * Run the F-207 bootstrap helper and surface its verdict as a single
- * briefing line. The verdict is one of `resume | bootstrap | idle`,
- * and any GoalBootstrapError is degraded to `idle` so SessionStart
- * never aborts because of a malformed feature_list.json.
- */
-function goalBootstrapBrief(cwd) {
-  const featureListPath = join(cwd, 'feature_list.json');
-  const specsDir = join(cwd, 'docs', 'specs');
-  let result;
-  try {
-    result = bootstrapGoalFromFile({ featureListPath, specsDir });
-  } catch (err) {
-    if (!(err instanceof GoalBootstrapError)) {
-      return 'goal: idle (bootstrap helper error)';
-    }
-    return `goal: idle (${err.message})`;
-  }
-  const v = result.verdict;
-  if (v.action === 'resume') {
-    return `goal: resume ultragoal ${v.id} (source=${v.source})`;
-  }
-  if (v.action === 'bootstrap') {
-    return `goal: bootstrap ultragoal ${v.id} → ${v.charterPath}`;
-  }
-  return 'goal: idle (no not_started features)';
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
@@ -266,29 +221,26 @@ function goalBootstrapBrief(cwd) {
 function buildBriefing(input) {
   const source = String(input.source || 'startup');
   const cwd = String(input.cwd || process.cwd());
-  // The goal line is always emitted FIRST so the F-207 verdict survives
-  // the MAX_BRIEFING clip even when learning context pushes the briefing
-  // past the cap.
-  const goalLine = goalBootstrapBrief(cwd);
+  const planning = openKanBrief(cwd);
+  const goalLine = planning?.goals.find((prd) => prd.status === 'active')
+    ? `OpenKan goal: ${planning.goals.find((prd) => prd.status === 'active').id} — active.`
+    : 'OpenKan goal: no active PRD.';
 
   if (source === 'resume') {
     const state = sessionState(cwd);
     return clip([goalLine, resumeBriefing(cwd, state), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
   }
 
-  const progressSrc = readIfExists(join(cwd, 'PROGRESS.md'));
-  const progressLast = firstParagraphAfter(progressSrc, '## In Progress');
   const recentCommits = gitRecent(cwd, 10);
-  const featureBrief = featureListBrief(cwd);
   const projectLine = projectSummary(cwd);
 
   if (source === 'clear') {
-    return clip([goalLine, clearBriefing(cwd, recentCommits, progressLast), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
+    return clip([goalLine, clearBriefing(cwd, recentCommits), buildLearningContext({ cwd })].filter(Boolean).join('\n'), MAX_BRIEFING);
   }
 
   // Default: startup.
   return clip(
-    [goalLine, startupBriefing(cwd, featureBrief, recentCommits, projectLine, progressLast), buildLearningContext({ cwd })].filter(Boolean).join('\n'),
+    [goalLine, startupBriefing(cwd, planning, recentCommits, projectLine), buildLearningContext({ cwd })].filter(Boolean).join('\n'),
     MAX_BRIEFING,
   );
 }

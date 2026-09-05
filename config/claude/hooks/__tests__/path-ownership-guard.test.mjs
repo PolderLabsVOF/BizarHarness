@@ -1,11 +1,9 @@
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-
-import { TaskLedger } from '../../../../cli/task-ledger.mjs';
 
 const HOOK = join(import.meta.dirname, '..', 'path-ownership-guard.mjs');
 const roots = [];
@@ -14,11 +12,11 @@ afterEach(() => {
   while (roots.length) rmSync(roots.pop(), { recursive: true, force: true });
 });
 
-function runHook(input, dbPath) {
+function runHook(input) {
   const result = spawnSync(process.execPath, [HOOK], {
     input: JSON.stringify(input),
     encoding: 'utf8',
-    env: { ...process.env, BIZAR_TASK_DB: dbPath },
+    env: { ...process.env },
   });
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim() ? JSON.parse(result.stdout) : {};
@@ -57,25 +55,21 @@ function assertAdvisoryAllow(result, reasonFragment) {
 test('edit hook enforces sibling claims as advisory reminders, never blocks', () => {
   const root = mkdtempSync(join(tmpdir(), 'bizar-path-guard-'));
   roots.push(root);
-  const main = join(root, 'main');
-  const isolated = join(root, 'isolated');
-  mkdirSync(join(main, 'src'), { recursive: true });
-  mkdirSync(join(isolated, 'src'), { recursive: true });
-  mkdirSync(join(isolated, 'docs'), { recursive: true });
-
-  const dbPath = join(root, 'tasks.sqlite');
-  const ledger = new TaskLedger({ dbPath });
-  ledger.createTask({ id: 'source', title: 'Source', scopes: ['src/**'] });
-  ledger.claimTask({ taskId: 'source', owner: 'todd', workspace: isolated });
-  ledger.close();
+  mkdirSync(join(root, 'src'), { recursive: true });
+  mkdirSync(join(root, 'docs'), { recursive: true });
+  mkdirSync(join(root, '.ok', 'tasks'), { recursive: true });
+  writeFileSync(join(root, '.ok', 'tasks', 'tsk-source.json'), JSON.stringify({
+    schema: 'ok.task.v1', id: 'tsk-source', owner: 'todd', status: 'in_progress', scopes: ['src/**'],
+  }));
 
   // Active task editing inside its own scope → silent allow.
   const allowed = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Edit',
-    cwd: isolated,
-    tool_input: { file_path: join(isolated, 'src', 'index.ts') },
-  }, dbPath);
+    cwd: root,
+    task_id: 'tsk-source',
+    tool_input: { file_path: join(root, 'src', 'index.ts') },
+  });
   assertSilent(allowed, 'in-scope edit');
 
   // F-200 loosening: active task editing OUTSIDE its own scope (still
@@ -84,9 +78,10 @@ test('edit hook enforces sibling claims as advisory reminders, never blocks', ()
   const outOfScope = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Write',
-    cwd: isolated,
-    tool_input: { file_path: join(isolated, 'docs', 'design.md') },
-  }, dbPath);
+    cwd: root,
+    task_id: 'tsk-source',
+    tool_input: { file_path: join(root, 'docs', 'design.md') },
+  });
   assertSilent(outOfScope, 'out-of-scope edit');
 
   // Different workspace, file in active task's scope → ALLOW with
@@ -95,13 +90,13 @@ test('edit hook enforces sibling claims as advisory reminders, never blocks', ()
   const siblingOwned = runHook({
     hook_event_name: 'PreToolUse',
     tool_name: 'Edit',
-    cwd: main,
-    tool_input: { file_path: join(main, 'src', 'index.ts') },
-  }, dbPath);
-  assertAdvisoryAllow(siblingOwned, 'SCOPE_OWNED');
+    cwd: root,
+    tool_input: { file_path: join(root, 'src', 'index.ts') },
+  });
+  assertAdvisoryAllow(siblingOwned, 'scope src');
   assert.match(
     siblingOwned.hookSpecificOutput.permissionDecisionReason,
-    /SCOPE_OWNED/,
+    /OpenKan path ownership advisory/,
   );
 });
 
@@ -117,7 +112,7 @@ test('edit hook allows /tmp and other scratch paths with no git repo', () => {
     tool_name: 'Write',
     cwd: scratch,
     tool_input: { file_path: join(scratch, 'note.txt') },
-  }, join(root, 'missing-tasks.sqlite'));
+  });
   assertSilent(result, 'no-ledger scratch path');
 });
 
@@ -127,6 +122,6 @@ test('edit hook allows /tmp/foo from a project cwd outside the repo', () => {
     tool_name: 'Write',
     cwd: '/home/drb0rk/projects/BizarHarness',
     tool_input: { file_path: '/tmp/foo.txt' },
-  }, '/nonexistent/tasks.sqlite');
+  });
   assertSilent(result, 'scratch path under project cwd');
 });

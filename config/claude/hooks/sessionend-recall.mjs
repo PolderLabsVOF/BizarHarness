@@ -30,6 +30,7 @@
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { listOpenKanTasks } from '../../../cli/openkan-store.mjs';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 
@@ -177,26 +178,21 @@ function extract(events) {
   };
 }
 
-function detectActiveFeature(cwd) {
-  const path = join(cwd, 'feature_list.json');
-  if (!existsSync(path)) return null;
+function detectActiveTask(cwd) {
   try {
-    const data = JSON.parse(readFileSync(path, 'utf8'));
-    const active = (data.features || []).filter((f) => f && f.state === 'active');
+    const active = listOpenKanTasks(cwd).filter((task) => ['in_progress', 'review'].includes(task.status));
     if (active.length === 1) return active[0].id;
-    if (active.length > 1) return active.map((a) => a.id).join(',');
-    return null;
+    if (active.length > 1) return active.map((task) => task.id).join(',');
   } catch {
-    return null;
+    // Session handoff is best-effort; a malformed .ok entry must not abort it.
   }
+  return null;
 }
 
-function inferNextStep(summary, activeFeature) {
+function inferNextStep(summary, activeTask) {
   if (summary.errors.length > 0) return `Resolve ${summary.errors[0]} from the prior session.`;
-  if (!activeFeature) {
-    return 'Pick next feature from feature_list.json not_started.';
-  }
-  return `Continue with ${activeFeature}.`;
+  if (!activeTask) return 'Pick and claim the next ready OpenKan task with `bizar task list`.';
+  return `Continue with OpenKan task ${activeTask}.`;
 }
 
 // ── File writers ───────────────────────────────────────────────────────────
@@ -213,7 +209,7 @@ function writeSessionNote(cwd, sessionId, reason, summary) {
   const fileName = `${today}-${sessionId.slice(0, 8)}.md`;
   const notePath = join(dir, fileName);
 
-  const activeFeature = detectActiveFeature(cwd);
+  const activeTask = detectActiveTask(cwd);
   const frontmatter = [
     '---',
     `title: Session ${today} ${sessionId.slice(0, 8)}`,
@@ -221,7 +217,7 @@ function writeSessionNote(cwd, sessionId, reason, summary) {
     `sessionId: ${sessionId}`,
     `reason: ${reason}`,
     `cwd: ${cwd}`,
-    activeFeature ? `activeFeature: ${activeFeature}` : 'activeFeature: null',
+    activeTask ? `activeTask: ${activeTask}` : 'activeTask: null',
     `requestFingerprint: ${summary.requestFingerprint || 'null'}`,
     `toolsUsed: ${JSON.stringify(summary.toolsUsed)}`,
     summary.filesTouched.length > 0
@@ -282,7 +278,7 @@ function writeSessionState(cwd, sessionId, reason, summary, nextStep) {
     lastSessionId: sessionId,
     lastSessionEnd: new Date().toISOString(),
     reason,
-    activeFeature: detectActiveFeature(cwd),
+    activeTask: detectActiveTask(cwd),
     nextStep,
     requestFingerprint: summary.requestFingerprint,
     filesTouched: summary.filesTouched,
@@ -350,7 +346,7 @@ process.stdin.on('end', () => {
   const summary = extract(events);
   errors = summary.errors;
 
-  const nextStep = inferNextStep(summary, detectActiveFeature(cwd));
+  const nextStep = inferNextStep(summary, detectActiveTask(cwd));
   const notePath = writeSessionNote(cwd, sessionId, reason, summary);
   const stateOk = writeSessionState(cwd, sessionId, reason, summary, nextStep);
 

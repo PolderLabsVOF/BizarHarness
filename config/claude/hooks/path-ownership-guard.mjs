@@ -4,7 +4,7 @@
 // F-176 (full permissions + advisory hooks):
 //   Hooks never return `deny` or `ask`. They inject guidance via
 //   `additionalContext` and always return `"allow"`. The hook still
-//   consults `cli/task-ledger.mjs` `authorizeEdit` so an agent who IS
+//   consults OpenKan `.ok/` scopes so an agent who IS
 //   tripping over a sibling's live claim gets a clear reminder, but the
 //   trip is a hint, not a block.
 //
@@ -18,11 +18,10 @@
 //   - Completed, integrated, blocked, and pending tasks no longer
 //     reserve scopes. Only active-with-lease tasks block siblings.
 
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { TaskLedger, resolveTaskDatabase } from '../../../cli/task-ledger.mjs';
+import { ownerOfOpenKanPath } from '../../../cli/openkan-store.mjs';
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -43,12 +42,6 @@ process.stdin.on('end', () => {
     return;
   }
 
-  const dbPath = resolveTaskDatabase(cwd);
-  if (!existsSync(dbPath)) {
-    process.stdout.write('{}\n');
-    return;
-  }
-
   const top = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd,
     encoding: 'utf8',
@@ -58,27 +51,25 @@ process.stdin.on('end', () => {
     ? resolve(top.stdout.trim())
     : cwd;
 
-  let ledger;
   try {
-    ledger = new TaskLedger({ dbPath });
-    const authorization = ledger.authorizeEdit({
+    const ownership = ownerOfOpenKanPath({
+      root: repoRoot,
       cwd,
       filePath,
-      repoRoot,
-      requireTask: false,
+      taskId: String(input.task_id || input.task?.id || process.env.BIZAR_TASK_ID || ''),
     });
-    if (!authorization.allowed) {
-      const target = authorization.path || filePath;
-      const taskTag = authorization.taskId ? ` (task ${authorization.taskId})` : '';
+    if (ownership) {
+      const target = ownership.path || filePath;
+      const taskTag = ownership.taskId ? ` (OpenKan task ${ownership.taskId})` : '';
       const out = {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
           permissionDecision: 'allow',
           permissionDecisionReason:
-            `Bizar path ownership advisory: ${authorization.reason} for ${target}${taskTag}.`,
+            `OpenKan path ownership advisory for ${target}${taskTag}.`,
           additionalContext:
-            `[advisory] Heads up: ${target}${taskTag} is held by a sibling task ` +
-            `(${authorization.reason}). Under F-176 the edit is allowed, but you may be ` +
+          `[advisory] Heads up: ${target}${taskTag} is held by a sibling OpenKan task ` +
+            `(scope ${ownership.scope}). Under F-176 the edit is allowed, but you may be ` +
             `stepping on a concurrent worker — coordinate via @mike before continuing, ` +
             `or pick a disjoint file scope.`,
         },
@@ -88,22 +79,20 @@ process.stdin.on('end', () => {
     }
     process.stdout.write('{}\n');
   } catch (error) {
-    // F-176: ledger errors no longer block edits; we surface the error
+    // F-176: OpenKan workspace errors never block edits; we surface the error
     // as an advisory so the agent can decide whether to continue.
     const out = {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'allow',
         permissionDecisionReason:
-          `Bizar path ownership advisory: LEDGER_UNAVAILABLE (${error.message || String(error)}).`,
+          `OpenKan path ownership advisory: WORKSPACE_UNAVAILABLE (${error.message || String(error)}).`,
         additionalContext:
-          `[advisory] Heads up: Bizar task ledger was unreachable ` +
+          `[advisory] Heads up: OpenKan .ok workspace was unreachable ` +
           `(${error.message || String(error)}). Edits to in-repo paths proceed ` +
           `without sibling-scope checks. Re-run the audit once the ledger is healthy.`,
       },
     };
     process.stdout.write(JSON.stringify(out) + '\n');
-  } finally {
-    try { ledger?.close(); } catch { /* process is exiting */ }
   }
 });

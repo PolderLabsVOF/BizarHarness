@@ -33,19 +33,15 @@ function runHook(inputJson, cwd) {
   return { status: r.status, stdout: r.stdout.trim(), stderr: r.stderr.trim() };
 }
 
-function makeProject({ withActiveFeature = true } = {}) {
+function makeProject({ withActiveTask = true } = {}) {
   const dir = join(tmpdir(), `bh-recall-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   mkdirSync(dir, { recursive: true });
   mkdirSync(join(dir, '.bizar'), { recursive: true });
-  if (withActiveFeature) {
-    writeFileSync(
-      join(dir, 'feature_list.json'),
-      JSON.stringify({
-        features: [
-          { id: 'F-103', state: 'active', behavior: 'rewrite sessionstart-prime' },
-        ],
-      }),
-    );
+  if (withActiveTask) {
+    mkdirSync(join(dir, '.ok', 'tasks'), { recursive: true });
+    writeFileSync(join(dir, '.ok', 'tasks', 'tsk-103.json'), JSON.stringify({
+      schema: 'ok.task.v1', id: 'tsk-103', title: 'rewrite sessionstart-prime', status: 'in_progress',
+    }));
   }
   return dir;
 }
@@ -76,7 +72,7 @@ function readSessionNote(dir) {
 test('SessionEnd: writes session note + state from transcript', () => {
   const dir = makeProject();
   const transcript = makeTranscript([
-    { type: 'message', timestamp: '2026-07-22T18:00:00Z', message: { role: 'user', content: 'implement F-103 hook overhaul' } },
+    { type: 'message', timestamp: '2026-07-22T18:00:00Z', message: { role: 'user', content: 'implement tsk-103 hook overhaul' } },
     { type: 'message', timestamp: '2026-07-22T18:00:05Z', message: { role: 'assistant', content: [
       { type: 'tool_use', name: 'Write', input: { file_path: '/home/user/.claude/hooks/sessionstart-prime.mjs', content: 'x' } },
     ]}},
@@ -94,14 +90,14 @@ test('SessionEnd: writes session note + state from transcript', () => {
     assert.ok(state);
     assert.equal(state.lastSessionId, 'abc123def456789');
     assert.equal(state.reason, 'exit');
-    assert.equal(state.activeFeature, 'F-103');
-    assert.match(state.nextStep, /Continue with F-103/);
+    assert.equal(state.activeTask, 'tsk-103');
+    assert.match(state.nextStep, /Continue with OpenKan task tsk-103/);
     assert.match(state.requestFingerprint, /^[a-f0-9]{16}$/);
     const note = readSessionNote(dir);
     assert.ok(note);
     assert.match(note.name, /\d{4}-\d{2}-\d{2}-abc123de\.md/);
-    assert.match(note.body, /activeFeature: F-103/);
-    assert.doesNotMatch(note.body, /implement F-103 hook overhaul/);
+    assert.match(note.body, /activeTask: tsk-103/);
+    assert.doesNotMatch(note.body, /implement tsk-103 hook overhaul/);
     assert.match(note.body, /requestFingerprint: [a-f0-9]{16}/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -164,7 +160,7 @@ test('SessionEnd: prompts are fingerprinted and never persisted', () => {
     runHook({ session_id: 'filer', reason: 'exit', cwd: dir, transcript_path: transcript });
     const state = readSessionState(dir);
     assert.ok(state);
-    assert.match(state.nextStep, /Continue with F-103/);
+    assert.match(state.nextStep, /Continue with OpenKan task tsk-103/);
     const note = readSessionNote(dir);
     assert.doesNotMatch(note.body, /rewire the SessionStart briefing|continue|go on/);
     assert.match(state.requestFingerprint, /^[a-f0-9]{16}$/);
@@ -173,15 +169,15 @@ test('SessionEnd: prompts are fingerprinted and never persisted', () => {
   }
 });
 
-test('SessionEnd: zero active features surfaces "pick next"', () => {
-  const dir = makeProject({ withActiveFeature: false });
+test('SessionEnd: zero active tasks surfaces "pick next"', () => {
+  const dir = makeProject({ withActiveTask: false });
   const transcript = makeTranscript([]);  // empty transcript → no prompts
   try {
     runHook({ session_id: 'noact', reason: 'exit', cwd: dir, transcript_path: transcript });
     const state = readSessionState(dir);
     assert.ok(state);
-    assert.equal(state.activeFeature, null);
-    assert.match(state.nextStep, /Pick next feature/);
+    assert.equal(state.activeTask, null);
+    assert.match(state.nextStep, /Pick and claim the next ready OpenKan task/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -199,7 +195,7 @@ test('SessionEnd: malformed JSONL lines are skipped, hook exits 0', () => {
     assert.equal(status, 0);
     const state = readSessionState(dir);
     assert.ok(state);
-    assert.match(state.nextStep, /Continue with F-103/);
+    assert.match(state.nextStep, /Continue with OpenKan task tsk-103/);
     assert.match(state.requestFingerprint, /^[a-f0-9]{16}$/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -216,8 +212,8 @@ test('SessionEnd: missing transcript_path is graceful, exits 0', () => {
     // No transcript means no user prompts, no errors.
     assert.equal(state.filesTouched.length, 0);
     assert.equal(state.blockers.length, 0);
-    // F-103 is active in the default fixture, so nextStep continues with it.
-    assert.match(state.nextStep, /Continue with F-103/);
+    // tsk-103 is active in the default fixture, so nextStep continues with it.
+    assert.match(state.nextStep, /Continue with OpenKan task tsk-103/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -255,7 +251,7 @@ test('SessionEnd: handles transcript with 200+ lines (cap respected)', () => {
     assert.equal(status, 0);
     const state = readSessionState(dir);
     assert.ok(state);
-    assert.match(state.nextStep, /Continue with F-103/);
+    assert.match(state.nextStep, /Continue with OpenKan task tsk-103/);
     assert.match(state.requestFingerprint, /^[a-f0-9]{16}$/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
