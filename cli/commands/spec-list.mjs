@@ -73,7 +73,7 @@ function readSchemaVersions() {
 function readPolicyDocs() {
   const docs = [
     { path: 'AGENTS.md',                     role: 'canonical',   expectOwner: 'polderlabs', cadence: 'release-cut' },
-    { path: 'PROGRESS.md',                   role: 'live-state',  expectOwner: 'orchestrator', cadence: 'each-commit' },
+    { path: '.ok/',                          role: 'live-state',  expectOwner: 'OpenKan', cadence: 'each-task-transition' },
     { path: 'docs/decisions/AUTONOMY_CONTRACT.md', role: 'policy', expectOwner: 'orchestrator', cadence: 'release-cut' },
     { path: 'docs/audits/production-autonomy-improvements-2026-08-28.md', role: 'audit', expectOwner: 'auditor', cadence: 'milestone' },
   ];
@@ -83,6 +83,23 @@ function readPolicyDocs() {
     const abs = join(REPO_ROOT, d.path);
     if (!existsSync(abs)) {
       enriched.push({ path: d.path, role: d.role, owner: null, cadence: null, mtime: null });
+      continue;
+    }
+    const stat = statSync(abs);
+    if (stat.isDirectory()) {
+      // Live-state workspace: surface its presence, not a YAML frontmatter.
+      const latest = readdirSync(abs)
+        .map((name) => join(abs, name))
+        .filter((path) => statSync(path).isFile())
+        .map((path) => ({ path, mtime: statSync(path).mtime }))
+        .sort((a, b) => b.mtime - a.mtime)[0];
+      enriched.push({
+        path: d.path,
+        role: d.role,
+        owner: d.expectOwner,
+        cadence: d.cadence,
+        mtime: latest ? latest.mtime.toISOString() : stat.mtime.toISOString(),
+      });
       continue;
     }
     const src = readFileSync(abs, 'utf8');
@@ -95,13 +112,13 @@ function readPolicyDocs() {
       owner = ownerMatch ? ownerMatch[1].trim() : null;
       cadence = cadenceMatch ? cadenceMatch[1].trim() : null;
     }
-    const stat = statSync(abs);
+    const enrichedStat = statSync(abs);
     enriched.push({
       path: d.path,
       role: d.role,
       owner: owner ?? `unowned (expected ${d.expectOwner})`,
       cadence: cadence ?? `unset (expected ${d.cadence})`,
-      mtime: stat.mtime.toISOString(),
+      mtime: enrichedStat.mtime.toISOString(),
     });
   }
   return enriched;

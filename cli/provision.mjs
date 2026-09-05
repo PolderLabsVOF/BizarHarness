@@ -44,6 +44,7 @@ import {
   syncStableRoleModelAgents,
 } from './commands/models.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
+import { installOpenKanPromise, resolveOpenKanOk, verifyOpenKanRuntime } from './openkan.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1157,6 +1158,37 @@ export function detectStateJson() {
   return JSON.stringify(detectState(), null, 2);
 }
 
+/** Ensure Bizar installs its default durable planning runtime. */
+export async function ensureOpenKanRuntime({
+  dryRun = false,
+  install = installOpenKanPromise,
+} = {}) {
+  try {
+    const launcher = resolveOpenKanOk();
+    verifyOpenKanRuntime();
+    return { ok: true, installed: false, launcher, message: `OpenKan ready (${launcher})` };
+  } catch (error) {
+    if (process.env.BIZAR_SKIP_OPENKAN_INSTALL === '1') {
+      return { ok: false, skipped: true, message: `OpenKan unavailable and installation skipped: ${error.message}` };
+    }
+    if (dryRun) {
+      return { ok: true, installed: false, message: '[dry-run] would install OpenKan natively from its tarball' };
+    }
+    try {
+      const result = await install();
+      const launcher = result.launcher || resolveOpenKanOk();
+      return {
+        ok: true,
+        installed: true,
+        launcher,
+        message: result.message || `OpenKan installed (${launcher})`,
+      };
+    } catch (installError) {
+      return { ok: false, message: `OpenKan installation failed: ${installError.message || String(installError)}` };
+    }
+  }
+}
+
 // ─── Top-level orchestration ─────────────────────────────────────────────────
 
 /**
@@ -1190,6 +1222,7 @@ export async function runProvision(opts = {}) {
     return r;
   };
 
+  await runStep('Ensuring OpenKan planning runtime', () => ensureOpenKanRuntime({ dryRun }));
   await runStep('Syncing skills',    () => syncSkillFiles({ dryRun, force }));
   await runStep('Syncing commands',   () => syncCommandFiles({ dryRun, force }));
   await runStep('Syncing rules',      () => syncRulesFiles({ dryRun, force }));
