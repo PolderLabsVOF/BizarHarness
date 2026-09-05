@@ -4,7 +4,9 @@
  * F-207 — Mike autonomous goal / ultragoal bootstrap.
  *
  * Exports:
- *   bootstrapGoal({ features, specsDir }) → BootstrapVerdict
+ *   bootstrapGoal({ openKanDir?, features?, specsDir }) → BootstrapVerdict
+ *   loadOpenKanSeeds({ openKanDir? }) → OpenKanSeed[]
+ *   bootstrapGoalFromFile({ openKanDir?, featureListPath?, specsDir }) → verdict
  *   GoalBootstrapError
  *
  * On every SessionStart the `office-manager` agent (Mike) must either
@@ -28,7 +30,7 @@
  * outside `specsDir`.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
 /** Bumped when the on-disk charter shape changes in a breaking way. */
@@ -48,7 +50,7 @@ const NON_PASSING_STATES = new Set<string>([
   "active",
 ]);
 
-/** A minimal feature record the bootstrap reads from `feature_list.json`. */
+/** A minimal feature record the bootstrap reads from a seed (legacy feature_list.json or OpenKan PRDs/plans). */
 export interface BootstrapFeature {
   readonly id: string;
   readonly title?: string;
@@ -60,9 +62,44 @@ export interface BootstrapFeature {
   readonly owner?: string;
 }
 
+/**
+ * A seed derived from a single OpenKan PRD goal plus its plan
+ * acceptance. The bootstrap converts these into `BootstrapFeature`
+ * records so the existing decision logic (resume / bootstrap / idle)
+ * works unchanged against either the legacy `feature_list.json` or
+ * the live OpenKan workspace.
+ */
+export interface OpenKanSeed {
+  /** Synthetic id used to key the charter (e.g. `prd-zxfjEL_3/g2`). */
+  readonly id: string;
+  /** Goal text from the PRD's `goals[]` entry. */
+  readonly title: string;
+  /** PRD goal id (e.g. `g2`). */
+  readonly goalId: string;
+  /** PRD id this goal belongs to. */
+  readonly prdId: string;
+  /** PRD goal status (`open` maps to `not_started` for the bootstrap). */
+  readonly status: string;
+  /** Plan acceptance items joined into a single behavior string. */
+  readonly behavior: string;
+  /** Plan ids that reference this PRD, used as `layer` hint. */
+  readonly planIds: ReadonlyArray<string>;
+  /** PRD-level owner if set. */
+  readonly owner?: string;
+}
+
 export interface BootstrapGoalInput {
-  /** Parsed `feature_list.json` (object form). Bootstrap is read-only here. */
-  readonly features: { features?: ReadonlyArray<BootstrapFeature> } & Record<string, unknown>;
+  /**
+   * Optional parsed legacy `feature_list.json` (object form). Bootstrap
+   * is read-only here. If omitted, the bootstrap reads from the OpenKan
+   * workspace at `openKanDir`.
+   */
+  readonly features?: { features?: ReadonlyArray<BootstrapFeature> } & Record<string, unknown>;
+  /**
+   * Path to the OpenKan workspace. Defaults to `.ok` at the process
+   * `cwd`. Ignored when `features` is provided.
+   */
+  readonly openKanDir?: string;
   /** Directory under which `ultragoal-<id>.md` will be created / detected. */
   readonly specsDir: string;
 }
@@ -108,7 +145,11 @@ function isFeature(value: unknown): value is BootstrapFeature {
 }
 
 function charterPathFor(id: string, specsDir: string): string {
-  return join(specsDir, `ultragoal-${id}.md`);
+  // OpenKan synthetic ids use `/` (e.g. `prd-zxfjEL_3/g2`); strip path
+  // separators so the bootstrap always writes a flat file inside
+  // `specsDir` and never creates nested directories.
+  const safeId = id.replaceAll("/", "_").replaceAll("\\", "_");
+  return join(specsDir, `ultragoal-${safeId}.md`);
 }
 
 function pickSmallestId(features: ReadonlyArray<BootstrapFeature>): string {
@@ -266,18 +307,22 @@ read-only; this carve-out applies to every downstream agent.
  * clear error instead of silently skipping the bootstrap.
  */
 export function bootstrapGoal(input: BootstrapGoalInput): BootstrapVerdict {
-  const list = asFeatureArray(input.features).filter(isFeature);
+  // Explicit `features` payload wins (legacy callers). When omitted,
+  // read the OpenKan workspace at `openKanDir` (default `.ok`).
+  const seeds = input.features !== undefined
+    ? asFeatureArray(input.features).filter(isFeature)
+    : loadOpenKanSeeds({ openKanDir: input.openKanDir ?? ".ok" }).map(seedToFeature);
   ensureSpecsDir(input.specsDir);
 
   // 1. Resume path — a charter already on disk whose feature is still
   //    non-passing.
-  const resumable = findResumable(list, input.specsDir);
+  const resumable = findResumable(seeds, input.specsDir);
   if (resumable) {
     return { action: "resume", id: resumable.id, source: "spec" };
   }
 
   // 2. Bootstrap path — at least one not_started feature, smallest id wins.
-  const notStarted = findFirstNotStarted(list);
+  const notStarted = findFirstNotStarted(seeds);
   if (notStarted.length === 0) {
     return { action: "idle" };
   }
@@ -309,43 +354,178 @@ export function bootstrapGoal(input: BootstrapGoalInput): BootstrapVerdict {
 }
 
 /**
- * Convenience helper for the SessionStart hook. Loads
- * `feature_list.json` from disk, resolves `docs/specs/`, and runs
- * `bootstrapGoal`. Returns the verdict on success; returns
- * `{ action: "idle" }` with `warning` set when the file is missing
+ * Read every PRD under `.ok/prds/` and every plan under `.ok/plans/`,
+ * then synthesize one `OpenKanSeed` per PRD goal. Plan acceptance
+ * items are joined into the seed's `behavior` field so the existing
+ * `bootstrapGoal` decision logic can route on them without parsing
+ * OpenKan schemas itself. Returns an empty array when the workspace
+ * is missing or unreadable so callers degrade to `idle`.
+ */
+export function loadOpenKanSeeds(input: { openKanDir?: string } = {}): OpenKanSeed[] {
+  const root = input.openKanDir ?? ".ok";
+  const prdDir = isAbsolute(root) ? join(root, "prds") : join(process.cwd(), root, "prds");
+  const planDir = isAbsolute(root) ? join(root, "plans") : join(process.cwd(), root, "plans");
+  const prds = readJsonDir(prdDir, "ok.prd.v1");
+  const plans = readJsonDir(planDir, "ok.plan.v1");
+  const prdIds = new Set(
+    prds
+      .map((prd) => (typeof prd.id === "string" ? prd.id : ""))
+      .filter((id) => id.length > 0),
+  );
+  const plansByPrd = new Map<string, Array<{ acceptance: ReadonlyArray<string> }>>();
+  for (const plan of plans) {
+    const planId = typeof plan.id === "string" ? plan.id : null;
+    if (!planId) continue;
+    const acceptance = Array.isArray(plan.acceptance)
+      ? plan.acceptance.map((line) => String(line))
+      : [];
+    // Plans reference tasks, not PRDs directly. Treat the plan as
+    // supporting every PRD whose id appears in `prdIds` for now —
+    // acceptance is PRD-agnostic and stays useful as behavior text.
+    for (const prdId of prdIds) {
+      const bucket = plansByPrd.get(prdId) ?? [];
+      bucket.push({ acceptance });
+      plansByPrd.set(prdId, bucket);
+    }
+  }
+  const seeds: OpenKanSeed[] = [];
+  for (const prd of prds) {
+    const prdId = typeof prd.id === "string" ? prd.id : null;
+    if (!prdId) continue;
+    const ownerRaw = Array.isArray(prd.owners) ? prd.owners[0] : undefined;
+    const owner = typeof ownerRaw === "string" ? ownerRaw : undefined;
+    const plansForPrd = plansByPrd.get(prdId) ?? [];
+    const planIds = plans
+      .map((plan) => (typeof plan.id === "string" ? plan.id : ""))
+      .filter((id) => id.length > 0);
+    const behavior = plansForPrd
+      .flatMap((entry) => entry.acceptance)
+      .map((line) => `- ${line}`)
+      .join("\n");
+    const goals = Array.isArray(prd.goals) ? prd.goals : [];
+    for (const goal of goals) {
+      if (!isPlainRecord(goal)) continue;
+      const status = typeof goal.status === "string" ? goal.status : "open";
+      const goalId = typeof goal.id === "string" ? goal.id : "";
+      const title = typeof goal.text === "string" ? goal.text : "";
+      if (!goalId || !title) continue;
+      seeds.push({
+        id: `${prdId}/${goalId}`,
+        title,
+        goalId,
+        prdId,
+        status,
+        behavior: behavior || `Implement and ship ${prdId}/${goalId}.`,
+        planIds,
+        owner,
+      });
+    }
+  }
+  return seeds;
+}
+
+function seedToFeature(seed: OpenKanSeed): BootstrapFeature {
+  // Map OpenKan goal status onto the bootstrap's expected states.
+  // `open` goals are candidates; everything else (closed, archived,
+  // blocked, in_progress) is treated as non-passing for resume.
+  const state = seed.status === "open" ? "not_started" : seed.status;
+  return {
+    id: seed.id,
+    title: seed.title,
+    behavior: seed.behavior,
+    description: seed.title,
+    state,
+    category: seed.prdId,
+    layer: seed.planIds[0],
+    owner: seed.owner,
+  };
+}
+
+function readJsonDir(dir: string, schema: string): Array<Record<string, unknown>> {
+  if (!existsSync(dir)) return [];
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const records: Array<Record<string, unknown>> = [];
+  for (const name of entries) {
+    if (!name.endsWith(".json")) continue;
+    let raw: string;
+    try {
+      raw = readFileSync(join(dir, name), "utf-8");
+    } catch {
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (!isPlainRecord(parsed)) continue;
+    if (parsed.schema !== schema) continue;
+    records.push(parsed);
+  }
+  return records;
+}
+
+/**
+ * Convenience helper for the SessionStart hook. Loads planning state
+ * from `.ok/` (preferred) or the legacy `feature_list.json` and
+ * runs `bootstrapGoal`. Returns the verdict on success; returns
+ * `{ action: "idle" }` with `warning` set when the source is missing
  * or malformed so the hook can degrade gracefully without aborting
  * SessionStart.
  */
 export function bootstrapGoalFromFile(input: {
-  featureListPath: string;
+  /** @deprecated Use `openKanDir` instead. Tolerated with a warning. */
+  featureListPath?: string;
+  /** Path to the OpenKan workspace. Defaults to `.ok` at the process `cwd`. */
+  openKanDir?: string;
   specsDir: string;
 }): { verdict: BootstrapVerdict; warning?: string } {
-  let raw: string;
-  try {
-    raw = readFileSync(input.featureListPath, "utf-8");
-  } catch (err) {
-    return {
-      verdict: { action: "idle" },
-      warning: `feature_list.json not readable at ${input.featureListPath}: ${err instanceof Error ? err.message : String(err)}`,
-    };
+  if (input.featureListPath) {
+    const legacyWarning = `featureListPath is deprecated; prefer openKanDir (.ok/) — see .ok/ task tsk-T1Aobcjj for the migration.`;
+    let raw: string;
+    try {
+      raw = readFileSync(input.featureListPath, "utf-8");
+    } catch (err) {
+      return {
+        verdict: { action: "idle" },
+        warning: `${legacyWarning} feature_list.json not readable at ${input.featureListPath}: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      return {
+        verdict: { action: "idle" },
+        warning: `${legacyWarning} feature_list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    if (!isPlainRecord(parsed)) {
+      return {
+        verdict: { action: "idle" },
+        warning: `${legacyWarning} feature_list.json must be a JSON object`,
+      };
+    }
+    try {
+      return { verdict: bootstrapGoal({ features: parsed, specsDir: input.specsDir }), warning: legacyWarning };
+    } catch (err) {
+      if (err instanceof GoalBootstrapError) {
+        return { verdict: { action: "idle" }, warning: `${legacyWarning} ${err.message}` };
+      }
+      return {
+        verdict: { action: "idle" },
+        warning: `${legacyWarning} ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
   }
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    return {
-      verdict: { action: "idle" },
-      warning: `feature_list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-  if (!isPlainRecord(parsed)) {
-    return {
-      verdict: { action: "idle" },
-      warning: "feature_list.json must be a JSON object",
-    };
-  }
-  try {
-    return { verdict: bootstrapGoal({ features: parsed, specsDir: input.specsDir }) };
+    return { verdict: bootstrapGoal({ openKanDir: input.openKanDir ?? ".ok", specsDir: input.specsDir }) };
   } catch (err) {
     if (err instanceof GoalBootstrapError) {
       return { verdict: { action: "idle" }, warning: err.message };

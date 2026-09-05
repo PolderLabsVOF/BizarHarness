@@ -35,7 +35,7 @@ echo "════════════════════════�
 
 check "1. Build and typecheck" make check
 check "2. Retained unit tests" make test
-check "3. Feature ledger integrity" node scripts/feature-state-machine.mjs
+check "3. OpenKan workspace present" test -d .ok
 check "4. Architecture and removed surfaces" make check-arch
 check "5. Claude Code startup path" make e2e
 

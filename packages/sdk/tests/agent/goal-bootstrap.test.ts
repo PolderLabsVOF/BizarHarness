@@ -10,6 +10,12 @@
  *   4. existing charter for in_progress feature → resume (source: spec)
  *   5. malformed features JSON (null / non-object) → GoalBootstrapError
  *   6. read-only specsDir (chmod 0555) → GoalBootstrapError
+ *
+ * OpenKan cutover (tsk-T1Aobcjj) coverage:
+ *   7. bootstrapGoal from a .ok/ workspace with one open goal → bootstrap
+ *   8. bootstrapGoalFromFile({ openKanDir }) routes to the .ok/ reader
+ *   9. bootstrapGoalFromFile({ featureListPath }) emits a deprecation
+ *      warning and still returns a verdict for legacy callers
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -28,6 +34,7 @@ import {
   bootstrapGoal,
   bootstrapGoalFromFile,
   GoalBootstrapError,
+  loadOpenKanSeeds,
   renderAggregateCharter,
   GOAL_BOOTSTRAP_SCHEMA_VERSION,
 } from "../../src/agent/goal-bootstrap.js";
@@ -206,6 +213,7 @@ describe("goal-bootstrap", () => {
     });
     expect(result.verdict).toEqual({ action: "idle" });
     expect(result.warning).toBeDefined();
+    expect(result.warning).toMatch(/deprecated/);
   });
 
   it("bootstrapGoalFromFile degrades gracefully on malformed JSON", () => {
@@ -214,6 +222,7 @@ describe("goal-bootstrap", () => {
     const result = bootstrapGoalFromFile({ featureListPath: fp, specsDir: tmp });
     expect(result.verdict).toEqual({ action: "idle" });
     expect(result.warning).toBeDefined();
+    expect(result.warning).toMatch(/deprecated/);
   });
 
   it("bootstrapGoalFromFile returns the bootstrap verdict on a healthy file", () => {
@@ -230,7 +239,107 @@ describe("goal-bootstrap", () => {
     );
     const result = bootstrapGoalFromFile({ featureListPath: fp, specsDir: tmp });
     expect(result.verdict.action).toBe("bootstrap");
+    expect(result.warning).toMatch(/deprecated/);
     if (result.verdict.action !== "bootstrap") return;
     expect(result.verdict.id).toBe("F-301");
+  });
+});
+
+describe("goal-bootstrap OpenKan cutover", () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), "goal-bootstrap-openkan-"));
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(tmp, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
+  function seedOpenKanFixture() {
+    const ok = join(tmp, ".ok");
+    mkdirSync(join(ok, "prds"), { recursive: true });
+    mkdirSync(join(ok, "plans"), { recursive: true });
+    writeFileSync(
+      join(ok, "prds", "prd-fake.json"),
+      JSON.stringify({
+        schema: "ok.prd.v1",
+        id: "prd-fake",
+        title: "Fake PRD",
+        goals: [
+          { id: "g1", text: "Ship goal one", status: "open" },
+          { id: "g2", text: "Ship goal two", status: "closed" },
+        ],
+        status: "active",
+      }),
+    );
+    writeFileSync(
+      join(ok, "plans", "pln-fake.json"),
+      JSON.stringify({
+        schema: "ok.plan.v1",
+        id: "pln-fake",
+        title: "Fake plan",
+        status: "active",
+        acceptance: ["Tests pass", "Docs updated"],
+      }),
+    );
+  }
+
+  it("loadOpenKanSeeds returns one seed per PRD goal", () => {
+    seedOpenKanFixture();
+    const seeds = loadOpenKanSeeds({ openKanDir: join(tmp, ".ok") });
+    expect(seeds).toHaveLength(2);
+    expect(seeds.map((s) => s.goalId).sort()).toEqual(["g1", "g2"]);
+    expect(seeds[0]).toMatchObject({
+      prdId: "prd-fake",
+      id: "prd-fake/g1",
+    });
+  });
+
+  it("bootstrapGoal picks an open goal from .ok/ and writes a charter", () => {
+    seedOpenKanFixture();
+    const verdict = bootstrapGoal({ openKanDir: join(tmp, ".ok"), specsDir: tmp });
+    expect(verdict.action).toBe("bootstrap");
+    if (verdict.action !== "bootstrap") return;
+    expect(verdict.id).toBe("prd-fake/g1");
+    const charter = join(tmp, "ultragoal-prd-fake_g1.md");
+    expect(existsSync(charter)).toBe(true);
+    const text = readFileSync(charter, "utf-8");
+    expect(text).toContain("Ship goal one");
+    expect(text).toContain("Tests pass");
+  });
+
+  it("bootstrapGoalFromFile({ openKanDir }) routes to the .ok/ reader", () => {
+    seedOpenKanFixture();
+    const result = bootstrapGoalFromFile({
+      openKanDir: join(tmp, ".ok"),
+      specsDir: tmp,
+    });
+    expect(result.warning).toBeUndefined();
+    expect(result.verdict.action).toBe("bootstrap");
+    if (result.verdict.action !== "bootstrap") return;
+    expect(result.verdict.id).toBe("prd-fake/g1");
+  });
+
+  it("bootstrapGoalFromFile({ featureListPath }) tolerates legacy callers with a warning", () => {
+    const fp = join(tmp, "feature_list.json");
+    writeFileSync(
+      fp,
+      JSON.stringify({
+        features: [
+          { id: "F-401", state: "not_started", title: "legacy" },
+        ],
+      }),
+      "utf-8",
+    );
+    const result = bootstrapGoalFromFile({ featureListPath: fp, specsDir: tmp });
+    expect(result.warning).toMatch(/deprecated/);
+    expect(result.verdict.action).toBe("bootstrap");
+    if (result.verdict.action !== "bootstrap") return;
+    expect(result.verdict.id).toBe("F-401");
   });
 });

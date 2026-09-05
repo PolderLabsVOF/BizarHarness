@@ -30,7 +30,6 @@ check:  ## Typecheck + lint
 	@echo "▶ Running TypeScript check..."
 	@bunx tsc --noEmit
 	@echo "✓ TypeScript check passed"
-	@echo "▶ Skipping eval gate (run 'make eval-gate' to enforce)."
 
 test:  ## Run all unit tests (sdk + cli)
 	@npm test
@@ -40,15 +39,6 @@ e2e:  ## End-to-end tests (SDK + Claude Code integration)
 	@node scripts/with-sdk-dist-lock.mjs node scripts/run-e2e-with-sdk-build.mjs
 
 # ── Harness primitives (L07-L12) ────────────────────────────────────────────
-vcr:  ## Verify Code Reality (VCR) check via feature_list.json
-	@echo "▶ Computing VCR ratio from feature_list.json..."
-	@node -e "const fs = require('node:fs'); const f = JSON.parse(fs.readFileSync('feature_list.json', 'utf8')); const total = f.features.filter(x => x.state !== 'not_started').length; const passing = f.features.filter(x => x.state === 'passing').length; const ratio = total === 0 ? 1.0 : passing / total; console.log('VCR:', passing + '/' + total, '=', ratio.toFixed(3)); if (ratio < 1.0 && total > 0) process.exit(1);"
-
-verify-feature:  ## Verify a feature by ID — usage: make verify-feature ID=F-001
-	@if [ -z "$(ID)" ]; then echo "Usage: make verify-feature ID=<feature-id>"; exit 1; fi
-	@echo "▶ Verifying feature $(ID)..."
-	@bash scripts/verify-feature.sh $(ID)
-
 check-arch:  ## Run architectural constraints (scripts/check-arch.sh)
 	@bash scripts/check-arch.sh .
 	@echo "▶ Verifying thinking-* skill files..."
@@ -76,16 +66,6 @@ audit:  ## Run harness audit (12 categories, 0-100 score)
 	@echo "▶ Running harness audit..."
 	@node scripts/audit.mjs --write
 	@echo "✓ audit complete — output written to .harness/audit/latest.json"
-
-eval-gate:  ## Verify local eval pass rates or tracked commit-backed evidence
-	@echo "▶ Running eval gate..."
-	@bun run scripts/eval-gate.mjs
-	@echo "✓ eval gate passed"
-
-feature-state-machine:  ## Enforce plan→exec→verify→audit state machine per passing feature
-	@echo "▶ Running feature state machine..."
-	@bun run scripts/feature-state-machine.mjs
-	@echo "✓ feature state machine passed"
 
 # ── Claude Code-specific ───────────────────────────────────────────────────
 # session-start / session-end were Cline-era targets. Claude Code now
@@ -121,4 +101,4 @@ worktree-init:  ## Bootstrap a new worktree with shared node_modules / dist syml
 	@./scripts/worktree-setup.sh "$(WORKTREE)"
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e vcr verify-feature check-arch clean-check verify-removed-surfaces verify-repo-structure verify-no-9router audit eval-gate feature-state-machine session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup workflow-gc workflow-gc-dry sync-skills-mirror verify-thinking-skills
+.PHONY: help setup dev check test e2e check-arch clean-check verify-removed-surfaces verify-repo-structure verify-no-9router audit session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup workflow-gc workflow-gc-dry sync-skills-mirror verify-thinking-skills

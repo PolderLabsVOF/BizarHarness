@@ -82,20 +82,10 @@ else
   err "AGENTS.md missing — every session must start by reading this"
 fi
 
-if [[ -f PROGRESS.md ]]; then
-  ok "PROGRESS.md present"
+if [[ -d .ok && -f .ok/index.json ]]; then
+  ok "OpenKan workspace .ok/ present"
 else
-  warn "PROGRESS.md missing — first session will create it"
-fi
-
-if [[ -f feature_list.json ]]; then
-  if node -e "JSON.parse(require('fs').readFileSync('feature_list.json','utf8'))" 2>/dev/null; then
-    ok "feature_list.json parses"
-  else
-    err "feature_list.json is corrupt — fix it before running"
-  fi
-else
-  warn "feature_list.json missing (run \`bizar init\` to create one)"
+  warn ".ok/ missing — bootstrap with: bizar openkan init"
 fi
 
 if [[ -d .harness ]]; then
@@ -106,26 +96,28 @@ fi
 
 # ── 3. WIP=1 invariant ───────────────────────────────────────────────────
 echo
-echo "③ WIP=1 invariant (one active feature only)"
+echo "③ WIP=1 invariant (one in-progress task only)"
 
-if [[ -f feature_list.json ]]; then
+if [[ -d .ok/tasks ]]; then
   ACTIVE_COUNT=$(node -e '
-    const fs = require("fs");
+    const fs = require("fs"), path = require("path");
     try {
-      const d = JSON.parse(fs.readFileSync("feature_list.json","utf8"));
-      const arr = Array.isArray(d) ? d : (d.features || []);
-      const active = arr.filter(f => f.status === "active");
-      console.log(active.length);
+      const dir = path.join(process.cwd(), ".ok", "tasks");
+      const tasks = fs.readdirSync(dir)
+        .filter((name) => name.endsWith(".json"))
+        .map((name) => JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")))
+        .filter((t) => t && t.schema === "ok.task.v1");
+      console.log(tasks.filter((t) => t.status === "in_progress").length);
     } catch (e) { console.log(-1); }
   ')
   if [[ "$ACTIVE_COUNT" == "1" ]]; then
-    ok "exactly one feature is 'active'"
+    ok "exactly one OpenKan task is 'in_progress'"
   elif [[ "$ACTIVE_COUNT" == "0" ]]; then
-    ok "zero features active (ready to pick a new one)"
+    ok "zero tasks in_progress (ready to pick a new one)"
   elif [[ "$ACTIVE_COUNT" == "-1" ]]; then
-    err "feature_list.json corrupt — cannot check WIP=1"
+    err ".ok/tasks corrupt — cannot check WIP=1"
   else
-    err "WIP=1 violated: $ACTIVE_COUNT features are 'active'. Pick one or finish the others."
+    err "WIP=1 violated: $ACTIVE_COUNT OpenKan tasks are 'in_progress'. Pick one or finish the others."
   fi
 fi
 

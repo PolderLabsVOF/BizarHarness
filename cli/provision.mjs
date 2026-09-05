@@ -386,7 +386,7 @@ function syncDir(srcDir, destDir, opts = {}) {
  * managed. Anything in dest that does not appear in src is removed.
  * This is intentionally aggressive; users who keep hand-edited
  * entries under those paths should run without `--force` to leave
- * them alone. See PROGRESS.md F-141 for the trade-off.
+ * them alone. See .ok/ task tsk-T1Aobcjj for the migration context.
  *
  * Returns { removed, kept } counts.
  */

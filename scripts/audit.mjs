@@ -5,7 +5,7 @@
  * Each category scores 0 or 10 from an executable check. `--write` also
  * stores the report at `.harness/audit/latest.json`.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -29,13 +29,39 @@ function predicate(ok, success, failure) {
   return { score: ok ? 10 : 0, evidence: ok ? success : failure };
 }
 
-const featureList = (() => {
+function readJson(path) {
   try {
-    return JSON.parse(readFileSync(join(ROOT, 'feature_list.json'), 'utf8'));
+    return JSON.parse(readFileSync(path, 'utf8'));
   } catch {
     return null;
   }
-})();
+}
+
+function listJsonDir(path) {
+  if (!existsSync(path)) return [];
+  return readdirSync(path)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((name) => readJson(join(path, name)))
+    .filter(Boolean);
+}
+
+const openKanIndex = readJson(join(ROOT, '.ok', 'index.json'));
+const openKanTasks = listJsonDir(join(ROOT, '.ok', 'tasks'));
+const openKanPlans = listJsonDir(join(ROOT, '.ok', 'plans'));
+const openKanPrds = listJsonDir(join(ROOT, '.ok', 'prds'));
+const activeOpenKanTask = openKanTasks.find((task) => task?.status === 'in_progress') || null;
+
+function openKanStateEvidence() {
+  if (!openKanIndex || !Array.isArray(openKanIndex.tasks)) {
+    return 'OpenKan workspace .ok/ is missing or invalid — bootstrap with: bizar openkan init';
+  }
+  const taskCount = openKanIndex.tasks.length;
+  const planCount = openKanIndex.plans?.length || 0;
+  const prdCount = openKanIndex.prds?.length || 0;
+  const ownerLine = activeOpenKanTask?.owner ? ` active task ${activeOpenKanTask.id} owned by ${activeOpenKanTask.owner}` : '';
+  return `OpenKan .ok/ present: ${taskCount} task(s), ${planCount} plan(s), ${prdCount} PRD(s)${ownerLine}.`;
+}
 
 const settings = (() => {
   try {
@@ -52,10 +78,10 @@ const categories = {
   archBoundaries: command('bash', ['scripts/check-arch.sh', '.'], 'Architecture rules passed.', 'Architecture rule failed'),
   securityPatterns: command(process.execPath, ['config/claude/hooks/__tests__/workflow-guards.test.mjs'], 'Approval and safety guard tests passed.', 'Workflow guard test failed'),
   docSync: command('bash', ['scripts/mirror-claude-md.sh', '--check'], 'CLAUDE.md mirror is synchronized.', 'CLAUDE.md mirror drifted'),
-  featureListState: predicate(
-    !!featureList?.features?.length,
-    `${featureList?.features?.length || 0} retained features have machine-readable state.`,
-    'feature_list.json is missing or invalid.',
+  openKanState: predicate(
+    !!openKanIndex && Array.isArray(openKanIndex.tasks) && openKanTasks.length > 0,
+    openKanStateEvidence(),
+    openKanStateEvidence(),
   ),
   cleanState: command(process.execPath, ['scripts/verify-removed-surfaces.mjs'], 'Removed UI and note-vault surfaces are absent.', 'Removed surface remains'),
   perfBudget: predicate(

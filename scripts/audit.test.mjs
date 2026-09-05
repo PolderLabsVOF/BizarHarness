@@ -59,7 +59,7 @@ test('each dimension returns a score 0-10 and an evidence string', () => {
   const result = parseAuditOutput(out.stdout);
   const dims = [
     'typecheck', 'tests', 'e2e', 'archBoundaries', 'securityPatterns',
-    'docSync', 'featureListState', 'cleanState', 'perfBudget',
+    'docSync', 'openKanState', 'cleanState', 'perfBudget',
     'coverage', 'observability', 'drift',
   ];
   for (const dim of dims) {
@@ -87,13 +87,13 @@ test('total score is the weighted sum of all dimensions', () => {
   assert.equal(result.total, expected, `total ${result.total} should equal weighted sum ${expected}`);
 });
 
-test('missing feature_list.json yields score 0 for feature-list-state (tolerates missing state)', () => {
-  // Rename the real feature_list.json out of the way, run audit, restore it
-  const flPath = join(PROJECT_ROOT, 'feature_list.json');
-  const backupPath = flPath + '.audit-test-backup';
+test('missing .ok/ yields score 0 for openKanState (tolerates missing workspace)', () => {
+  // Rename the real .ok/ out of the way, run audit, restore it.
+  const okPath = join(PROJECT_ROOT, '.ok');
+  const backupPath = okPath + '.audit-test-backup';
   const hadBackup = existsSync(backupPath);
-  if (existsSync(flPath)) {
-    renameSync(flPath, backupPath);
+  if (existsSync(okPath)) {
+    renameSync(okPath, backupPath);
   }
   try {
     const stdout = execSync(`node "${AUDIT_SCRIPT}" 2>&1`, {
@@ -102,12 +102,30 @@ test('missing feature_list.json yields score 0 for feature-list-state (tolerates
     });
     const result = parseAuditOutput(stdout);
     assert.ok(result !== null, `audit output should be valid JSON. stdout: ${(stdout ?? '').slice(0, 200)}`);
-    assert.equal(result.scores.featureListState, 0, 'missing feature_list should give featureListState=0');
+    assert.equal(result.scores.openKanState, 0, 'missing .ok/ should give openKanState=0');
+    assert.match(
+      result.categories.openKanState.evidence,
+      /bizar openkan init/,
+      'evidence should point at the openkan init bootstrap',
+    );
   } finally {
     if (existsSync(backupPath)) {
-      renameSync(backupPath, flPath);
+      renameSync(backupPath, okPath);
     }
   }
+});
+
+test('present .ok/ with live tasks yields score 10 for openKanState', () => {
+  const out = runAudit();
+  if (out.status !== 0) return;
+  const result = parseAuditOutput(out.stdout);
+  assert.ok(result, 'audit output should be valid JSON');
+  assert.equal(result.scores.openKanState, 10, 'live .ok/ should give openKanState=10');
+  const evidence = result.categories.openKanState.evidence;
+  const taskMatch = evidence.match(/(\d+) task/);
+  assert.ok(taskMatch, 'evidence should mention a task count');
+  assert.ok(Number.isFinite(Number(taskMatch[1])), 'captured task count should be numeric');
+  assert.ok(Number(taskMatch[1]) > 0, 'captured task count should be non-zero');
 });
 
 test('evidence strings are human-readable (non-empty, contain useful context)', () => {

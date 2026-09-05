@@ -2,9 +2,9 @@
  * cli/__tests__/guard.test.mjs
  *
  * CLI surface tests for `bizar guard` (F-206 `/guard` progress-guarding
- * loop). The fixture is a tmp directory with a stub plan doc,
- * `feature_list.json`, and `PROGRESS.md` written by the test; the guard
- * operates entirely inside that tmp so it never touches the host repo.
+ * loop). The fixture is a tmp directory with a stub plan doc and an
+ * OpenKan `.ok/tasks/` seeded by the test; the guard operates entirely
+ * inside that tmp so it never touches the host repo.
  *
  * Coverage (12 cases):
  *   1.  start creates state.json and prints a /loop line
@@ -77,7 +77,7 @@ function setupFixture({
         ];
   for (const task of tasks) writeFileSync(join(taskDir, `${task.id}.json`), JSON.stringify(task));
 
-  // For "stuck" tests: stamp feature_list.json older than last check,
+  // For "stuck" tests: stamp the .ok/ workspace older than last check,
   // and make sure there are no commits in this tmp (no .git).
   if (stuck) {
     const oldTime = new Date('2020-01-01T00:00:00.000Z');

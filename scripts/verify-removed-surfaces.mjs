@@ -29,7 +29,6 @@ const removedPaths = [
   'packages/sdk/dist/router/memory-distillation.d.ts',
   'plugins',
   '.bizar/MEMORY.md',
-  '.bizar/PROGRESS.md',
   '.bizar/activity-flow.md',
   '.bizar/lightrag',
   'config/claude/skills/lightrag',
