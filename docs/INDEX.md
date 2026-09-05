@@ -13,3 +13,4 @@
 - [Repository cleanup audit, 2026-07-30](audits/repository-cleanup-2026-07-30.md)
 - [Agent harness comparison and roadmap, 2026-07-30](audits/agent-harness-roadmap-2026-07-30.md)
 - [OpenKan external control plane decision](decisions/DEC-015-openkan-control-plane.md)
+- [OpenKan-first Bizar planning decision](decisions/DEC-023-openkan-first-planning.md)

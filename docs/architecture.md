@@ -77,13 +77,11 @@ always available and never performs Git or publication mutations.
 ## OpenKan control boundary
 
 Bizar does not embed a web server or dashboard. The `bizar control` CLI is the
-stable, machine-readable boundary for an optional OpenKan control plane. It
-exposes agent definitions, the task and integration ledgers, feature/progress
-state, Claude Code background sessions, and durable messages as JSON.
+stable, machine-readable boundary over Bizar’s default OpenKan workspace. OpenKan
+owns task, plan, and PRD state under `.ok/`; Bizar exposes agent definitions,
+OpenKan snapshots, Claude Code background sessions, and durable messages as JSON.
 
-OpenKan invokes the CLI with argument arrays and owns all HTTP, WebSocket, and
-browser code. It never imports Bizar modules, opens Bizar's SQLite database,
-edits Claude transcripts, or duplicates task-lease semantics.
+OpenKan invokes the CLI with argument arrays and owns all HTTP, WebSocket, browser code, and durable planning storage. Bizar never imports OpenKan storage internals, edits Claude transcripts, or duplicates task-lease semantics.
 
 Cross-agent messages are file-per-message records under
 `.bizar/control/messages/`. Atomic rename provides claim serialization.
