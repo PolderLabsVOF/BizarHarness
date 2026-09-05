@@ -3,7 +3,7 @@
  *
  * Pins the workflow-gc CLI's lifecycle semantics:
  *   - Empty runs dir: 0 candidates, exit 0.
- *   - In-progress feature in feature_list.json: ALL runs marked
+ *   - In-progress OpenKan task: ALL runs marked
  *     skip:in-progress, NO deletions.
  *   - 14-day boundary: runs older than 14d are deleted; runs newer than
  *     14d are skipped with skip:too-recent.
@@ -82,7 +82,7 @@ describe('workflow-gc B.3', () => {
     rmSync(emptyRoot, { recursive: true, force: true });
   });
 
-  test('in_progress feature blocks all deletions', async () => {
+  test('in_progress OpenKan task blocks all deletions', async () => {
     const root = makeRoot();
     const runs = join(root, '.bizar', 'runs');
     mkdirSync(runs, { recursive: true });
@@ -94,12 +94,10 @@ describe('workflow-gc B.3', () => {
     }
     setMtime(runs, 30);
 
-    // Add feature_list.json with an in_progress feature.
-    writeFileSync(join(root, 'feature_list.json'), JSON.stringify({
-      features: [
-        { id: 'F-active', state: 'in_progress', commit: 'pending' },
-        { id: 'F-done', state: 'passing', commit: 'abc' },
-      ],
+    // Add an active OpenKan task.
+    mkdirSync(join(root, '.ok', 'tasks'), { recursive: true });
+    writeFileSync(join(root, '.ok', 'tasks', 'tsk-active.json'), JSON.stringify({
+      schema: 'ok.task.v1', id: 'tsk-active', status: 'in_progress',
     }));
 
     const r = await runGc(['--root', runs], { cwd: root });
@@ -116,7 +114,7 @@ describe('workflow-gc B.3', () => {
     const root = makeRoot();
     const runs = join(root, '.bizar', 'runs');
     mkdirSync(runs, { recursive: true });
-    // No feature_list.json -> no in-progress gate.
+    // No active OpenKan task -> no in-progress gate.
     for (const id of ['old', 'new', 'boundary']) {
       const r = join(runs, id);
       mkdirSync(r);

@@ -31,8 +31,8 @@ The feature is `passing` only when ALL of:
 - [ ] Layer 2: `make test` green for touched module
 - [ ] Layer 3: `make e2e` green if cross-component
 - [ ] Documentation updated in same commit (no stale docs)
-- [ ] `feature_list.json` updated with `evidence` field
-- [ ] `PROGRESS.md` reflects new current state
+- [ ] OpenKan PRD/task updated with fresh evidence in `.ok/`
+- [ ] `bizar doctor` (or `.ok/` validation) reflects new state
 - [ ] Commit message explains WHY (not just what)
 
 ## Architecture constraints

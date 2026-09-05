@@ -29,11 +29,12 @@ function fixture() {
     'description: Office manager',
     '---',
   ].join('\n'));
-  writeFileSync(join(root, 'feature_list.json'), JSON.stringify({
-    features: [{ id: 'F-120', behavior: 'OpenKan integration', state: 'active' }],
-    vcr: { passing: 0, activated: 1, ratio: 0 },
-  }));
-  writeFileSync(join(root, 'PROGRESS.md'), '# PROGRESS\n\n## In Progress — F-120 OpenKan integration\n\nWorking now.\n');
+  mkdirSync(join(root, '.ok', 'tasks'), { recursive: true });
+  mkdirSync(join(root, '.ok', 'plans'), { recursive: true });
+  mkdirSync(join(root, '.ok', 'prds'), { recursive: true });
+  writeFileSync(join(root, '.ok', 'tasks', 'tsk-120.json'), JSON.stringify({ schema: 'ok.task.v1', id: 'tsk-120', title: 'OpenKan integration', status: 'in_progress' }));
+  writeFileSync(join(root, '.ok', 'plans', 'pln-120.json'), JSON.stringify({ schema: 'ok.plan.v1', id: 'pln-120', title: 'Adoption' }));
+  writeFileSync(join(root, '.ok', 'prds', 'prd-120.json'), JSON.stringify({ schema: 'ok.prd.v1', id: 'prd-120', title: 'Planning', goals: [] }));
 
   const log = join(root, 'claude-args.jsonl');
   const fake = join(root, 'claude');
@@ -78,10 +79,13 @@ test('control snapshot returns agents, tasks, sessions, and messages as JSON', (
   assert.equal(snapshot.projectRoot, root);
   assert.equal(snapshot.agents[0].id, 'mike');
   assert.equal(snapshot.sessions[0].sessionId, 'abc12345-1234-4234-8234-123456789abc');
-  assert.deepEqual(snapshot.tasks, []);
+  assert.equal(snapshot.version, 2);
+  assert.equal(snapshot.tasks[0].id, 'tsk-120');
+  assert.equal(snapshot.plans[0].id, 'pln-120');
+  assert.equal(snapshot.goals[0].id, 'prd-120');
   assert.deepEqual(snapshot.messages, []);
-  assert.equal(snapshot.features[0].id, 'F-120');
-  assert.match(snapshot.progress.current, /F-120/);
+  assert.equal(snapshot.features, undefined);
+  assert.equal(snapshot.progress, undefined);
 });
 
 test('control session send queues a message and resumes through Claude background mode', () => {

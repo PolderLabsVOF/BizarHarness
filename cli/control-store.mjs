@@ -11,7 +11,7 @@ import { basename, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
-import { TaskLedger, resolveTaskDatabase } from './task-ledger.mjs';
+import { listOpenKanGoals, listOpenKanPlans, listOpenKanTasks } from './openkan-store.mjs';
 
 const MESSAGE_STATES = ['queued', 'processing', 'delivered', 'failed'];
 const MAX_MESSAGE_BYTES = 16 * 1024;
@@ -177,32 +177,11 @@ export function listControlMessages(projectRoot = process.cwd(), options = {}) {
 }
 
 export function listControlTasks(projectRoot = process.cwd()) {
-  const ledger = new TaskLedger({ dbPath: resolveTaskDatabase(projectRoot) });
-  try {
-    return {
-      tasks: ledger.listTasks(),
-      integrations: ledger.listIntegrations(),
-    };
-  } finally {
-    ledger.close();
-  }
-}
-
-function readFeatureState(projectRoot) {
-  const path = join(projectRoot, 'feature_list.json');
-  const data = existsSync(path) ? readJson(path) : null;
   return {
-    features: Array.isArray(data?.features) ? data.features : [],
-    vcr: data?.vcr || null,
+    tasks: listOpenKanTasks(projectRoot),
+    plans: listOpenKanPlans(projectRoot),
+    goals: listOpenKanGoals(projectRoot),
   };
-}
-
-function readProgressState(projectRoot) {
-  const path = join(projectRoot, 'PROGRESS.md');
-  if (!existsSync(path)) return { current: '', excerpt: '' };
-  const text = readFileSync(path, 'utf8');
-  const current = text.match(/^##\s+(.+)$/m)?.[1]?.trim() || '';
-  return { current, excerpt: text.slice(0, 4000) };
 }
 
 function claudeBin() {
@@ -295,17 +274,14 @@ export function stopControlSession(projectRoot, sessionId, killProcess = process
 export function getControlSnapshot(projectRoot = process.cwd()) {
   const root = resolve(projectRoot);
   const coordination = listControlTasks(root);
-  const featureState = readFeatureState(root);
   return {
-    version: 1,
+    version: 2,
     projectRoot: root,
     generatedAt: new Date().toISOString(),
     agents: listControlAgents(root),
     tasks: coordination.tasks,
-    integrations: coordination.integrations,
-    features: featureState.features,
-    vcr: featureState.vcr,
-    progress: readProgressState(root),
+    plans: coordination.plans,
+    goals: coordination.goals,
     sessions: listControlSessions(root),
     messages: listControlMessages(root).messages,
   };

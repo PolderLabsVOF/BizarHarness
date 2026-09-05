@@ -1,59 +1,96 @@
 /**
  * scripts/sprint.mjs
  *
- * /sprint <goal-id> — auto-fill a sprint contract from root PROGRESS.md.
+ * /sprint <goal-id> — auto-fill a sprint contract from an OpenKan PRD.
  *
  * Usage:
  *   node scripts/sprint.mjs <goal-id> [projectRoot]
  *
  * projectRoot defaults to process.cwd().
+ *
+ * Operational model (DEC-023): OpenKan `.ok/prds/<id>.json` is the
+ * canonical source of durable goals. The sprint contract is a derived
+ * operator artifact under `.bizar/sprints/`, regenerated from the
+ * matching PRD on demand.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+const STATUS_DONE = new Set(['done', 'completed', 'passing']);
+const STATUS_PENDING = new Set(['open', 'pending', 'in_progress', 'review', 'blocked']);
+
+/**
+ * Read every PRD under `.ok/prds/` and return the matching goal + the
+ * PRD that hosts it.
+ */
+function findOpenKanGoal(goalId, projectRoot) {
+  const prdDir = join(projectRoot, '.ok', 'prds');
+  if (!existsSync(prdDir)) return null;
+  const files = readdirSync(prdDir).filter((name) => name.endsWith('.json')).sort();
+  for (const file of files) {
+    const prdPath = join(prdDir, file);
+    let prd;
+    try {
+      prd = JSON.parse(readFileSync(prdPath, 'utf8'));
+    } catch {
+      continue;
+    }
+    if (prd?.schema !== 'ok.prd.v1') continue;
+    const goal = (prd.goals || []).find((candidate) =>
+      typeof candidate?.id === 'string'
+      && candidate.id.toUpperCase() === goalId.toUpperCase()
+    );
+    if (goal) {
+      return { prd, goal, prdPath };
+    }
+  }
+  return null;
+}
+
 /** @param {string} goalId @param {string} projectRoot */
 export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
-  // 1. Find and read progress-parser.mjs
-  const parserPath = join(projectRoot, 'cli', 'progress-parser.mjs');
-  let parseProgress;
-  try {
-    ({ parseProgress } = await import(parserPath));
-  } catch {
-    throw new Error(`progress-parser.mjs not found at ${parserPath}`);
+  // 1. Find the goal across every PRD in .ok/prds/
+  const located = findOpenKanGoal(goalId, projectRoot);
+  if (!located) {
+    throw new Error(
+      `goal '${goalId}' not found under .ok/prds/. `
+      + `Run \`bizar goals list\` or \`bizar openkan prd list --json\` to see available goals.`,
+    );
   }
+  const { goal, prd } = located;
 
-  // 2. Read the canonical root PROGRESS.md.
-  const progressPath = join(projectRoot, 'PROGRESS.md');
-  if (!existsSync(progressPath)) {
-    throw new Error(`PROGRESS.md not found at ${progressPath}`);
-  }
-  const progressText = readFileSync(progressPath, 'utf8');
-  const { goals } = parseProgress(progressText);
+  // 2. Derive the sprint-shape fields. OpenKan PRDs use simple goal
+  //    entries ({ id, text, status }) rather than the legacy PROGRESS.md
+  //    key-results list; we surface each goal text as a single scope item
+  //    so the operator gets a useful contract even with the leaner shape.
+  const goalTitle = goal.text?.split('\n')[0]?.trim() || prd.title || goalId;
+  const goalOwner = (Array.isArray(prd.owners) && prd.owners.length > 0)
+    ? prd.owners[0]
+    : (typeof prd.owner === 'string' ? prd.owner : 'claude');
+  const goalStatus = typeof goal.status === 'string' ? goal.status.toLowerCase() : 'open';
+  const isDone = STATUS_DONE.has(goalStatus);
+  const sprintGoal = {
+    id: goalId,
+    title: goalTitle,
+    owner: goalOwner,
+    keyResults: [{ title: goal.text || goalTitle, done: isDone }],
+  };
 
-  // 3. Find the goal
-  const goal = goals.find((g) => g.id.toUpperCase() === goalId.toUpperCase());
-  if (!goal) {
-    const available = goals.map((g) => g.id).join(', ');
-    throw new Error(`goal '${goalId}' not found in PROGRESS.md. Available: ${available || 'none'}`);
-  }
-
-  // 4. Read template
+  // 3. Read template
   const templatePath = join(projectRoot, 'templates', 'sprint-contract.md');
   if (!existsSync(templatePath)) {
     throw new Error(`sprint-contract.md not found at ${templatePath}`);
   }
   const template = readFileSync(templatePath, 'utf8');
 
-  // 5. Build pre-filled content
+  // 4. Build pre-filled content
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  // Split template into lines for section-by-section replacement
   const lines = template.split('\n');
   const out = [];
 
-  // Section flags
   let inScopeIn = false;
   let inScopeOut = false;
   let inDod = false;
@@ -63,20 +100,19 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
   let filledSprintDate = false;
   let scopeInStarted = false;
 
-  const completedKRs = goal.keyResults.filter((kr) => kr.done);
-  const pendingKRs = goal.keyResults.filter((kr) => !kr.done);
+  const completedKRs = sprintGoal.keyResults.filter((kr) => kr.done);
+  const pendingKRs = sprintGoal.keyResults.filter((kr) => !kr.done);
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Fill Identification section
     if (!filledFeatureId && /Feature ID/.test(line)) {
-      out.push(line.replace('F-NNN', goal.id));
+      out.push(line.replace('F-NNN', sprintGoal.id));
       filledFeatureId = true;
       continue;
     }
     if (!filledTitle && /^\s*- \*\*Title:\*\*/.test(line)) {
-      out.push(line.replace('<one-line>', goal.title));
+      out.push(line.replace('<one-line>', sprintGoal.title));
       filledTitle = true;
       continue;
     }
@@ -86,12 +122,11 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
       continue;
     }
     if (!filledOwner && /^\s*- \*\*Owner:\*\*/.test(line)) {
-      out.push(line.replace('<agent name or "claude">', goal.owner ?? 'claude'));
+      out.push(line.replace('<agent name or "claude">', sprintGoal.owner ?? 'claude'));
       filledOwner = true;
       continue;
     }
 
-    // Scope (in) — replace placeholder with goal KRs
     if (/^\s*## Scope \(in\)/.test(line)) {
       inScopeIn = true;
       inScopeOut = false;
@@ -104,13 +139,11 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
       inScopeOut = true;
       inDod = false;
       out.push(line);
-      // Add a blank "not yet defined" placeholder if no scope-out is natural
       out.push('\n- _None defined yet — add items as the sprint evolves_\n');
       continue;
     }
     if (inScopeIn && !scopeInStarted && /^-\s*<item/.test(line)) {
       scopeInStarted = true;
-      // Replace placeholder with pending KRs first, then completed
       if (pendingKRs.length > 0) {
         out.push(`- _In progress (${pendingKRs.length}):_`);
         for (const kr of pendingKRs) {
@@ -125,7 +158,7 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
         }
         out.push('');
       }
-      if (goal.keyResults.length === 0) {
+      if (sprintGoal.keyResults.length === 0) {
         out.push('- <scope item — add from goal key results>');
       }
       continue;
@@ -143,9 +176,8 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
     // criterion into a "done" claim with no recorded proof.
     // See: docs/audits/production-autonomy-improvements-2026-08-28.md (P0:
     // "Stop pre-completing Definition of Done in sprint generation").
-    // Scope out — skip any remaining placeholders (already handled above)
     if (inScopeOut && /^-\s*<item/.test(line)) {
-      continue; // skip placeholder — we added our own above
+      continue;
     }
     if (/^\s*## Architecture/.test(line)) {
       inScopeIn = false;
@@ -163,10 +195,10 @@ export async function fillSprintContract(goalId, projectRoot = process.cwd()) {
 
   const content = out.join('\n');
 
-  // 6. Write to .bizar/sprints/<goal-id>-<date>.md
+  // 5. Write to .bizar/sprints/<goal-id>-<date>.md
   const sprintsDir = join(projectRoot, '.bizar', 'sprints');
   mkdirSync(sprintsDir, { recursive: true });
-  const destPath = join(sprintsDir, `${goal.id}-${today}.md`);
+  const destPath = join(sprintsDir, `${sprintGoal.id}-${today}.md`);
 
   if (existsSync(destPath)) {
     throw new Error(`Sprint file already exists: ${destPath}\nDelete it or use a different goal.`);

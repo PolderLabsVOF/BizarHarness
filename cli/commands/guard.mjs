@@ -6,7 +6,7 @@
  * surface.
  *
  * Implements a bounded read-only progress audit that re-checks a plan
- * doc + PROGRESS.md + feature_list.json + recent git history + the
+ * doc + OpenKan `.ok/` task/plan state + recent git history + the
  * per-guard `checks.jsonl`. Every `check` invocation is independent —
  * there is no persistent background process. The cadence is driven by
  * the operator wiring `bizar guard check` into Claude Code's `/loop`
@@ -44,6 +44,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
+import { listOpenKanPlans, listOpenKanTasks } from '../openkan-store.mjs';
 import {
   addGuard,
   getGuard,
@@ -72,22 +73,21 @@ function usage() {
   What guard does:
     start  creates a guard at .bizar/guards/<slug>/ and prints a
            copy-pasteable /loop invocation for the configured cadence.
-    check  runs ONE bounded read-only audit (plan doc, PROGRESS.md,
-           feature_list.json, recent commits, prior checks) and
-           records a verdict to .bizar/guards/<slug>/checks.jsonl.
-           Self-terminates on verdict=done; nudges PROGRESS.md on
-           drift|stuck; writes to drift-log.md for drift|stuck.
+    check  runs ONE bounded read-only audit (plan doc, OpenKan .ok/,
+           recent commits, prior checks) and records a verdict to
+           .bizar/guards/<slug>/checks.jsonl. Self-terminates on done
+           and writes advisory drift records for drift|stuck.
     status prints the guard's state and the most recent 5 checks.
     stop   marks the guard as stopped (operator override).
     list   enumerates every guard on disk.
 
   Verdicts:
     healthy  plan is progressing, recent activity present
-    drift    plan's stated next-actions diverge from PROGRESS.md
+    drift    plan's stated next-actions diverge from the linked OpenKan plan/task state
     stuck    no commits in last interval, no in-flight worktrees,
-             no feature_list.json state change
-    done     plan closed or feature_list.json WIP=0 with all shipped
-             features (self-terminates; writes DONE.md archive note)
+             and no .ok state change
+    done     linked OpenKan plan is complete or all project tasks are terminal
+             (self-terminates; writes DONE.md archive note)
 
   Exit codes:
     0  healthy | done
@@ -372,7 +372,6 @@ function runCheck(flags) {
   }
   if (audit.verdict === 'drift' || audit.verdict === 'stuck') {
     appendDriftLog(normalized, guard, audit, repoRoot);
-    nudgeProgressMd(audit, repoRoot);
   }
   let updated;
   try {
@@ -430,145 +429,45 @@ function guessActiveSlug() {
  */
 function performAudit(slug, guard, repoRoot) {
   const signals = [];
-  let done = false;
-
-  // Signal A: plan doc has a `## Done` / `## Complete` heading at the
-  // top of its section list. We treat the *first* H2 after the doc's
-  // intro as the candidate — operators routinely use a "Done" header
-  // to mark plan closure.
   const planAbs = resolvePlanPath(guard.planPath, repoRoot);
+  let documentDone = false;
   if (existsSync(planAbs)) {
     const text = readFileSync(planAbs, 'utf-8');
-    const headings = Array.from(text.matchAll(/^##\s+([^\n]+)$/gm)).map((m) => m[1].trim());
+    const headings = Array.from(text.matchAll(/^##\s+([^\n]+)$/gm)).map((match) => match[1].trim());
     const firstHeading = headings[0] ?? null;
-    if (firstHeading && /^(done|complete|completed)$/i.test(firstHeading)) {
-      signals.push(`plan doc first H2 is "${firstHeading}"`);
-      done = true;
-    } else {
-      signals.push(`plan doc first H2 is "${firstHeading ?? '(none)'}"`);
-    }
+    documentDone = !!firstHeading && /^(done|complete|completed)$/i.test(firstHeading);
+    signals.push(`plan doc first H2 is "${firstHeading ?? '(none)'}"`);
   } else {
-    signals.push(`plan doc missing at ${planAbs}`);
+    signals.push(`plan doc missing at ${planAbs}; using OpenKan state only`);
   }
 
-  // Signal B: feature_list.json — if WIP=0 AND activated == passing AND
-  // there is no in-progress feature, ship is complete.
-  const featureListDone = checkFeatureList(repoRoot, signals);
-  if (featureListDone) done = true;
-
-  // Signal C: PROGRESS.md + recent git log freshness.
-  if (checkProgressAndGit(guard, repoRoot, signals)) done = true;
-
-  // Signal D: drift — compare plan's stated next-actions to PROGRESS.md's
-  // last `## In Progress` block's next-actions.
-  if (!done && checkDrift(guard, repoRoot, signals)) {
-    return {
-      verdict: 'drift',
-      signals,
-      recommendation:
-        'Plan doc and PROGRESS.md diverge. Reconcile the next-actions list in the plan doc with the most-recent `## In Progress` block in PROGRESS.md, then re-run `bizar guard check`.',
-    };
+  const openKan = checkOpenKanState(guard, repoRoot, signals);
+  if (documentDone || openKan.done) {
+    return { verdict: 'done', signals, recommendation: 'OpenKan work is terminal. Self-termination: status=done, archive note written to .bizar/guards/<slug>/DONE.md.' };
   }
-
-  // Signal E: stuck — escalate when the last 2 checks were stuck OR
-  // when no commits / no worktrees / no state change in the interval.
-  if (!done && checkStuck(guard, slug, repoRoot, signals)) {
-    return {
-      verdict: 'stuck',
-      signals,
-      recommendation:
-        'No state change in the last interval and the previous two checks were also unhealthy. Pause the loop, refresh the plan doc, and resume by re-running `bizar guard start` with a fresh slug.',
-    };
+  if (checkDrift(guard, repoRoot, signals, openKan)) {
+    return { verdict: 'drift', signals, recommendation: 'The plan document and linked OpenKan work diverge. Reconcile the plan with `.ok/` tasks or plan phases, then re-run `bizar guard check`.' };
   }
-
-  if (done) {
-    return {
-      verdict: 'done',
-      signals,
-      recommendation:
-        'Plan is closed. Self-termination: status=done, archive note written to .bizar/guards/<slug>/DONE.md.',
-    };
+  if (checkStuck(guard, slug, repoRoot, signals)) {
+    return { verdict: 'stuck', signals, recommendation: 'No OpenKan or repository state changed in the last interval and the prior checks were unhealthy. Refresh the active task or plan before resuming the loop.' };
   }
-  return {
-    verdict: 'healthy',
-    signals,
-    recommendation: 'Progress is on track. Continue the loop; next check in '
-      + humanizeInterval(guard.intervalMs) + '.',
-  };
+  return { verdict: 'healthy', signals, recommendation: `OpenKan progress is on track. Continue the loop; next check in ${humanizeInterval(guard.intervalMs)}.` };
 }
 
 function resolvePlanPath(planPath, repoRoot) {
   return isAbsolute(planPath) ? planPath : resolve(repoRoot, planPath);
 }
 
-function checkFeatureList(repoRoot, signals) {
-  const fp = join(repoRoot, 'feature_list.json');
-  if (!existsSync(fp)) {
-    signals.push('feature_list.json not present at repo root');
-    return false;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(readFileSync(fp, 'utf-8'));
-  } catch (err) {
-    signals.push(`feature_list.json malformed: ${err.message}`);
-    return false;
-  }
-  const features = Array.isArray(parsed?.features) ? parsed.features : [];
-  const inProgress = features.filter((f) => f && f.state === 'in_progress');
-  const passing = features.filter((f) => f && f.state === 'passing').length;
-  const activated = features.filter((f) => f && f.state !== 'not_started').length;
-  signals.push(`feature_list: passing=${passing} activated=${activated} in_progress=${inProgress.length}`);
-  const vcr = parsed?.vcr ?? null;
-  if (vcr && typeof vcr.activated === 'number' && vcr.activated === vcr.passing && inProgress.length === 0) {
-    signals.push(`vcr.activated (${vcr.activated}) == vcr.passing (${vcr.passing}) with no in_progress`);
-    return true;
-  }
-  if (activated > 0 && passing === activated && inProgress.length === 0) {
-    return true;
-  }
-  return false;
-}
-
-function checkProgressAndGit(guard, repoRoot, signals) {
-  const fp = join(repoRoot, 'PROGRESS.md');
-  if (!existsSync(fp)) {
-    signals.push('PROGRESS.md not present at repo root');
-    return false;
-  }
-  const text = readFileSync(fp, 'utf-8');
-  const headerRe = /^## In Progress[^\n]*$/gm;
-  const headers = Array.from(text.matchAll(headerRe)).map((m) => ({
-    header: m[0],
-    offset: m.index ?? 0,
-  }));
-  if (headers.length === 0) {
-    signals.push('PROGRESS.md has no `## In Progress` header');
-    return false;
-  }
-  const last = headers[headers.length - 1];
-  const blockStart = last.offset + last.header.length;
-  const nextHeader = text.slice(blockStart).search(/^##\s/m);
-  const blockText = nextHeader === -1
-    ? text.slice(blockStart)
-    : text.slice(blockStart, blockStart + nextHeader);
-  const statusMatch = blockText.match(/###\s+Status\s*\n+([^\n]+)/);
-  if (statusMatch && /All gates green/i.test(statusMatch[1])) {
-    signals.push(`PROGRESS.md most-recent Status: "${statusMatch[1].trim()}"`);
-    // Combined gate: also need a "no commits since last check" freshness
-    // signal AND a relatively complete plan doc; if both hold, treat
-    // as done. Otherwise surface this as a strong "healthy" signal.
-    const lastCheck = guard.lastCheckedAt;
-    const lastCommit = recentLastCommitDate(repoRoot);
-    if (lastCheck && lastCommit && lastCommit <= lastCheck) {
-      signals.push(`git log: last commit ${lastCommit} <= last check ${lastCheck}`);
-      return true;
-    }
-    signals.push('PROGRESS.md reports all gates green but commits are newer than last check');
-  } else {
-    signals.push('PROGRESS.md most-recent Status does not read "All gates green"');
-  }
-  return false;
+function checkOpenKanState(guard, repoRoot, signals) {
+  const tasks = listOpenKanTasks(repoRoot);
+  const plans = listOpenKanPlans(repoRoot);
+  const active = tasks.filter((task) => ['in_progress', 'review'].includes(task.status));
+  const pending = tasks.filter((task) => task.status === 'pending');
+  const terminal = tasks.filter((task) => ['done', 'cancelled'].includes(task.status));
+  const linkedPlan = plans.find((plan) => plan.id === guard.planPath || plan.path === guard.planPath);
+  signals.push(`OpenKan: tasks=${tasks.length} active=${active.length} pending=${pending.length} terminal=${terminal.length}; plans=${plans.length}`);
+  if (linkedPlan) signals.push(`OpenKan linked plan ${linkedPlan.id}: ${linkedPlan.status || 'unknown'}`);
+  return { tasks, active, pending, plans, linkedPlan, done: linkedPlan?.status === 'complete' || (tasks.length > 0 && terminal.length === tasks.length) };
 }
 
 function recentLastCommitDate(repoRoot) {
@@ -582,42 +481,19 @@ function recentLastCommitDate(repoRoot) {
   return ts || null;
 }
 
-function checkDrift(guard, repoRoot, signals) {
+function checkDrift(guard, repoRoot, signals, openKan) {
   const planAbs = resolvePlanPath(guard.planPath, repoRoot);
   if (!existsSync(planAbs)) return false;
-  const planText = readFileSync(planAbs, 'utf-8');
-  const planNextActions = extractNextActions(planText);
-  const progressFp = join(repoRoot, 'PROGRESS.md');
-  if (!existsSync(progressFp)) return false;
-  const progressText = readFileSync(progressFp, 'utf-8');
-  const progressNext = extractNextActions(progressText);
-  if (planNextActions.length === 0 && progressNext.length === 0) {
-    signals.push('no extractable next-action items in either doc');
-    return false;
-  }
-  // A drift signal fires when one doc carries material next-action
-  // content (>= 3 items) that the other doc does not surface.
-  if (planNextActions.length === 0) {
-    signals.push(`PROGRESS.md has ${progressNext.length} next-action items but plan doc has none`);
-    return progressNext.length >= 3;
-  }
-  if (progressNext.length === 0) {
-    signals.push(`plan doc has ${planNextActions.length} next-action items but PROGRESS.md has none`);
-    return planNextActions.length >= 3;
-  }
-  // Compare by normalized token sets: a "drift" requires >= 3
-  // semantically different items that the one doc mentions and the
-  // other doesn't. We approximate semantic difference by set-difference
-  // between key-token bags.
-  const planTokens = tokenize(planNextActions.join('\n'));
-  const progressTokens = tokenize(progressNext.join('\n'));
-  const onlyInPlan = planTokens.filter((t) => !progressTokens.includes(t));
-  const onlyInProgress = progressTokens.filter((t) => !planTokens.includes(t));
-  signals.push(
-    `plan next-actions: ${planNextActions.length} items; PROGRESS.md next-actions: ${progressNext.length} items; only-in-plan=${onlyInPlan.length} only-in-progress=${onlyInProgress.length}`,
-  );
-  if (onlyInPlan.length >= 3 || onlyInProgress.length >= 3) return true;
-  return false;
+  const planActions = extractNextActions(readFileSync(planAbs, 'utf-8'));
+  const taskText = [...openKan.active, ...openKan.pending]
+    .map((task) => [task.title, task.description].filter(Boolean).join(' '));
+  if (planActions.length === 0 || taskText.length === 0) return false;
+  const planTokens = tokenize(planActions.join('\n'));
+  const taskTokens = tokenize(taskText.join('\n'));
+  const onlyInPlan = planTokens.filter((token) => !taskTokens.includes(token));
+  const onlyInTasks = taskTokens.filter((token) => !planTokens.includes(token));
+  signals.push(`plan next-actions=${planActions.length}; OpenKan ready work=${taskText.length}; only-in-plan=${onlyInPlan.length} only-in-openkan=${onlyInTasks.length}`);
+  return onlyInPlan.length >= 5 && onlyInTasks.length >= 5;
 }
 
 function checkStuck(guard, slug, repoRoot, signals) {
@@ -629,19 +505,19 @@ function checkStuck(guard, slug, repoRoot, signals) {
     return true;
   }
   // Second: surface as stuck if no commits in last interval AND no
-  // in-flight worktrees older than 2 intervals AND no feature_list.json
-  // state change since last check.
+  // in-flight worktrees older than 2 intervals AND no OpenKan state
+  // change since last check.
   const intervalMs = guard.intervalMs;
   const lastCommit = recentLastCommitDate(repoRoot);
   const lastCheck = guard.lastCheckedAt;
   const lastCommitStale = lastCommit && lastCheck && Date.parse(lastCommit) <= Date.parse(lastCheck);
   const staleSeconds = intervalMs / 1000;
   const worktrees = listWorktreesOlderThan(repoRoot, intervalMs * 2);
-  const featureListChanged = hasFeatureListChangedSince(repoRoot, lastCheck);
+  const openKanChanged = hasOpenKanStateChangedSince(repoRoot, lastCheck);
   signals.push(
-    `stuck-gates: lastCommitStale=${!!lastCommitStale} worktrees(${staleSeconds * 2}s)=${worktrees.length} featureListChanged=${featureListChanged}`,
+    `stuck-gates: lastCommitStale=${!!lastCommitStale} worktrees(${staleSeconds * 2}s)=${worktrees.length} openKanChanged=${openKanChanged}`,
   );
-  if (lastCommitStale && worktrees.length === 0 && !featureListChanged) {
+  if (lastCommitStale && worktrees.length === 0 && !openKanChanged) {
     return true;
   }
   return false;
@@ -683,14 +559,11 @@ function listWorktreesOlderThan(repoRoot, cutoffMs) {
   });
 }
 
-function hasFeatureListChangedSince(repoRoot, sinceIso) {
+function hasOpenKanStateChangedSince(repoRoot, sinceIso) {
   if (!sinceIso) return false;
-  const fp = join(repoRoot, 'feature_list.json');
-  if (!existsSync(fp)) return false;
+  const fp = join(repoRoot, '.ok');
   const stat = statSyncSafe(fp);
-  if (!stat) return false;
-  const iso = new Date(stat.mtimeMs).toISOString();
-  return iso > sinceIso;
+  return !!stat && new Date(stat.mtimeMs).toISOString() > sinceIso;
 }
 
 function statSyncSafe(fp) {
@@ -797,24 +670,6 @@ function writeDoneArchive(slug, guard, audit, repoRoot) {
     '',
   ];
   writeFileSync(fp, lines.join('\n'), 'utf-8');
-}
-
-function nudgeProgressMd(audit, repoRoot) {
-  const fp = join(repoRoot, 'PROGRESS.md');
-  if (!existsSync(fp)) return;
-  const text = readFileSync(fp, 'utf-8');
-  const headers = Array.from(text.matchAll(/^## In Progress[^\n]*$/gm));
-  if (headers.length === 0) return;
-  const last = headers[headers.length - 1];
-  const blockStart = last.index ?? 0;
-  const blockEndCandidate = text.slice(blockStart + 1).search(/^##\s/m);
-  const blockEnd = blockEndCandidate === -1
-    ? text.length
-    : blockStart + 1 + blockEndCandidate;
-  const stamp = new Date().toISOString();
-  const nudge = `\n\n> guard@${stamp}: ${audit.recommendation}\n`;
-  const next = text.slice(0, blockEnd) + nudge + text.slice(blockEnd);
-  writeFileSync(fp, next, 'utf-8');
 }
 
 // ── Public dispatch ─────────────────────────────────────────────────────────

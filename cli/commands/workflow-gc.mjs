@@ -9,8 +9,8 @@
  * Policy:
  *   - TTL: 14 days since the directory's mtime (configurable via
  *     `--max-age-days`).
- *   - In-progress gate: if `feature_list.json` has any feature with
- *     `state: in_progress`, NO directories are deleted (conservative;
+ *   - In-progress gate: if OpenKan has any task with
+ *     `status: in_progress` or `review`, NO directories are deleted (conservative;
  *     we have no feature -> runId mapping). The dry-run reports this
  *     explicitly so the operator sees the skip reason.
  *   - Permission failures: skip + warn, never abort the run.
@@ -32,6 +32,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { listOpenKanTasks } from '../openkan-store.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
@@ -73,19 +74,12 @@ Exit codes:
 `);
 }
 
-/**
- * Inspect feature_list.json#in_progress. Returns
- * `{ inProgress: boolean, ids: string[] }`. When the file is missing
- * or unreadable, inProgress is false (no gate) — a missing
- * feature_list.json is not the GC tool's problem to fix.
- */
-function inProgressFeatureIds(cwd) {
-  const p = resolve(cwd, 'feature_list.json');
-  if (!existsSync(p)) return { inProgress: false, ids: [] };
+/** Inspect active OpenKan tasks. Missing `.ok/` is intentionally ungated. */
+function inProgressTaskIds(cwd) {
   try {
-    const json = JSON.parse(readFileSync(p, 'utf8'));
-    const features = Array.isArray(json?.features) ? json.features : [];
-    const ids = features.filter((f) => f && f.state === 'in_progress').map((f) => f.id || '<no-id>');
+    const ids = listOpenKanTasks(cwd)
+      .filter((task) => ['in_progress', 'review'].includes(task.status))
+      .map((task) => task.id || '<no-id>');
     return { inProgress: ids.length > 0, ids };
   } catch {
     return { inProgress: false, ids: [] };
@@ -99,7 +93,7 @@ function inProgressFeatureIds(cwd) {
  *
  * Skip reasons:
  *   'too-recent'      — mtime within the TTL window
- *   'in-progress'     — feature_list.json has any in_progress feature
+ *   'in-progress'     — OpenKan has active task ownership
  *   'permission-denied' — stat/rm threw EACCES or EPERM
  *   'missing'         — directory vanished between listRuns() and stat()
  */
@@ -192,7 +186,7 @@ async function main() {
   const root = args.root ? resolve(args.root) : undefined;
   const cwd = process.cwd();
   const nowMs = Date.now();
-  const inProgress = inProgressFeatureIds(cwd);
+  const inProgress = inProgressTaskIds(cwd);
   const runs = listRuns({ runRoot: root });
   const plan = planCandidates({ runs, nowMs, maxAgeDays: args.maxAgeDays, inProgress: inProgress.inProgress });
   const { rows } = executePlan(plan, { dryRun: args.dryRun, nowMs });

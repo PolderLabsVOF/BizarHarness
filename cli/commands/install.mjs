@@ -54,15 +54,17 @@ export function showInstallHelp() {
     in from the stash.
 
     1. Installs @polderlabs/bizar via npm (skipped if already current).
-    2. Shells to ./install.sh for platform-specific system dependencies.
-    3. Syncs agent files, slash commands, and bundled skills into
+    2. Installs or updates OpenKan from its official installer as Bizar's
+       default durable planning, progression, and PRD-goal runtime.
+    3. Shells to ./install.sh for platform-specific system dependencies.
+    4. Syncs agent files, slash commands, and bundled skills into
        ~/.claude/ (or $CLAUDE_CONFIG_DIR).
-    4. Registers the Bizar MCP server in ~/.claude/settings.json.
-    5. Wires Claude Code lifecycle hooks (SessionStart / PreToolUse /
+    5. Registers the Bizar MCP server in ~/.claude/settings.json.
+    6. Wires Claude Code lifecycle hooks (SessionStart / PreToolUse /
        PostToolUse / UserPromptSubmit) under ~/.claude/hooks/.
-    6. In a terminal, confirms the install and securely asks for a provider
+    7. In a terminal, confirms the install and securely asks for a provider
        URL and key only when they are not already configured.
-    7. Runs 'bizar doctor' as a post-install health check.
+    8. Runs 'bizar doctor' as a post-install health check.
 
     Provider settings are global (~/.claude/settings.json), so they work from
     every project. Key input is hidden. Use --yes or --non-interactive to skip
@@ -90,21 +92,22 @@ export function showUpdateHelp() {
     Single unified provisioner — the same code path as 'bizar install'
     with mode=update. Every step is idempotent; re-running is safe.
 
-    1. Re-emits skills, commands, rules, hooks, agents, and workflows
+    1. Ensures the bundled default OpenKan planning runtime is present and current.
+    2. Re-emits skills, commands, rules, hooks, agents, and workflows
        from the repo source into ~/.claude/ (or $CLAUDE_CONFIG_DIR),
        overwriting only the Bizar-managed surface and pruning stale
        entries (F-141).
-    2. Writes the install marker so subsequent runs short-circuit when
+    3. Writes the install marker so subsequent runs short-circuit when
        nothing has changed.
-    3. With --force, re-runs the F-183 clean-install flow: wipes
+    4. With --force, re-runs the F-183 clean-install flow: wipes
        ~/.claude/{agents,skills,commands,hooks,rules,workflows,plugins}/
        and ~/.agents/, stashes the prior settings.json env block into
        BIZAR_SAVED_ENV, then re-emits settings.json with the operator's
        ANTHROPIC_* and BIZAR_* keys union-merged back in (so gateway
        URL, auth token, and BIZAR_HOME are preserved across the wipe).
-    4. Runs 'bizar doctor' after a successful update so config
+    5. Runs 'bizar doctor' after a successful update so config
        regressions surface before the next Claude Code session.
-    5. Repairs stale bin symlinks so the operator picks up the new code
+    6. Repairs stale bin symlinks so the operator picks up the new code
        on the next shell prompt.
 
   Idempotency note:

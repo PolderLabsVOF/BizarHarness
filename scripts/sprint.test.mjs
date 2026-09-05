@@ -5,21 +5,31 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fillSprintContract } from './sprint.mjs';
 
-test('fills a sprint contract from canonical root PROGRESS.md', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'bizar-sprint-'));
-  try {
-    mkdirSync(join(root, 'cli'), { recursive: true });
-    mkdirSync(join(root, 'templates'), { recursive: true });
-    copyFileSync(join(import.meta.dirname, '..', 'cli', 'progress-parser.mjs'), join(root, 'cli', 'progress-parser.mjs'));
-    copyFileSync(join(import.meta.dirname, '..', 'templates', 'sprint-contract.md'), join(root, 'templates', 'sprint-contract.md'));
-    writeFileSync(join(root, 'PROGRESS.md'), `# Progress
+function fixtureRoot() {
+  return mkdtempSync(join(tmpdir(), 'bizar-sprint-'));
+}
 
-## In Progress — F-116 Core audit
-Owner: mike
-Goal is **active**.
-- [x] Remove retired surfaces
-- [ ] Run final gates
-`);
+function seedPrd(root, prd) {
+  const prdDir = join(root, '.ok', 'prds');
+  mkdirSync(prdDir, { recursive: true });
+  writeFileSync(join(prdDir, 'prd-fixture.json'), JSON.stringify(prd));
+}
+
+test('fills a sprint contract from an OpenKan PRD in .ok/prds/', async () => {
+  const root = fixtureRoot();
+  try {
+    mkdirSync(join(root, 'templates'), { recursive: true });
+    copyFileSync(join(import.meta.dirname, '..', 'templates', 'sprint-contract.md'), join(root, 'templates', 'sprint-contract.md'));
+    seedPrd(root, {
+      schema: 'ok.prd.v1',
+      id: 'prd-fixture',
+      title: 'OpenKan-first Bizar planning',
+      owners: ['mike'],
+      goals: [
+        { id: 'F-116', text: 'Core audit', status: 'open' },
+      ],
+      status: 'active',
+    });
 
     const path = await fillSprintContract('F-116', root);
     const output = readFileSync(path, 'utf8');
@@ -27,8 +37,8 @@ Goal is **active**.
     assert.equal((output.match(/\*\*Sprint date:\*\*/g) || []).length, 1);
     assert.match(output, /- \*\*Feature ID:\*\* F-116/);
     assert.match(output, /- \*\*Title:\*\* Core audit/);
-    assert.match(output, /- \[ \] Run final gates/);
-    assert.match(output, /- \[x\] Remove retired surfaces/);
+    assert.match(output, /- \[ \] Core audit/);
+    assert.match(output, /- \*\*Owner:\*\* mike/);
     assert.doesNotMatch(output, /\.bizar\/PROGRESS/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -42,19 +52,20 @@ Goal is **active**.
 // silently convert unverified acceptance criteria into "done" claims with
 // no recorded proof.
 test('sprint generator does NOT pre-check Definition of Done checkboxes', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'bizar-sprint-dod-'));
+  const root = fixtureRoot();
   try {
-    mkdirSync(join(root, 'cli'), { recursive: true });
     mkdirSync(join(root, 'templates'), { recursive: true });
-    copyFileSync(join(import.meta.dirname, '..', 'cli', 'progress-parser.mjs'), join(root, 'cli', 'progress-parser.mjs'));
     copyFileSync(join(import.meta.dirname, '..', 'templates', 'sprint-contract.md'), join(root, 'templates', 'sprint-contract.md'));
-    writeFileSync(join(root, 'PROGRESS.md'), `# Progress
-
-## In Progress — F-200 Audit fix
-Owner: mike
-Goal is **active**.
-- [ ] Implement the fix
-`);
+    seedPrd(root, {
+      schema: 'ok.prd.v1',
+      id: 'prd-fixture',
+      title: 'Audit fix PRD',
+      owners: ['mike'],
+      goals: [
+        { id: 'F-200', text: 'Implement the fix', status: 'open' },
+      ],
+      status: 'active',
+    });
 
     const path = await fillSprintContract('F-200', root);
     const output = readFileSync(path, 'utf8');
@@ -63,15 +74,15 @@ Goal is **active**.
     const dodMatch = output.match(/## Definition of Done \(DoD\)[\s\S]*?(?=\n## )/);
     assert.ok(dodMatch, 'output must contain the shipped-template DoD block');
     const dodSection = dodMatch[0];
-    // The seven shipped DoD items must all remain `[ ]`. Pre-fix they were
+    // Every shipped DoD item must remain `[ ]`. Pre-fix they were
     // rewritten to `[x]` by `scripts/sprint.mjs:140-144`.
     const shippedDoDItems = [
       'Layer 1: `make check` green',
       'Layer 2: `make test` green',
       'Layer 3: `make e2e` green',
       'Documentation updated in same commit',
-      '`feature_list.json` updated with `evidence` field',
-      '`PROGRESS.md` reflects new current state',
+      'OpenKan PRD/task updated with fresh evidence in `.ok/`',
+      '`bizar doctor` (or `.ok/` validation) reflects new state',
       'Commit message explains WHY',
     ];
     for (const needle of shippedDoDItems) {
@@ -80,6 +91,27 @@ Goal is **active**.
       assert.doesNotMatch(dodSection, new RegExp(`- \\[x\\] ${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
         `DoD checkbox for "${needle}" must NOT be pre-checked`);
     }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sprint generator throws an actionable error when the goal is missing from .ok/prds/', async () => {
+  const root = fixtureRoot();
+  try {
+    mkdirSync(join(root, 'templates'), { recursive: true });
+    copyFileSync(join(import.meta.dirname, '..', 'templates', 'sprint-contract.md'), join(root, 'templates', 'sprint-contract.md'));
+    seedPrd(root, {
+      schema: 'ok.prd.v1',
+      id: 'prd-fixture',
+      title: 'Empty PRD',
+      goals: [],
+      status: 'active',
+    });
+    await assert.rejects(
+      () => fillSprintContract('F-999', root),
+      /goal 'F-999' not found under \.ok\/prds\./,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

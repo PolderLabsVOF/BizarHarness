@@ -1,143 +1,40 @@
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
 const BIN = resolve(import.meta.dirname, '..', 'bin.mjs');
 const roots = [];
+afterEach(() => { while (roots.length) rmSync(roots.pop(), { recursive: true, force: true }); });
 
-afterEach(() => {
-  while (roots.length) rmSync(roots.pop(), { recursive: true, force: true });
-});
-
-function run(args, cwd) {
+function fixture() {
+  const root = mkdtempSync(join(tmpdir(), 'bizar-openkan-task-'));
+  roots.push(root);
+  const home = join(root, 'openkan');
+  mkdirSync(join(home, 'bin'), { recursive: true });
+  writeFileSync(join(home, 'bin', 'ok.mjs'), `#!/usr/bin/env node\nconst args=process.argv.slice(2); console.log(JSON.stringify({args}));\n`);
+  chmodSync(join(home, 'bin', 'ok.mjs'), 0o755);
+  return { root, home };
+}
+function run(args, cwd, home) {
   return spawnSync(process.execPath, [BIN, 'task', ...args], {
-    cwd,
-    encoding: 'utf8',
-    env: { ...process.env, BIZAR_SKIP_BUILD: '1' },
+    cwd, encoding: 'utf8', env: { ...process.env, BIZAR_SKIP_BUILD: '1', BIZAR_OPENKAN_HOME: home },
   });
 }
 
-test('task CLI creates, claims, completes, and unblocks dependencies', () => {
-  const root = mkdtempSync(join(tmpdir(), 'bizar-task-command-'));
-  roots.push(root);
-  const db = join(root, 'tasks.sqlite');
-
-  let result = run([
-    'create',
-    'plan',
-    '--title',
-    'Plan',
-    '--scope',
-    'docs/plan.md',
-    '--db',
-    db,
-    '--json',
-  ], root);
+test('task CLI forwards the complete task lifecycle to OpenKan', () => {
+  const { root, home } = fixture();
+  const result = run(['claim', 'tsk-123', '--owner', 'todd', '--lease-ms', '60000', '--json'], root, home);
   assert.equal(result.status, 0, result.stderr);
-
-  result = run([
-    'create',
-    'build',
-    '--title',
-    'Build',
-    '--scope',
-    'src/**',
-    '--depends-on',
-    'plan',
-    '--db',
-    db,
-    '--json',
-  ], root);
-  assert.equal(result.status, 0, result.stderr);
-
-  result = run(['ready', '--db', db, '--json'], root);
-  assert.deepEqual(JSON.parse(result.stdout).tasks.map((task) => task.id), ['plan']);
-
-  result = run(['claim', 'plan', '--owner', 'paul', '--db', db, '--json'], root);
-  assert.equal(result.status, 0, result.stderr);
-  result = run([
-    'complete',
-    'plan',
-    '--owner',
-    'paul',
-    '--evidence',
-    'approved',
-    '--db',
-    db,
-    '--json',
-  ], root);
-  assert.equal(result.status, 0, result.stderr);
-
-  result = run(['ready', '--db', db, '--json'], root);
-  assert.deepEqual(JSON.parse(result.stdout).tasks.map((task) => task.id), ['build']);
+  assert.deepEqual(JSON.parse(result.stdout).args, ['task', 'claim', 'tsk-123', '--owner', 'todd', '--lease-ms', '60000', '--json']);
 });
 
-test('task CLI serializes integration queue ownership', () => {
-  const root = mkdtempSync(join(tmpdir(), 'bizar-task-integration-'));
-  roots.push(root);
-  const db = join(root, 'tasks.sqlite');
-
-  for (const [id, scope, owner] of [
-    ['first', 'src/first.ts', 'todd'],
-    ['second', 'src/second.ts', 'karen'],
-  ]) {
-    assert.equal(run([
-      'create', id, '--scope', scope, '--db', db, '--json',
-    ], root).status, 0);
-    assert.equal(run([
-      'claim', id, '--owner', owner, '--db', db, '--json',
-    ], root).status, 0);
-    assert.equal(run([
-      'complete', id, '--owner', owner, '--evidence', 'tests passed',
-      '--db', db, '--json',
-    ], root).status, 0);
-    assert.equal(run([
-      'integrate', 'enqueue', id, '--commit', `${id}1234`,
-      '--owner', owner, '--db', db, '--json',
-    ], root).status, 0);
-  }
-
-  let result = run([
-    'integrate', 'claim', '--worker', 'steve', '--db', db, '--json',
-  ], root);
-  assert.equal(result.status, 0, result.stderr);
-  const first = JSON.parse(result.stdout);
-  assert.equal(first.taskId, 'first');
-
-  result = run([
-    'integrate', 'claim', '--worker', 'other', '--db', db, '--json',
-  ], root);
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /INTEGRATION_BUSY/);
-
-  result = run([
-    'integrate', 'pass', String(first.id), '--worker', 'steve',
-    '--evidence', 'aggregate checks passed', '--db', db, '--json',
-  ], root);
-  assert.equal(result.status, 0, result.stderr);
-
-  result = run([
-    'integrate', 'claim', '--worker', 'steve', '--db', db, '--json',
-  ], root);
-  assert.equal(JSON.parse(result.stdout).taskId, 'second');
-});
-
-test('task CLI cancels pending work through the durable ledger', () => {
-  const root = mkdtempSync(join(tmpdir(), 'bizar-task-cancel-'));
-  roots.push(root);
-  const db = join(root, 'tasks.sqlite');
-
-  assert.equal(run([
-    'create', 'obsolete', '--title', 'Obsolete task', '--db', db, '--json',
-  ], root).status, 0);
-  const result = run([
-    'cancel', 'obsolete', '--reason', 'Replaced by OpenKan task', '--db', db, '--json',
-  ], root);
-  assert.equal(result.status, 0, result.stderr);
-  const task = JSON.parse(result.stdout);
-  assert.equal(task.state, 'cancelled');
-  assert.equal(task.blocker, 'Replaced by OpenKan task');
+test('task CLI exposes OpenKan lifecycle help and does not advertise SQLite integration queues', () => {
+  const { root, home } = fixture();
+  const result = run(['--help'], root, home);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /OpenKan-backed task lifecycle/);
+  assert.doesNotMatch(result.stdout, /integration queue/i);
 });

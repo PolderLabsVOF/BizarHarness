@@ -63,50 +63,30 @@ function setupFixture({
     : '# Plan\n\n## ' + planH2 + '\n\n- Build the SDK\n- Wire the CLI\n';
   writeFileSync(planPath, planBody);
 
-  // feature_list.json: by default an in_progress feature so the audit
-  // does not trip "done" via VCR/WIP=0. The done-path fixture flips
-  // this off.
-  const featureList = done
-    ? {
-        features: [
-          { id: 'F-A', state: 'passing', title: 'A' },
-          { id: 'F-B', state: 'passing', title: 'B' },
-        ],
-        vcr: { passing: 2, activated: 2, ratio: 1.0 },
-      }
-    : {
-        features: [
-          { id: 'F-A', state: 'passing', title: 'A' },
-          { id: 'F-B', state: 'in_progress', title: 'B' },
-          { id: 'F-C', state: 'not_started', title: 'C' },
-        ],
-        vcr: { passing: 1, activated: 2, ratio: 0.5 },
-      };
-  writeFileSync(join(root, 'feature_list.json'), JSON.stringify(featureList, null, 2));
-
-  // PROGRESS.md: recent Status all-gates-green only on done path; in
-  // other modes the status is "In flight" so we don't trip the
-  // PROGRESS.md-done signal.
-  const progressPath = join(root, 'PROGRESS.md');
-  const progressBody = done
-    ? '# Progress\n\n' +
-      '## In Progress — fixture (2026-09-03)\n\n' +
-      '### Status\n\nAll gates green\n\n'
-    : '# Progress\n\n' +
-      '## In Progress — fixture (2026-09-03)\n\n' +
-      '### Status\n\nIn flight\n\n';
-  writeFileSync(progressPath, progressBody);
+  // OpenKan `.ok/` is the live progression state. A linked task is active
+  // for ordinary fixtures and terminal for the completion fixture.
+  const taskDir = join(root, '.ok', 'tasks');
+  mkdirSync(taskDir, { recursive: true });
+  const tasks = done
+    ? [{ schema: 'ok.task.v1', id: 'tsk-a', title: 'Build the SDK', status: 'done' }]
+    : driftPlan
+      ? [{ schema: 'ok.task.v1', id: 'tsk-a', title: 'Update OpenKan command bridge', description: 'keep bridge semantics aligned', status: 'in_progress' }]
+      : [
+          { schema: 'ok.task.v1', id: 'tsk-a', title: 'Build the SDK', status: 'in_progress' },
+          { schema: 'ok.task.v1', id: 'tsk-b', title: 'Wire the CLI', status: 'pending' },
+        ];
+  for (const task of tasks) writeFileSync(join(taskDir, `${task.id}.json`), JSON.stringify(task));
 
   // For "stuck" tests: stamp feature_list.json older than last check,
   // and make sure there are no commits in this tmp (no .git).
   if (stuck) {
     const oldTime = new Date('2020-01-01T00:00:00.000Z');
     utimesSync(planPath, oldTime, oldTime);
-    utimesSync(join(root, 'feature_list.json'), oldTime, oldTime);
-    utimesSync(progressPath, oldTime, oldTime);
+    utimesSync(join(root, '.ok'), oldTime, oldTime);
+    utimesSync(join(root, '.ok', 'tasks'), oldTime, oldTime);
   }
 
-  return { root, planPath, featureList, progressPath };
+  return { root, planPath, tasks };
 }
 
 function runGuard(args, { cwd, allowFail = false } = {}) {

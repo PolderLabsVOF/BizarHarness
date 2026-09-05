@@ -126,9 +126,12 @@ function showHelp() {
     run                    Run Claude Code once (optionally --bg)
     rca                    Analyze a GitHub issue (Claude Code CLI sample)
     cost <subcommand>      Atomic cost gate (SQLite-backed room budget tracker)
-    claim <subcommand>     GitHub-style claim protocol over feature_list.json
-    task <subcommand>      Durable dependency/worktree/path task coordination
-    control <subcommand>   Machine-readable agents/tasks/sessions/messages API
+    openkan <subcommand>   Install, initialise, and operate the default OpenKan workspace
+    task <subcommand>      OpenKan-backed durable task lifecycle
+    plan <subcommand>      OpenKan plans and phases
+    goals <subcommand>     OpenKan PRDs, goals, and milestones
+    claim <subcommand>     OpenKan task lease shortcut
+    control <subcommand>   Machine-readable agents/tasks/plans/goals/sessions/messages API
     workflow <subcommand>  Session-bound autopilot workflow state
     hook <name>            Run a portable Claude Code hook
     worktree-merge <branch>  Merge a feature branch with archive tag (no work lost)
@@ -387,8 +390,6 @@ async function main() {
     }
 
     case 'claim': {
-      // F-035 MetaHarness — GitHub-style claim protocol over feature_list.json.
-      // Subcommands: <featureId> | release | handoff | steal | status | list | transition
       const mod = await importCommand('claim');
       if (!mod) {
         console.error(chalk.red(`  ✗ Could not load claim command module`));
@@ -417,6 +418,21 @@ async function main() {
         console.error(chalk.red(`  ✗ Usage: bizar task <subcommand> — run 'bizar task --help'`));
         process.exit(EXIT_USAGE);
       }
+      break;
+    }
+
+    case 'openkan': {
+      const mod = await importCommand('openkan');
+      if (!mod) { process.exit(EXIT_ERROR); return; }
+      await mod.run(cmd, cmdArgs, isHelpRequest);
+      break;
+    }
+
+    case 'plan':
+    case 'goals': {
+      const mod = await importCommand('planning');
+      if (!mod) { process.exit(EXIT_ERROR); return; }
+      await mod.run(cmd, cmdArgs, isHelpRequest);
       break;
     }
 
@@ -532,8 +548,8 @@ async function main() {
 
     case 'guard': {
       // F-206 — `/guard` progress-guarding loop. The CLI is read-only
-      // with respect to the repo (plan + PROGRESS.md + feature_list +
-      // checks.jsonl). See cli/commands/guard.mjs for the verdict
+      // with respect to the repo (plan + OpenKan .ok state + checks.jsonl).
+      // See cli/commands/guard.mjs for the verdict
       // semantics and side-effect rules.
       const mod = await importCommand('guard');
       if (!mod) {
@@ -548,20 +564,10 @@ async function main() {
     }
 
     case 'goal-bootstrap': {
-      // F-207 — Mike autonomous goal / ultragoal bootstrap. Single-action
-      // CLI: read feature_list.json + docs/specs/ and emit a
-      // discriminated-union verdict (resume | bootstrap | idle). The
-      // bootstrap action writes exactly one durable artifact (the
-      // charter) under docs/specs/. See cli/commands/goal-bootstrap.mjs.
-      const mod = await importCommand('goal-bootstrap');
-      if (!mod) {
-        console.error(chalk.red(`  ✗ Could not load goal-bootstrap command module`));
-        process.exit(EXIT_ERROR);
-        return;
-      }
-      dbg('loaded command module:', 'goal-bootstrap');
-      const code = await mod.run(cmdArgs);
-      if (typeof code === 'number') process.exit(code);
+      console.error(chalk.yellow('  ! goal-bootstrap is retired; OpenKan PRDs are the default goal system.'));
+      const mod = await importCommand('planning');
+      if (!mod) { process.exit(EXIT_ERROR); return; }
+      await mod.run('goals', cmdArgs, isHelpRequest);
       break;
     }
 

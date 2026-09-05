@@ -43,7 +43,7 @@ function help() {
 
   Usage:
     bizar control snapshot --json
-    bizar control agents|tasks|sessions|messages --json
+    bizar control agents|tasks|plans|goals|sessions|messages --json
     bizar control message --agent <agent>|--session <id> --text <text> [--from <sender>]
     bizar control session start --agent <agent> --prompt <text> [--name <name>]
     bizar control session send <id> --text <text> [--from <sender>]
@@ -64,6 +64,8 @@ export async function run(name, args, isHelpRequest) {
     if (resource === 'snapshot') print(getControlSnapshot(root), flags);
     else if (resource === 'agents') print({ agents: listControlAgents(root) }, flags);
     else if (resource === 'tasks') print(listControlTasks(root), flags);
+    else if (resource === 'plans') print({ plans: listControlTasks(root).plans }, flags);
+    else if (resource === 'goals') print({ goals: listControlTasks(root).goals }, flags);
     else if (resource === 'sessions') print({ sessions: listControlSessions(root) }, flags);
     else if (resource === 'messages') print(listControlMessages(root, { status: flags.status }), flags);
     else if (resource === 'message') {
