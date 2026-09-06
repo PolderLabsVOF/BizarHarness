@@ -82,7 +82,7 @@ export function showDoctorHelp() {
       • hook wiring
       • installed agents and skills
       • required local tools
-      • model-router reachability
+      • alias map (ANTHROPIC_DEFAULT_*_MODEL)
 
     Prints ✓/✗ for each check and a final summary. Exits non-zero
     if any check fails. Use \`bizar doctor\` after installation or

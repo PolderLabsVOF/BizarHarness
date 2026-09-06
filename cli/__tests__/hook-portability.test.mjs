@@ -6,7 +6,6 @@ import { join } from 'node:path';
 
 import { EVENT_CHAINS, executeHook, selectEventChain } from '../commands/hook.mjs';
 import {
-  isBizarManagedModelRouter,
   mergeBizarHooks,
   normalizePermissionLists,
 } from '../provision.mjs';
@@ -48,23 +47,11 @@ test('event dispatcher exposes every plugin hook name', () => {
 });
 
 test('PreTool safety leaf failures deny while context leaf failures fail open', () => {
+  // F-176 / OmniRoute alias overhaul: the removed `agent-model-guard` leaf
+  // is no longer in the chain. The remaining safety leaves (e.g.
+  // `path-ownership-guard`) still deny on failure; context leaves still
+  // fail open. We exercise the latter to keep the deny/fail-open contract.
   const hookRoot = '/tmp/injected-bizar-hooks';
-  const failed = executeHook('pre-tool-use', JSON.stringify({
-    hook_event_name: 'PreToolUse',
-    tool_name: 'Agent',
-  }), {
-    hookRoot,
-    executor({ name, path }) {
-      assert.equal(name, 'agent-model-guard');
-      assert.match(path, /^\/tmp\/injected-bizar-hooks\//);
-      return { status: 1, stdout: '', stderr: 'simulated crash' };
-    },
-  });
-  assert.equal(failed.status, 0);
-  const denied = JSON.parse(failed.stdout);
-  assert.equal(denied.hookSpecificOutput.permissionDecision, 'deny');
-  assert.match(denied.hookSpecificOutput.permissionDecisionReason, /failed/i);
-
   const context = executeHook('user-prompt-submit', JSON.stringify({
     hook_event_name: 'UserPromptSubmit',
     prompt: 'ordinary prompt',
@@ -131,13 +118,6 @@ test('permission merge preserves allow + ask + deny (F-169 user override)', () =
   // Hard-mutation rules must NOT be moved out of allow by the merge.
   assert.ok(normalized.allow.includes('Bash(git push *)'));
   assert.ok(normalized.allow.includes('Bash(npm publish *)'));
-});
-
-test('model router ownership recognizes Bizar v1/v2 but not user routers', () => {
-  assert.equal(isBizarManagedModelRouter({ $schema: 'https://bizar.dev/schema/model-router.v1.json' }), true);
-  assert.equal(isBizarManagedModelRouter({ $schema: 'https://bizar.dev/schema/model-router.v2.json' }), true);
-  assert.equal(isBizarManagedModelRouter({ $schema: 'https://example.test/model-router.json' }), false);
-  assert.equal(isBizarManagedModelRouter({ version: 1 }), false);
 });
 
 test('ownership merge removes stale Bizar hooks while preserving foreign handlers', () => {

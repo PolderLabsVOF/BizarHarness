@@ -34,15 +34,7 @@ import { fileURLToPath } from 'node:url';
 import {
   resolveBizarHome,
   resolveClaudeConfigDir,
-  resolveGlobalModelRouter,
 } from './config-paths.mjs';
-import {
-  buildClaudeModelOverrides,
-  configuredEnabledModels,
-  requiresGatewayModelDiscovery,
-  syncGeneratedModelAgents,
-  syncStableRoleModelAgents,
-} from './commands/models.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
 import {
   ensureOpenKanProject,
@@ -521,55 +513,6 @@ export async function syncAgentFiles({ dryRun = false, force = false } = {}) {
 // The dynamic model router is operator-owned state. It is created only under
 // Bizar's global config root; a repository can never supply a runtime model.
 
-export const EMPTY_GLOBAL_MODEL_ROUTER = {
-  $schema: 'https://bizar.dev/schema/model-router.v3.json',
-  version: '13.0.0',
-  endpoint: null,
-  disabledProviders: ['anthropic'],
-  userSelected: { models: [], lastUpdated: null, source: 'default-empty', tierHints: {} },
-  gateway: { required: false, endpoint: null, availabilityProbe: '/models', discoveryTimeoutMs: 3000, unavailableBehavior: 'configured-tier-fallback' },
-  tiers: Object.fromEntries(['premium', 'high', 'mid-design', 'default', 'mid', 'budget'].map((name) => [name, { models: [] }])),
-  roleDefaults: { mike: 'premium', paul: 'premium', carl: 'premium', karen: 'high', linda: 'high', ria: 'mid-design', greg: 'default', steve: 'default', oscar: 'mid', todd: 'mid', susan: 'mid', pam: 'budget', brenda: 'budget', janet: 'budget', kevin: 'budget', brad: 'mid-design' },
-  policies: { mainOrchestrator: 'mike', selectionOwner: 'orchestrator', dispatchModelOverride: 'required-configured-candidate', unknownAgent: 'configured-tier-fallback', discoveryFailure: 'configured-tier-fallback', unavailableModel: 'configured-tier-fallback', silentProviderSubstitution: false, retryModelAliases: false, snapshotDecisions: true, maxDispatchModelAttempts: 1 },
-};
-
-export function isBizarManagedModelRouter(value) {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && typeof value.$schema === 'string'
-    && /^https:\/\/bizar\.dev\/schema\/model-router\.v\d+\.json$/.test(value.$schema),
-  );
-}
-
-export async function syncModelRouter({ dryRun = false, force = false } = {}) {
-  // Write to ~/.claude/model-router.json (resolveGlobalModelRouter now points there).
-  // This is the single canonical location — both the CLI and Claude Code hooks read it.
-  const dest = resolveGlobalModelRouter();
-  if (existsSync(dest)) {
-    return { ok: true, message: `${dest} is operator-managed — preserved`, preserved: true };
-  }
-  if (dryRun) return { ok: true, message: `[dry-run] would create global model router at ${dest}` };
-  ensureDir(dirname(dest));
-  writeFileSync(dest, `${JSON.stringify(EMPTY_GLOBAL_MODEL_ROUTER, null, 2)}\n`);
-  return { ok: true, message: `global model-router.json → ${dest}`, path: dest };
-}
-
-// Recreate the managed definition projection on every install/update. This is
-// needed after an npm upgrade or a clean Claude directory: the router is
-// operator-owned and preserved, while generated definitions are disposable
-// installation artifacts derived exclusively from its selected IDs.
-export function syncConfiguredModelAgents({ dryRun = false } = {}) {
-  const routerPath = resolveGlobalModelRouter();
-  let router = {};
-  try { if (existsSync(routerPath)) router = JSON.parse(readFileSync(routerPath, 'utf8')); } catch { return { ok: false, message: `cannot read ${routerPath}` }; }
-  const models = configuredEnabledModels(router);
-  if (dryRun) return { ok: true, message: `[dry-run] would sync ${models.length} generated model agent(s)`, models };
-  const generated = syncGeneratedModelAgents(models, { agentsDir: join(resolveClaudeDir(), 'agents', 'bizar-models') });
-  const stable = syncStableRoleModelAgents(models, { agentsDir: join(resolveClaudeDir(), 'agents') });
-  return { ok: true, message: `${stable.names.length} stable role model(s) and ${generated.names.length} generated model agent(s) synced`, ...generated, stableRoleAgents: stable };
-}
-
 export async function syncSkillFiles({ dryRun = false, force = false } = {}) {
   const src = join(REPO_ROOT, 'config', 'skills');
   const dest = CLAUDE_SKILLS_DIR;
@@ -840,30 +783,6 @@ export function normalizePermissionLists(existing = {}, desired = {}) {
   };
 }
 
-export function configuredInstallModel(router) {
-  if (!router || typeof router !== 'object') return undefined;
-  const disabled = new Set(
-    (Array.isArray(router.disabledProviders) ? router.disabledProviders : [])
-      .filter((prefix) => typeof prefix === 'string' && prefix.trim())
-      .map((prefix) => prefix.trim().toLowerCase()),
-  );
-  const enabled = (id) => typeof id === 'string' && id.trim()
-    && ![...disabled].some((prefix) => id.trim().toLowerCase().startsWith(prefix));
-  const userModels = Array.isArray(router.userSelected?.models) ? router.userSelected.models : [];
-  const picked = userModels.find(enabled);
-  if (picked) return picked.trim();
-  for (const tier of Object.values(router.tiers || {})) {
-    const candidate = Array.isArray(tier?.models) ? tier.models.find(enabled) : undefined;
-    if (candidate) return candidate.trim();
-  }
-  return undefined;
-}
-
-export function configuredModelContextTokens(router, modelId) {
-  const value = router?.userSelected?.profiles?.[modelId]?.limits?.contextTokens;
-  return Number.isSafeInteger(value) && value >= 100_000 ? value : undefined;
-}
-
 export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const fp = join(CLAUDE_DIR, 'settings.json');
   const existing = readJsonSafe(fp, {}) || {};
@@ -871,10 +790,10 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const shipped = readJsonSafe(join(REPO_ROOT, 'config', 'claude', 'settings.json'), {}) || {};
   // Bizar is provider-agnostic. We do NOT auto-inject a default gateway URL
   // or auth token into the user's `~/.claude/settings.json` — operators MUST
-  // configure `ANTHROPIC_BASE_URL`, `BIZAR_MODEL_ROUTER_URL`, and
-  // `ANTHROPIC_AUTH_TOKEN` via their shell environment if they want a
-  // non-default gateway. If those env vars are absent we omit the keys
-  // entirely and let Claude Code's session model handle dispatch.
+  // configure `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` via their
+  // shell environment if they want a non-default gateway. If those env vars
+  // are absent we omit the keys entirely and let Claude Code's session model
+  // handle dispatch.
 
   // F-183 — when `forceCleanInstall` has wiped `~/.claude/settings.json`,
   // it stashes the prior env block into `process.env.BIZAR_SAVED_ENV`.
@@ -906,12 +825,9 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   };
 
   const savedBaseUrl = pickEnv('ANTHROPIC_BASE_URL');
-  const savedRouterUrl = pickEnv('BIZAR_MODEL_ROUTER_URL');
-  const existingBaseUrl = !force ? (existingEnv.ANTHROPIC_BASE_URL || existingEnv.BIZAR_MODEL_ROUTER_URL) : undefined;
+  const existingBaseUrl = !force ? existingEnv.ANTHROPIC_BASE_URL : undefined;
   const operatorGatewayUrl = savedBaseUrl
-    || savedRouterUrl
     || process.env.ANTHROPIC_BASE_URL
-    || process.env.BIZAR_MODEL_ROUTER_URL
     || existingBaseUrl;
   // Resolve hook commands via `resolveHookCommand`, which emits the
   // absolute-path wrapper invocation when the shim is executable and
@@ -921,16 +837,12 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   const hook = (name, timeout = 15) => resolveHookCommand(name, timeout);
 
   // The shipped settings template (`config/claude/settings.json`) is the
-  // source of truth for the main agent, worktree, workflows, etc. We
-  // overlay Bizar-owned keys (mcpServers, hooks, env) on top so the installer
-  // honors user preferences without having to fork the template here.
-  // 10.22.0 / Phase 4 spirit-of-constraint fix: `model` and
-  // `modelOverrides` are no longer hardcoded in the shipped template;
-  // they are derived from the operator's persisted
-  // `userSelected.models[0]`. When the operator has not picked anything
-  // yet, both keys are omitted entirely — Claude Code inherits its
-  // session default, still gated by the operator's `disabledProviders`
-  // list (10.22.0 / Phase 4).
+  // sole source of truth for the alias binding (`model`,
+  // `modelOverrides`, `ANTHROPIC_DEFAULT_*_MODEL`). The provisioner
+  // does NOT synthesize `ANTHROPIC_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`,
+  // or any model-router-derived projection: the four aliases
+  // (sonnet/haiku/opus/fable -> default/common/hard/fable) are the
+  // operator contract.
   const bizarSettings = {
     ...shipped,
     $schema: shipped.$schema || 'https://json.schemastore.org/claude-code-settings.json',
@@ -990,13 +902,7 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     env: {
       BIZAR_HOME: BIZAR_HOME(),
       ...(operatorGatewayUrl
-        ? {
-            ANTHROPIC_BASE_URL: operatorGatewayUrl,
-            BIZAR_MODEL_ROUTER_URL:
-              pickEnv('BIZAR_MODEL_ROUTER_URL')
-              || process.env.BIZAR_MODEL_ROUTER_URL
-              || operatorGatewayUrl,
-          }
+        ? { ANTHROPIC_BASE_URL: operatorGatewayUrl }
         : {}),
       ...(pickEnv('ANTHROPIC_AUTH_TOKEN')
         ? { ANTHROPIC_AUTH_TOKEN: pickEnv('ANTHROPIC_AUTH_TOKEN') }
@@ -1005,6 +911,22 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
         pickEnv('CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS')
         || shipped.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
         || '1',
+      // OmniRoute alias binding: the four ANTHROPIC_DEFAULT_*_MODEL vars
+      // ship in the template's top-level env. Forward them verbatim so
+      // the operator contract (sonnet/haiku/opus/fable → default/common/hard/fable)
+      // survives every write.
+      ...(shipped.env?.ANTHROPIC_DEFAULT_SONNET_MODEL
+        ? { ANTHROPIC_DEFAULT_SONNET_MODEL: shipped.env.ANTHROPIC_DEFAULT_SONNET_MODEL }
+        : {}),
+      ...(shipped.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL
+        ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: shipped.env.ANTHROPIC_DEFAULT_HAIKU_MODEL }
+        : {}),
+      ...(shipped.env?.ANTHROPIC_DEFAULT_OPUS_MODEL
+        ? { ANTHROPIC_DEFAULT_OPUS_MODEL: shipped.env.ANTHROPIC_DEFAULT_OPUS_MODEL }
+        : {}),
+      ...(shipped.env?.ANTHROPIC_DEFAULT_FABLE_MODEL
+        ? { ANTHROPIC_DEFAULT_FABLE_MODEL: shipped.env.ANTHROPIC_DEFAULT_FABLE_MODEL }
+        : {}),
     },
     hooks: {
       UserPromptSubmit: [{ hooks: [hook('user-prompt-submit', 10)] }],
@@ -1024,37 +946,10 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
     },
   };
 
-  // Use an explicit configured model for the parent session. A user pick
-  // wins; otherwise the first enabled configured tier candidate is used.
-  // This prevents Claude Code from falling through to an unconfigured
-  // provider default when `userSelected.models` is intentionally empty.
-  // The Bizar global router is the sole source of model policy and picks.
-  const bizarRouterPath = resolveGlobalModelRouter();
-  let installModel;
-  let installContextTokens;
-  let installModels = [];
-  for (const p of [bizarRouterPath]) {
-    if (!existsSync(p)) continue;
-    const parsed = readJsonSafe(p, null);
-    if (!parsed || typeof parsed !== 'object') continue;
-    installModel = configuredInstallModel(parsed);
-    installModels = configuredEnabledModels(parsed);
-    installContextTokens = installModel ? configuredModelContextTokens(parsed, installModel) : undefined;
-    if (installModel) break;
-  }
-  if (installModel) {
-    bizarSettings.model = installModel;
-    bizarSettings.modelOverrides = buildClaudeModelOverrides(installModels);
-    bizarSettings.env.ANTHROPIC_MODEL = installModel;
-    if (operatorGatewayUrl && requiresGatewayModelDiscovery(installModels)) {
-      bizarSettings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = '1';
-    }
-    const configuredContext = pickEnv('CLAUDE_CODE_MAX_CONTEXT_TOKENS') || installContextTokens;
-    if (configuredContext) bizarSettings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(configuredContext);
-  } else {
-    delete bizarSettings.model;
-    delete bizarSettings.modelOverrides;
-  }
+  // The alias binding (`model`, `modelOverrides`, `ANTHROPIC_DEFAULT_*_MODEL`)
+  // is owned entirely by the shipped template — the provisioner never
+  // synthesizes `ANTHROPIC_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, or any
+  // model-router projection.
 
   const merged = { ...existing };
   if (force) {
@@ -1088,15 +983,19 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   // still override it for one session with `claude --agent <name>`.
   merged.agent = 'mike';
 
-  // `model` is Bizar-owned routing policy, so refresh it on both ordinary and
-  // forced provision runs. Do not erase an existing operator model if a
-  // malformed router has no enabled candidate; dispatch will fail closed.
-  if (installModel) {
-    merged.model = installModel;
-    merged.modelOverrides = bizarSettings.modelOverrides;
-    merged.env = { ...(merged.env || {}), ANTHROPIC_MODEL: installModel };
-  } else if (merged.env && typeof merged.env === 'object') {
+  // The alias binding (`model`, `modelOverrides`, `ANTHROPIC_DEFAULT_*_MODEL`)
+  // is Bizar-owned template content. Refresh it predictably on every run
+  // without erasing unrelated env entries (e.g. an operator's
+  // `ANTHROPIC_API_KEY` survives a force update). The provisioner never
+  // synthesizes `ANTHROPIC_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, or any
+  // router-derived projection.
+  merged.model = bizarSettings.model;
+  merged.modelOverrides = bizarSettings.modelOverrides;
+  if (merged.env && typeof merged.env === 'object') {
     delete merged.env.ANTHROPIC_MODEL;
+    delete merged.env.CLAUDE_CODE_SUBAGENT_MODEL;
+    delete merged.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY;
+    delete merged.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS;
   }
 
   // Auto-compaction is part of the Bizar reliability contract. Remove legacy
@@ -1324,22 +1223,6 @@ export async function runProvision(opts = {}) {
   await runStep('Installing git hooks', () => installGitHooks({ dryRun }));
   await runStep('Building SDK',       () => buildSdk({ dryRun }));
 
-  section('Ensuring global model-router.json');
-  const routerStep = await syncModelRouter({ dryRun, force });
-  if (routerStep.ok) logOk(routerStep.message); else logErr(routerStep.message);
-  stepResults.push({ label: 'model-router', ...routerStep });
-
-  section('Syncing configured model agents');
-  let modelAgentsStep;
-  try {
-    modelAgentsStep = syncConfiguredModelAgents({ dryRun });
-  } catch (err) {
-    const message = err?.message ?? String(err);
-    modelAgentsStep = { ok: false, message: `configured model-agent sync failed: ${message}`, error: message, code: err?.code };
-  }
-  if (modelAgentsStep.ok) logOk(modelAgentsStep.message); else logErr(modelAgentsStep.message);
-  stepResults.push({ label: 'model-agents', ...modelAgentsStep });
-
   section('Writing settings.json');
   const settingsStep = writeClaudeSettings({ dryRun, force });
   if (settingsStep.ok) logOk(settingsStep.message); else logErr(settingsStep.message);
@@ -1372,26 +1255,8 @@ export async function runProvision(opts = {}) {
   if (anyFail) console.log(chalk.yellow('  ⚠ Some steps had issues.'));
   else { console.log(chalk.bold.green('  ✓ Bizar is ready.')); console.log(chalk.dim('     Next: restart your Claude Code session.')); }
   console.log('');
-  // 10.22.0 / Phase 4 spirit-of-constraint fix: derive the install-banner
-  // premium model id from the operator's persisted
-  // `userSelected.tierHints.premium[0]` instead of hardcoding one
-  // provider's id. When the operator has not picked anything yet, fall
-  // back to a clear hint to run `bizar models`.
-  let premiumPick = null;
-  try {
-    const routerPath = resolveGlobalModelRouter();
-    const router = JSON.parse(readFileSync(routerPath, 'utf8'));
-    const picks = Array.isArray(router?.userSelected?.tierHints?.premium)
-      ? router.userSelected.tierHints.premium.filter((id) => typeof id === 'string' && id)
-      : [];
-    premiumPick = picks[0] || null;
-  } catch { /* fresh install — no router file yet */ }
-  if (premiumPick) {
-    console.log(chalk.dim(`  Premium model: ANTHROPIC_MODEL=${premiumPick} claude`));
-  } else {
-    console.log(chalk.dim('  Premium model: (no premium pick configured yet — run `bizar models`)'));
-  }
-  console.log(chalk.dim('  Inspect configured selections with `bizar models --list` or `bizar models --agent-types --json`.'));
+  console.log(chalk.dim('  Default model: sonnet → ANTHROPIC_DEFAULT_SONNET_MODEL=default (haiku→common, opus→hard, fable→fable).'));
+  console.log(chalk.dim('  Provider routing is owned by OmniRoute; Bizar does not synthesize ANTHROPIC_MODEL or gateway IDs.'));
   console.log('');
   return { ok: !anyFail, mode: effectiveMode, state: detectState(), stepResults };
 }
@@ -1541,11 +1406,8 @@ export async function syncConfigExtras({ dryRun = false } = {}) {
 export const FORCE_CLEAN_PRESERVE_ENV_KEYS = Object.freeze([
   'ANTHROPIC_BASE_URL',
   'ANTHROPIC_AUTH_TOKEN',
-  'BIZAR_MODEL_ROUTER_URL',
   'BIZAR_HOME',
-  'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',
   'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS',
-  'CLAUDE_CODE_MAX_CONTEXT_TOKENS',
 ]);
 
 /**

@@ -18,14 +18,12 @@ const HOOK_ROOT = resolve(PACKAGE_ROOT, 'config', 'claude', 'hooks');
 const PRETOOL_SAFETY_LEAVES = new Set([
   'pretooluse-editwrite', 'path-ownership-guard',
   'pretooluse-bash', 'git-workflow-guard',
-  'agent-model-guard',
   'workflow-route-guard',
 ]);
 
 export const HOOK_PROGRAMS = Object.freeze({
   'advisor-context': 'advisor-context.mjs',
   'agent-grounding': 'agent-grounding.mjs',
-  'agent-model-guard': 'agent-model-guard.mjs',
   'content-style-guard': 'content-style-guard.mjs',
   'completion-artifact': 'completion-artifact.mjs',
   'control-inbox': 'control-inbox.mjs',
@@ -40,7 +38,6 @@ export const HOOK_PROGRAMS = Object.freeze({
   'pretooluse-bash': 'pretooluse-bash.mjs',
   'pretooluse-editwrite': 'pretooluse-editwrite.mjs',
   'sessionend-recall': 'sessionend-recall.mjs',
-  'sessionstart-model-sync': 'sessionstart-model-sync.mjs',
   'sessionstart-prime': 'sessionstart-prime.mjs',
   'simplify-guard': 'simplify-guard.mjs',
   telemetry: 'telemetry.mjs',
@@ -64,7 +61,6 @@ export const EVENT_CHAINS = Object.freeze({
   ]),
   'session-start': Object.freeze([
     'control-inbox',
-    'sessionstart-model-sync',
     'sessionstart-prime',
     'persistent-mode',
     'telemetry',
@@ -238,7 +234,6 @@ export function selectEventChain(eventKey, input = '') {
     if (toolName === 'Bash') {
       return ['workflow-route-guard', 'pretooluse-bash', 'git-workflow-guard'];
     }
-    if (toolName === 'Agent') return ['workflow-route-guard', 'agent-model-guard'];
     return [];
   }
 

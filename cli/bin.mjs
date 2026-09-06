@@ -108,7 +108,6 @@ function showHelp() {
     artifact               Toggle global browser completion artifacts
     learn                  Manage bounded global preferences and project lessons
     tools                  Inventory installed agents, skills, hooks, commands, and MCP tools
-    tier                   Explain the explicit configured model tier for a task
     upgrade-defaults       Reapply safe Bizar-owned Claude defaults
     backup                 Create / list / verify / delete backups of BizarHarness state
     restore                Restore BizarHarness from a backup
@@ -136,12 +135,10 @@ function showHelp() {
     hook <name>            Run a portable Claude Code hook
     worktree-merge <branch>  Merge a feature branch with archive tag (no work lost)
     worker <subcommand>      Run an exact-model Claude process worker in a worktree
-    models                 Configure the global model picker and Models.dev metadata
     evidence <subcommand>  Inspect model-routing evidence
     improve <subcommand>   Propose and verify bounded self-edits
     sandbox <subcommand>   Manage local execution sandboxes
     explain-run <id>       Explain a recorded run
-    model                  Deprecated alias for models
 
   Examples:
     bizar install
@@ -452,22 +449,6 @@ async function main() {
       break;
     }
 
-    case 'models': {
-      const mod = await importCommand('models');
-      if (!mod) {
-        console.error(chalk.red(`  ✗ Could not load models command module`));
-        process.exit(EXIT_ERROR);
-        return;
-      }
-      dbg('loaded command module:', 'models');
-      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
-      if (found === false) {
-        console.error(chalk.red(`  ✗ Usage: bizar models [--list|--set|--clear|--json] — run 'bizar models --help'`));
-        process.exit(EXIT_USAGE);
-      }
-      break;
-    }
-
     case 'artifact': {
       const mod = await importCommand('artifact');
       if (!mod) { process.exit(EXIT_ERROR); return; }
@@ -483,7 +464,6 @@ async function main() {
     }
 
     case 'tools':
-    case 'tier':
     case 'upgrade-defaults': {
       const mod = await importCommand(cmd);
       if (!mod) { process.exit(EXIT_ERROR); return; }
@@ -610,29 +590,6 @@ async function main() {
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) {
         console.error(chalk.red(`  ✗ Usage: bizar improve <subcommand> — run 'bizar improve --help'`));
-        process.exit(EXIT_USAGE);
-      }
-      break;
-    }
-
-    case 'model': {
-      // Deprecated alias. Routes to the original `model.mjs` so the
-      // legacy JSON shape (`{ providers: { ... }, total: N }`) and table
-      // output keep working for existing scripts and tests. New code
-      // should use `bizar models` (see `case 'models'`).
-      const mod = await importCommand('model');
-      if (!mod) {
-        console.error(chalk.red(`  ✗ Could not load model command module`));
-        process.exit(EXIT_ERROR);
-        return;
-      }
-      dbg('loaded command module (deprecated alias):', 'model');
-      if (!isHelpRequest) {
-        console.error(chalk.yellow('  ! `bizar model` is deprecated; use `bizar models` for the new picker surface.'));
-      }
-      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
-      if (found === false) {
-        console.error(chalk.red(`  ✗ Usage: bizar model <subcommand> — run 'bizar model --help'`));
         process.exit(EXIT_USAGE);
       }
       break;

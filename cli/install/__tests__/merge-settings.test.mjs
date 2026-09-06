@@ -14,24 +14,17 @@ import { describe, it } from 'node:test';
 const REPO_ROOT = resolve(import.meta.dirname, '../../..');
 const GATEWAY_KEYS = [
   'ANTHROPIC_BASE_URL',
-  'BIZAR_MODEL_ROUTER_URL',
   'ANTHROPIC_AUTH_TOKEN',
   // Prevent an operator's shell environment from leaking into test isolation.
   'CLAUDE_CODE_MAX_CONTEXT_TOKENS',
 ];
 
-function runProductionWriter({ existing, force = false, env = {}, router } = {}) {
+function runProductionWriter({ existing, force = false, env = {} } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'bizar-settings-merge-'));
   const claudeDir = join(home, '.claude');
   const settingsPath = join(claudeDir, 'settings.json');
   mkdirSync(claudeDir, { recursive: true });
   if (existing) writeFileSync(settingsPath, `${JSON.stringify(existing)}\n`);
-  // Router lives under CLAUDE_CONFIG_DIR (~/.claude/model-router.json) — the single
-  // canonical location that both the CLI and Claude Code hooks agree on.
-  if (router) {
-    const routerPath = join(claudeDir, 'model-router.json');
-    writeFileSync(routerPath, `${JSON.stringify(router)}\n`);
-  }
 
   const childEnv = {
     ...process.env,
@@ -65,47 +58,22 @@ describe('writeClaudeSettings gateway environment', () => {
     const settings = runProductionWriter();
     assert.equal(settings.env.BIZAR_HOME.endsWith('/.config/bizar'), true);
     // Bizar ships no default provider. The writer MUST NOT auto-inject
-    // ANTHROPIC_BASE_URL, BIZAR_MODEL_ROUTER_URL, or ANTHROPIC_AUTH_TOKEN.
-    // Operators configure those via their shell environment if they want
-    // a non-default gateway.
+    // ANTHROPIC_BASE_URL or ANTHROPIC_AUTH_TOKEN. Operators configure
+    // those via their shell environment if they want a non-default gateway.
     assert.equal(
       settings.env.ANTHROPIC_BASE_URL,
       undefined,
       'no default gateway URL — operators MUST configure ANTHROPIC_BASE_URL',
     );
     assert.equal(
-      settings.env.BIZAR_MODEL_ROUTER_URL,
-      undefined,
-      'no default router URL — operators MUST configure BIZAR_MODEL_ROUTER_URL',
-    );
-    assert.equal(
       settings.env.ANTHROPIC_AUTH_TOKEN,
       undefined,
       'no default auth token — operators MUST configure ANTHROPIC_AUTH_TOKEN',
     );
-    // Gateway discovery stays absent when no gateway or custom configured
-    // models exist. The writer enables it only for that concrete setup.
-    assert.equal(
-      settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY,
-      undefined,
-      'gateway discovery must stay absent without a configured gateway',
-    );
     assert.equal(settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, '1');
-  });
-
-  it('selected model metadata configures Claude Code context-window enforcement', () => {
-    const settings = runProductionWriter({
-      router: {
-        disabledProviders: [],
-        userSelected: {
-          models: ['provider/long-context'],
-          profiles: { 'provider/long-context': { limits: { contextTokens: 1048576 } } },
-        },
-        tiers: {},
-      },
-    });
-    assert.equal(settings.model, 'provider/long-context');
-    assert.equal(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1048576');
+    // The alias binding is shipped by the writer as the canonical source.
+    assert.equal(settings.model, 'sonnet');
+    assert.ok(settings.modelOverrides, 'modelOverrides must be present');
   });
 
   it('normal updates preserve user values and omit gateway keys that were never set', () => {
@@ -123,27 +91,12 @@ describe('writeClaudeSettings gateway environment', () => {
     assert.equal(settings.env.MY_CUSTOM_VAR, 'kept');
     assert.equal(settings.env.BIZAR_HOME, '/custom/bizar');
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
-    // When the operator has configured a gateway URL via ANTHROPIC_BASE_URL,
-    // the writer mirrors it to BIZAR_MODEL_ROUTER_URL so downstream routers
-    // see a consistent gateway. The writer does NOT auto-inject either key
-    // when no operator URL is configured — see the
-    // "provider-agnostic and omits gateway keys" test above.
-    assert.equal(
-      settings.env.BIZAR_MODEL_ROUTER_URL,
-      'https://gateway.example/v1',
-      'router URL mirrors ANTHROPIC_BASE_URL when the operator has configured a gateway',
-    );
     // ANTHROPIC_AUTH_TOKEN was never set in `existing.env` so the writer
     // MUST NOT auto-inject one.
     assert.equal(
       settings.env.ANTHROPIC_AUTH_TOKEN,
       undefined,
       'no default auth token leaked into the writer output',
-    );
-    assert.equal(
-      settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY,
-      undefined,
-      'production writer must not auto-add the gateway discovery env',
     );
     assert.equal(settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'anthropic/custom-opus');
     assert.equal(settings.permissions.defaultMode, 'ask');
@@ -155,17 +108,15 @@ describe('writeClaudeSettings gateway environment', () => {
       existing: {
         env: {
           ANTHROPIC_BASE_URL: 'https://gateway.example/v1',
-          BIZAR_MODEL_ROUTER_URL: 'https://models.example/v1',
           ANTHROPIC_AUTH_TOKEN: 'user-token',
         },
       },
     });
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
-    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://models.example/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'user-token');
   });
 
-  it('fresh installs use explicit gateway environment and align both URLs', () => {
+  it('fresh installs use explicit gateway environment', () => {
     const settings = runProductionWriter({
       env: {
         ANTHROPIC_BASE_URL: 'https://router.example/v1',
@@ -173,14 +124,7 @@ describe('writeClaudeSettings gateway environment', () => {
       },
     });
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://router.example/v1');
-    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://router.example/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'ambient-token');
-    // Operator env var is preserved when explicitly passed via process.env.
-    assert.equal(
-      settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY,
-      undefined,
-      'gateway discovery env is operator-controlled and not auto-emitted',
-    );
   });
 
   it('force refreshes managed keys without deleting unrelated user env', () => {

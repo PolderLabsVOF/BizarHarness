@@ -38,7 +38,9 @@ test('updates provider env without replacing unrelated settings', () => {
   assert.equal(next.env.KEEP, 'yes');
   assert.equal(next.env.ANTHROPIC_BASE_URL, 'http://local/v1');
   assert.equal(next.env.ANTHROPIC_MODEL, 'model-a');
-  assert.equal(next.env.BIZAR_MODEL_ROUTER_URL, 'http://local/v1');
+  // Legacy BIZAR_MODEL_ROUTER_URL mirror is dropped on update — there is
+  // no separate picker-routing URL anymore.
+  assert.equal(next.env.BIZAR_MODEL_ROUTER_URL, undefined);
   assert.equal(next.env.ANTHROPIC_AUTH_TOKEN, 'secret');
 });
 
@@ -47,7 +49,7 @@ test('redacts provider keys', () => {
   assert.doesNotMatch(redact('sk-ant-1234567890'), /123456/);
 });
 
-test('provider listing recognizes a router-only legacy URL', async () => {
+test('provider listing falls back to Anthropic default when no URL is configured', async () => {
   work = mkdtempSync(join(tmpdir(), 'bizar-provider-'));
   process.env.CLAUDE_CONFIG_DIR = work;
   mkdirSync(work, { recursive: true });
@@ -61,7 +63,9 @@ test('provider listing recognizes a router-only legacy URL', async () => {
   } finally {
     console.log = originalLog;
   }
-  assert.match(writes.join('\n'), /https:\/\/router-only\.example\/v1/);
+  // After the picker removal, the legacy BIZAR_MODEL_ROUTER_URL is no
+  // longer consulted as a gateway URL.
+  assert.match(writes.join('\n'), /Anthropic default/);
 });
 
 test('writes Claude settings and preserves existing hooks', async () => {

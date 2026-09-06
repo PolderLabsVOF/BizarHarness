@@ -43,7 +43,9 @@ export function updateProviderSettings(current, options) {
   const next = { ...current, env: { ...(current.env || {}) } };
   if (options.gateway !== undefined) {
     next.env.ANTHROPIC_BASE_URL = options.gateway;
-    next.env.BIZAR_MODEL_ROUTER_URL = options.gateway;
+    // Legacy compatibility: drop any pre-existing router-URL mirror so the
+    // install surface converges on a single provider URL.
+    delete next.env.BIZAR_MODEL_ROUTER_URL;
   }
   if (options.key !== undefined) next.env.ANTHROPIC_AUTH_TOKEN = options.key;
   if (options.model !== undefined) next.env.ANTHROPIC_MODEL = options.model;
@@ -87,7 +89,7 @@ export async function runSetupProvider(args = []) {
 
   if (options.list) {
     console.log(`  Settings: ${path}`);
-    console.log(`  Gateway: ${current.env?.ANTHROPIC_BASE_URL || current.env?.BIZAR_MODEL_ROUTER_URL || '(Anthropic default)'}`);
+    console.log(`  Gateway: ${current.env?.ANTHROPIC_BASE_URL || '(Anthropic default)'}`);
     console.log(`  Model:   ${current.env?.ANTHROPIC_MODEL || '(Claude Code default)'}`);
     console.log(`  API key: ${redact(current.env?.ANTHROPIC_AUTH_TOKEN || current.env?.ANTHROPIC_API_KEY)}`);
     return { ok: true, path, settings: current };

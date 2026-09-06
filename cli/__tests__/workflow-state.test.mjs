@@ -10,9 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -32,9 +30,6 @@ import {
   startWorkflow as startWorkflowCore,
   validateWorkflowState,
 } from '../core/workflow-state.mjs';
-import { probeAvailableModels } from '../commands/workflow.mjs';
-
-const repoRoot = resolve(dirname(new URL(import.meta.url).pathname), '..', '..');
 
 // Controlled fixture registry — deterministic models, no dependency on the live
 // global router which was moved to ~/.claude/model-router.json (10.23.12).
@@ -101,51 +96,6 @@ function assertCode(code, operation) {
   });
 }
 
-function runWorkflowCli(root, env, args) {
-  return new Promise((resolveResult) => {
-    const child = spawn(
-      process.execPath,
-      [join(repoRoot, 'cli', 'bin.mjs'), 'workflow', ...args, '--project', root, '--json'],
-      { cwd: root, env: { ...process.env, BIZAR_SKIP_BUILD: '1', FORCE_COLOR: '0', ...env } },
-    );
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.on('close', (code) => resolveResult({ status: code, stdout, stderr }));
-  });
-}
-
-async function fakeModelGateway(t, root, modelIds = availableModelIds) {
-  const requests = [];
-  const server = createServer((request, response) => {
-    requests.push({ url: request.url, authorization: request.headers.authorization });
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ data: modelIds.map((id) => ({ id })) }));
-  });
-  await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
-  t.after(() => new Promise((resolveClose) => {
-    server.close(resolveClose);
-    server.closeAllConnections?.();
-  }));
-  const endpoint = `http://127.0.0.1:${server.address().port}/v1`;
-  const registry = structuredClone(testRegistry);
-  registry.endpoint = endpoint;
-  registry.gateway.endpoint = endpoint;
-  const routerPath = join(root, 'model-router.json');
-  writeFileSync(routerPath, JSON.stringify(registry));
-  return {
-    requests,
-    env: {
-      CLAUDE_SESSION_ID: 'cli-session',
-      ANTHROPIC_AUTH_TOKEN: 'workflow-test-token',
-      ANTHROPIC_BASE_URL: endpoint,
-      BIZAR_MODEL_ROUTER_URL: endpoint,
-      BIZAR_MODEL_ROUTER_PATH: routerPath,
-    },
-  };
-}
-
 test('fixed descriptors expose only canonical profiles and stages', () => {
   const descriptor = createWorkflowDescriptor('default');
   assert.deepEqual(descriptor.stages, WORKFLOW_STAGES);
@@ -184,36 +134,6 @@ test('workflow starts snapshot explicit configured models when discovery is unav
   assert.equal(state.assignmentSnapshot.decisions.todd.model, testRegistry.tiers.mid.models[0]);
   assert.equal(Object.isFrozen(state.assignmentSnapshot), true);
   assert.equal(Object.isFrozen(state.assignmentSnapshot.decisions.mike), true);
-});
-
-test('availability probes enforce timeout and exact response ids', async () => {
-  const probeRegistry = structuredClone(testRegistry);
-  probeRegistry.endpoint = 'http://127.0.0.1:1/v1';
-  probeRegistry.gateway.endpoint = 'http://127.0.0.1:1/v1';
-  await assert.rejects(
-    probeAvailableModels({
-      registry: probeRegistry,
-      timeoutMs: 5,
-      fetchImpl: (_url, { signal }) => new Promise((_resolve, reject) => {
-        signal.addEventListener('abort', () => {
-          const error = new Error('aborted');
-          error.name = 'AbortError';
-          reject(error);
-        });
-      }),
-    }),
-    (error) => error instanceof WorkflowStateError && error.code === 'GATEWAY_TIMEOUT',
-  );
-  await assert.rejects(
-    probeAvailableModels({
-      registry: probeRegistry,
-      fetchImpl: async () => ({
-        ok: true,
-        async json() { return { data: [{ id: ' claude-qwen/qwen3.8-max ' }] }; },
-      }),
-    }),
-    (error) => error instanceof WorkflowStateError && error.code === 'GATEWAY_RESPONSE_INVALID',
-  );
 });
 
 test('workflow completes the fixed lifecycle with monotonic revisions', (t) => {
@@ -569,113 +489,3 @@ test('goal and advance evidence are required, bounded, and stored only as digest
   assert.match(advanced.evidenceByStage.research.hash, /^[0-9a-f]{64}$/);
 });
 
-test('CLI probes the strict gateway and emits JSON for the guarded lifecycle', async (t) => {
-  const root = project(t);
-  const gateway = await fakeModelGateway(t, root);
-  const invoke = (...args) => runWorkflowCli(root, gateway.env, args);
-
-  const started = await invoke('start', '--workflow', 'plan-build-qa', '--goal', 'CLI lifecycle');
-  assert.equal(started.status, 0, started.stderr);
-  const startPayload = JSON.parse(started.stdout);
-  assert.equal(startPayload.workflow.stage, 'research');
-  assert.equal(startPayload.workflow.profile, 'plan-build-qa');
-  assert.equal(startPayload.workflow.assignmentSnapshot.runId, startPayload.workflow.runId);
-  assert.equal(gateway.requests.length, 1);
-  assert.equal(gateway.requests[0].url, '/v1/models?limit=1000');
-  assert.equal(gateway.requests[0].authorization, 'Bearer workflow-test-token');
-
-  const status = await invoke('status');
-  assert.equal(status.status, 0, status.stderr);
-  assert.equal(JSON.parse(status.stdout).workflow.runId, startPayload.workflow.runId);
-
-  const advanced = await invoke(
-    'advance',
-    '--run', startPayload.workflow.runId,
-    '--revision', String(startPayload.workflow.revision),
-    '--stage', startPayload.workflow.stage,
-    '--evidence', 'research completed',
-  );
-  assert.equal(advanced.status, 0, advanced.stderr);
-  assert.equal(JSON.parse(advanced.stdout).workflow.stage, 'plan');
-
-  const stale = await invoke(
-    'advance',
-    '--run', startPayload.workflow.runId,
-    '--revision', '1',
-    '--stage', 'research',
-    '--evidence', 'stale evidence',
-  );
-  assert.equal(stale.status, 1);
-  assert.equal(JSON.parse(stale.stderr).error.code, 'STALE_REVISION');
-});
-
-test('CLI accepts matching profile aliases and rejects conflicts before probing', async (t) => {
-  const root = project(t);
-  const gateway = await fakeModelGateway(t, root);
-  gateway.env.CLAUDE_SESSION_ID = 'alias-session';
-  const invoke = (...args) => runWorkflowCli(root, gateway.env, args);
-
-  const matching = await invoke(
-    'start',
-    '--profile', 'default',
-    '--workflow', 'default',
-    '--goal', 'Matching aliases',
-  );
-  assert.equal(matching.status, 0, matching.stderr);
-  assert.equal(JSON.parse(matching.stdout).workflow.profile, 'default');
-
-  const otherRoot = project(t);
-  const conflicting = await runWorkflowCli(
-    otherRoot,
-    { ...gateway.env, CLAUDE_SESSION_ID: 'alias-conflict-session' },
-    [
-      'start',
-      '--profile', 'default', '--workflow', 'plan-build-qa',
-      '--goal', 'Conflicting aliases',
-    ],
-  );
-  assert.equal(conflicting.status, 2);
-  assert.equal(JSON.parse(conflicting.stderr).error.code, 'USAGE');
-  assert.equal(gateway.requests.length, 1, 'conflicting aliases must fail before a network probe');
-});
-
-test('CLI keeps the configured fallback when discovery coordinates are missing or mismatched', async (t) => {
-  const root = project(t);
-  const gateway = await fakeModelGateway(t, root);
-
-  const missing = await runWorkflowCli(root, {
-    ...gateway.env,
-    CLAUDE_SESSION_ID: 'missing-inference-endpoint',
-    ANTHROPIC_BASE_URL: '',
-  }, ['start', '--goal', 'Inherit without an effective inference endpoint']);
-  assert.equal(missing.status, 0, missing.stderr);
-
-  const mismatch = await runWorkflowCli(root, {
-    ...gateway.env,
-    CLAUDE_SESSION_ID: 'mismatched-inference-endpoint',
-    ANTHROPIC_BASE_URL: 'https://other-gateway.example/v1',
-  }, ['start', '--goal', 'Inherit on mismatched inference routing']);
-  assert.equal(mismatch.status, 0, mismatch.stderr);
-
-  const contradiction = await runWorkflowCli(root, {
-    ...gateway.env,
-    CLAUDE_SESSION_ID: 'contradictory-router-endpoint',
-    BIZAR_MODEL_ROUTER_URL: 'https://other-gateway.example/v1',
-  }, ['start', '--goal', 'Inherit on contradictory router routing']);
-  assert.equal(contradiction.status, 0, contradiction.stderr);
-  assert.equal(gateway.requests.length, 0, 'coordinate failures must skip discovery rather than retry');
-});
-
-test('CLI starts only with the configured fallback when discovery returns unrelated models', async (t) => {
-  const root = project(t);
-  const gateway = await fakeModelGateway(t, root, ['unconfigured/provider-model']);
-  gateway.env.CLAUDE_SESSION_ID = 'inherit-session';
-  const result = await runWorkflowCli(root, gateway.env, [
-    'start', '--goal', 'Inherit instead of cycling model aliases',
-  ]);
-  assert.equal(result.status, 0, result.stderr);
-  const paths = resolveWorkflowPaths({ projectRoot: root, sessionId: 'inherit-session' });
-  assert.equal(existsSync(paths.statePath), true);
-  const state = JSON.parse(readFileSync(paths.statePath, 'utf8'));
-  assert.equal(state.assignmentSnapshot.discoveryAttempted, true);
-});
