@@ -34,8 +34,23 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, mkdirSync, writeFileSync, renameSync, rmSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import {
+  existsSync,
+  readFileSync,
+  mkdirSync,
+  writeFileSync,
+  renameSync,
+  rmSync,
+  readdirSync,
+  statSync,
+  openSync,
+  fsyncSync,
+  closeSync,
+  constants as fsConstants,
+} from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+
+const { O_APPEND, O_CREAT, O_WRONLY } = fsConstants;
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /*                       Static alias contract (the four aliases)             */
@@ -172,6 +187,192 @@ export const ARTIFACT_SCHEMA_VERSION = 1;
 export const MAX_SUMMARY_BYTES = 200;
 export const MAX_BARRIER_BYTES = 3072;
 
+/* ────────────────────────────────────────────────────────────────────────── */
+/*             JSONL evidence helpers (F-191 / IMP-018 persistence)           */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * `appendEvidence` / `attachEvidenceOutcome` / `readEvidenceRows` —
+ * JSONL writers and readers for the `bizar evidence ...` CLI surface
+ * and the F-191 dispatch-evidence decision trail.
+ *
+ * Post-cutover these helpers are pure persistence utilities: they do
+ * NOT load profile/health/budget/tier/registry state, do NOT read
+ * `model-router.json`, and do NOT construct `args.routing`. The CLI
+ * reader (`cli/commands/evidence.mjs`) consumes the same line format,
+ * so divergence fails the F-191 e2e test.
+ */
+
+const EVIDENCE_SCHEMA_VERSION = 1;
+
+function resolveEvidenceDir({ cwd = process.cwd(), env = process.env } = {}) {
+  if (env.BIZAR_EVIDENCE_DIR && typeof env.BIZAR_EVIDENCE_DIR === 'string') {
+    return isAbsolute(env.BIZAR_EVIDENCE_DIR) ? env.BIZAR_EVIDENCE_DIR : resolve(cwd, env.BIZAR_EVIDENCE_DIR);
+  }
+  const home = env.BIZAR_HOME || (env.HOME ? `${env.HOME}/.config/bizar` : null);
+  if (!home) return resolve(cwd, '.config', 'bizar', 'evidence');
+  return join(home, 'evidence');
+}
+
+function canonicalize(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(canonicalize);
+  const out = {};
+  for (const key of Object.keys(value).sort()) {
+    out[key] = canonicalize(value[key]);
+  }
+  return out;
+}
+
+function sha256Hex(input) {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+function computeEvidenceHashes({ selectedProfiles, staticProfiles, activeSessionModel, budget, health }) {
+  return {
+    selectedProfilesHash: sha256Hex(JSON.stringify(canonicalize(selectedProfiles ?? []))),
+    staticProfilesHash: sha256Hex(JSON.stringify(canonicalize(staticProfiles ?? []))),
+    activeSessionModel,
+    budgetHash: sha256Hex(JSON.stringify(canonicalize(budget ?? {}))),
+    healthHash: sha256Hex(JSON.stringify(canonicalize(health ?? {}))),
+  };
+}
+
+function readEvidenceFile(filePath) {
+  if (!existsSync(filePath)) return [];
+  const raw = readFileSync(filePath, 'utf8');
+  const rows = [];
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try { rows.push(JSON.parse(trimmed)); } catch { /* skip malformed */ }
+  }
+  return rows;
+}
+
+function appendEvidenceLine(filePath, line) {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    try { mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
+  }
+  let fd = null;
+  try {
+    fd = openSync(filePath, O_APPEND | O_CREAT | O_WRONLY, 0o600);
+    writeFileSync(fd, line, { encoding: 'utf8' });
+    try { fsyncSync(fd); } catch { /* fsync unsupported on some FS */ }
+  } finally {
+    if (fd !== null) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}
+
+function writeEvidenceFile(filePath, rows) {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    try { mkdirSync(dir, { recursive: true }); } catch { /* ignore */ }
+  }
+  const tmp = `${filePath}.tmp`;
+  const body = rows.map((r) => JSON.stringify(r)).join('\n') + (rows.length ? '\n' : '');
+  writeFileSync(tmp, body, { encoding: 'utf8', mode: 0o600 });
+  renameSync(tmp, filePath);
+}
+
+function sameRowContent(existing, next) {
+  const a = JSON.stringify(canonicalize({
+    decision: next.decision,
+    taskFeatures: next.taskFeatures,
+    inputs: computeEvidenceHashes(next),
+  }));
+  const b = JSON.stringify(canonicalize({
+    decision: existing.decision,
+    taskFeatures: existing.taskFeatures,
+    inputs: existing.inputs,
+  }));
+  return a === b;
+}
+
+/**
+ * Append a DispatchEvidence row to the JSONL store. Mirrors the SDK's
+ * `EvidenceStore.append`:
+ *   - schemaVersion=1 stamped server-side;
+ *   - createdAt stamped server-side (default ISO now);
+ *   - sequence number assigned from the existing chain (0 for primary,
+ *     N for follow-up);
+ *   - throws a plain Error on duplicate content.
+ */
+export function appendEvidence(record, opts = {}) {
+  const dir = opts.evidenceDir ?? resolveEvidenceDir();
+  const filePath = join(dir, 'dispatch.jsonl');
+  const now = opts.now ?? (() => new Date());
+  const existing = readEvidenceFile(filePath);
+  const dup = existing.find((row) => row.routingDecisionId === record.routingDecisionId && sameRowContent(row, record));
+  if (dup) {
+    const err = new Error(`DispatchEvidence with routingDecisionId=${record.routingDecisionId} already exists`);
+    err.code = 'duplicate-routingDecisionId';
+    throw err;
+  }
+  const chain = existing.filter((row) => row.routingDecisionId === record.routingDecisionId);
+  const sequence = chain.length;
+  const built = {
+    routingDecisionId: record.routingDecisionId,
+    createdAt: now().toISOString(),
+    schemaVersion: EVIDENCE_SCHEMA_VERSION,
+    decision: record.decision,
+    taskFeatures: record.taskFeatures,
+    inputs: computeEvidenceHashes(record),
+    runId: record.runId,
+    agentName: record.agentName,
+    workflowPhase: record.workflowPhase,
+    sequence,
+    isFollowUp: sequence > 0 ? true : undefined,
+  };
+  appendEvidenceLine(filePath, JSON.stringify(built) + '\n');
+  return built;
+}
+
+/**
+ * Attach an outcome block to the primary (sequence=0) row of a
+ * dispatch chain. Mirrors the SDK's `EvidenceStore.attachOutcome`:
+ * idempotent on identical outcome, throws on conflict.
+ */
+export function attachEvidenceOutcome(routingDecisionId, outcome, opts = {}) {
+  const dir = opts.evidenceDir ?? resolveEvidenceDir();
+  const filePath = join(dir, 'dispatch.jsonl');
+  const now = opts.now ?? (() => new Date());
+  const rows = readEvidenceFile(filePath);
+  const chain = rows.filter((r) => r.routingDecisionId === routingDecisionId);
+  if (chain.length === 0) {
+    const err = new Error(`DispatchEvidence with routingDecisionId=${routingDecisionId} not found`);
+    err.code = 'not-found';
+    throw err;
+  }
+  const primary = chain.find((r) => r.sequence === 0) ?? chain[0];
+  if (primary.outcome) {
+    if (JSON.stringify(canonicalize(primary.outcome)) === JSON.stringify(canonicalize(outcome))) {
+      return primary;
+    }
+    const err = new Error(`Outcome for routingDecisionId=${routingDecisionId} already attached with a different value`);
+    err.code = 'outcome-conflict';
+    throw err;
+  }
+  const idx = rows.findIndex((r) => r.routingDecisionId === routingDecisionId && r.sequence === primary.sequence);
+  const capturedAt = outcome.capturedAt ?? now().toISOString();
+  rows[idx] = { ...primary, outcome: { ...outcome, capturedAt } };
+  writeEvidenceFile(filePath, rows);
+  return rows[idx];
+}
+
+/**
+ * Convenience: read every evidence row back from the JSONL store.
+ * Used by tests + the `evidence run <id>` CLI subcommand.
+ */
+export function readEvidenceRows(opts = {}) {
+  const dir = opts.evidenceDir ?? resolveEvidenceDir();
+  const filePath = join(dir, 'dispatch.jsonl');
+  return readEvidenceFile(filePath);
+}
+
 export function slugify(input, maxLen = 64) {
   const raw = String(input ?? '').toLowerCase();
   const safe = raw.replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, maxLen);
@@ -303,16 +504,25 @@ export function listArtifacts(args) {
   if (!existsSync(runDir)) return [];
   const out = [];
   for (const name of readdirSync(runDir)) {
-    if (!name.endsWith('.json') || name === 'manifest.json') continue;
+    if (!name.endsWith('.json')) continue;
+    if (name === 'manifest.json') continue;
+    if (name.includes('.tmp-')) continue; // orphaned tmp from a crashed write
     const full = join(runDir, name);
-    try {
-      const env = JSON.parse(readFileSync(full, 'utf8'));
-      if (env && typeof env === 'object' && env.phase && env.label) {
-        out.push({ phase: env.phase, label: env.label, artifactPath: full });
-      }
-    } catch {
-      // skip corrupt entries
-    }
+    let stat;
+    try { stat = statSync(full); } catch { continue; }
+    const sep = name.indexOf('__');
+    if (sep < 0) continue;
+    const phase = name.slice(0, sep);
+    const label = name.slice(sep + 2, -('.json'.length));
+    out.push({
+      phase,
+      label,
+      slug: name.slice(0, -'.json'.length),
+      path: full,
+      artifactPath: full,
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+    });
   }
   return out;
 }
