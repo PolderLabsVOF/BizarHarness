@@ -14,11 +14,17 @@ bizar setup-provider --remove-key
 ```
 
 The command edits only `env.ANTHROPIC_BASE_URL`,
-`env.BIZAR_MODEL_ROUTER_URL`, `env.ANTHROPIC_AUTH_TOKEN`, and
-`env.ANTHROPIC_MODEL` in
+`env.ANTHROPIC_AUTH_TOKEN`, and `env.ANTHROPIC_MODEL` in
 `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`).
 All unrelated settings are preserved. It rejects invalid existing JSON
 and never prints a full API key.
+
+Bizar dispatches through four static native aliases (`haiku`, `sonnet`,
+`opus`, `fable`); OmniRoute handles ordered failover between configured
+full IDs for the chosen alias, so the operator does not pick a picker-
+style gateway ID per agent at this layer. `bizar models` was the picker
+that mapped roles to user-selected IDs — that surface is gone; the
+alias set is fixed.
 
 With no arguments it shows help; it does not guess credentials or query
 an untrusted model catalog. A normal `bizar install` provides the safer

@@ -32,8 +32,10 @@ public marketplace entries are third-party code, not an automatic trust grant.
 - `self-improvement` — explicit bounded global preferences and project lessons.
 - `skills-cli` — skill discovery and installation.
 - `providers` — model-provider configuration (provider-agnostic; ships
-  no default gateway; operators configure via $BIZAR_MODEL_ROUTER_URL
-  or $ANTHROPIC_BASE_URL).
+  no default gateway; operators configure via $ANTHROPIC_BASE_URL).
+  Bizar dispatches through four static native aliases (`haiku`,
+  `sonnet`, `opus`, `fable`); OmniRoute handles ordered failover
+  between configured full IDs for the chosen alias.
 - `sdk` — Bizar typed SDK and MCP integration.
 - thinking skills — structured reasoning patterns loaded only when relevant.
 

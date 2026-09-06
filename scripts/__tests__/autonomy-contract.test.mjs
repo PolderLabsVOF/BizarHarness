@@ -164,7 +164,6 @@ test('AUTONOMY_CONTRACT.md cross-references every enforcement surface', () => {
     'pretooluse-editwrite.mjs',
     'simplify-guard.mjs',
     'content-style-guard.mjs',
-    'agent-model-guard.mjs',
     'cli/commands/secure-dir.mjs',
     'packages/sdk/src/learning/behavior-capture.ts',
     'config/claude/hooks/worker-suggest.mjs',

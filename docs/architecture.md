@@ -143,15 +143,16 @@ The Bizar stdio MCP server exposes a fixed tool surface to Claude Code. Tools
 are wrappers around typed SDK primitives (plans, loops, graph queries,
 instincts, decisions) plus an OpenKan-native task tool (the compatibility
 identifier `bizar_task`,
-`bizar_workflow`, `bizar_control`, `bizar_audit`). `bizar_model_list` returns
-ONLY the user-selected models from `model-router.json#userSelected` (plus a
-total-available count for context) — never the raw gateway inventory. This
-prevents dozens of unrelated gateway IDs from flooding the model's context.
+`bizar_workflow`, `bizar_control`, `bizar_audit`). There is no `model-list`
+tool: Bizar dispatches through four static native aliases
+(`haiku`/`sonnet`/`opus`/`fable`) and OmniRoute handles ordered failover
+between configured full IDs for the chosen alias. There is no
+`model-router.json#userSelected` to project into a model-list response.
 
-The MCP server exposes 14 tools: plan actions, loop state, graph query/path,
+The MCP server exposes 13 tools: plan actions, loop state, graph query/path,
 read-only instinct/decision records, and explicit task, workflow, control,
-audit, and model-list boundaries. Tool handlers operate on local files and do
-not call a local HTTP service.
+and audit boundaries. Tool handlers operate on local files and do not call a
+local HTTP service.
 
 ## Autonomy and approval
 
@@ -176,24 +177,19 @@ review, and verification pipeline. Specialized worker matches supplement this
 route but never replace it.
 
 Mike is the sole general orchestrator. Agent roles are model-agnostic: no
-custom agent carries fixed `model:` frontmatter. Before each dispatch Mike
-selects the cheapest sufficient user-selected model from task risk and
-complexity. **Model selection is user-driven, not auto-discovered**: the
-user explicitly enables the IDs they trust via `bizar models`, which writes
-them to the global `$BIZAR_HOME/config/claude/model-router.json#userSelected`
-file. The repository is never a model-policy source. The orchestrator
-dispatches ONLY with IDs in that block; if the block is missing or empty,
-the dispatch fails closed rather than inheriting an unconfigured session model. The
-picker is the discovery surface — live gateway discovery is not required to
-validate user picks (the Agent-model-guard enforces that and bypasses the
-live probe for IDs in `userSelected`). A dispatch is attempted once; Bizar
-does not cycle aliases, providers, or tiers.
-
-Workflow state records only the routing decisions made for requested agents,
-including whether each dispatch used a concrete user-selected candidate or
-inherited the session. The `cx/*`, `claude-qwen/*`, and `claude-minimax/*`
-IDs are optional compatibility-gateway contracts, not permanent properties
-of agent roles.
+custom agent carries fixed `model:` frontmatter, and the harness does not
+maintain a picker. For every dispatch Mike picks ONE of the four static
+native aliases — `haiku`, `sonnet`, `opus`, `fable` — and passes it as the
+native `model` field. **Alias selection is policy-driven, not picker-driven**:
+the alias policy lives in `office-manager.md` and the per-workflow
+`routeModel`; OmniRoute handles ordered failover between configured full
+IDs for the chosen alias. There is no `model-router.json`, no
+`userSelected` block, no `disabledProviders`, and no Agent-model-guard hook;
+the harness does not consult profile / health / budget / tier / registry
+state. Workflow scripts are self-contained and inline their `dispatchAgent`
+wrapper with hard-coded aliases. The `cx/*`, `claude-qwen/*`, and
+`claude-minimax/*` IDs are gone as authoritative selectors — they remain
+only as OmniRoute failover candidates behind the static aliases.
 
 Bizar also installs three native Claude Code dynamic workflows under
 `~/.claude/workflows/`: `ultracode`, `ultracode-review`, and

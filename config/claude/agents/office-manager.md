@@ -38,18 +38,17 @@ version-sensitive claims. Inspect installed skills before hard or specialized
 work; if stuck with no match, search skills.sh and review the candidate before
 proposing installation.
 
-Before every Workflow, Agent, or Agent-team call, read the global Bizar model
-router and construct a small `args.routing` object whose `default`, `medium`,
-and `high` values are explicit enabled configured gateway IDs. Include the
-user's task in the same args object under the workflow's documented task field.
-Use the generated `bizar-models` user agent matching the chosen full gateway
-ID as `subagent_type`, and omit the native Agent `model` parameter entirely.
-That definition's frontmatter owns the full-ID selection for ordinary agents,
-workflows, and teams. Include the raw ID in `additionalContext.bizarConfiguredModel`
-for audit telemetry. Never use `inherit` or an unconfigured provider default.
-`sonnet`, `opus`, `haiku`, and `fable` are compatibility aliases only. If no
-stable Bizar role definition exists, stop and ask the operator to run
-`bizar models`; never omit the stable role type or cycle providers.
+Before every Workflow, Agent, or Agent-team call, pick ONE of the four
+static native aliases — `haiku`, `sonnet`, `opus`, `fable` — and pass it as
+the native `model` field. OmniRoute handles ordered failover between
+configured full IDs for the chosen alias. Do NOT read the global Bizar
+model router, do NOT construct an `args.routing` object, and do NOT pass
+a raw gateway ID. Use the stable Bizar role name (e.g. `greg`, `todd`,
+`linda`, `mike`) as `subagent_type` — agent definitions are alias-agnostic,
+so the harness, not the agent, owns alias selection. Never use `inherit`.
+Include the user's task in the same `args` object under the workflow's
+documented task field. If the alias set is not available, stop and surface
+the configuration error; never cycle aliases or providers.
 
 Invoke the selected workflow by `name` first. If Claude reports that the Bizar
 name is unavailable, resolve the active Claude config directory and retry once
@@ -116,21 +115,23 @@ advancing. Never invent a goal — F-207 is the only authority.
 
 ## Models
 
-For every dispatch, select the cheapest sufficient enabled configured model
-from the global Bizar router. The default selected model is written into each
-stable global Bizar role definition by `bizar models`; `disabledProviders`
-excludes invalid selections. Native aliases are compatibility transport labels
-bound by `bizar models`, not Anthropic selections. Pass the stable role name
-(for example `greg` or `todd`) as `subagent_type` and omit native `model`; the
-definition's `model:` frontmatter selects the full gateway ID. This is the
-default for individual subagents, workflows, and agent-team teammates. Use
-`bizar models --agent-types --json` only for an explicit advanced per-model
-choice. For teams, do not name a competing model in the spawn prompt. Use
-`bizar worker` only when a separately launched process worktree is useful. If
-no enabled configured candidate or stable definition exists, stop with the
-configuration error and run `bizar models`. Never let Claude choose an
-unconfigured default, use an unmapped alias, or retry by cycling models,
-providers, or tiers.
+For every dispatch, pick ONE of the four static native aliases
+(`haiku`, `sonnet`, `opus`, `fable`) and pass it as the native `model`
+field. OmniRoute handles ordered failover between configured full IDs
+for the chosen alias. Alias policy:
+- `haiku` → trivial / cheap micro-edits
+- `sonnet` → ordinary implementation, research, planning lanes
+- `opus` → hard / architectural / adversarial / debug / high-risk review lanes
+- `fable` → explicit Anthropic OpenAI-compat surfaces
+
+Do NOT pass a raw gateway ID (e.g. `claude-minimax/...`, `cx/...`).
+Do NOT read model-router state, user-selected profiles, tier hints,
+or health snapshots. Do NOT construct `args.routing`. Do NOT pass
+`inherit` for the model field. For agent-team teammates, set the
+alias once on the team spawn prompt and do not name a competing model
+per teammate. Every editing worker uses call-level `isolation: "worktree"`.
+If the alias set ever changes, stop and surface the configuration
+error — never retry by cycling aliases or providers.
 
 ## Worktree Discipline and integration
 

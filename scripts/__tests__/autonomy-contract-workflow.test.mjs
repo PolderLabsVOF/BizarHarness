@@ -129,14 +129,23 @@ test('autonomy-contract-workflow: every workflow script routes agent() through d
   assert.deepEqual(failures, [], failures.join('\n'));
 });
 
-test('autonomy-contract-workflow: every workflow script is self-contained with explicit model routing', () => {
+test('autonomy-contract-workflow: every workflow script is self-contained with explicit alias selection', () => {
   const scripts = listWorkflowScripts();
   const failures = [];
   for (const script of scripts) {
     const source = readFileSync(join(workflowsDir, script), 'utf8');
     if (/^\s*import\s/m.test(source)) failures.push(`${script}: native workflow body cannot import modules`);
     if (!/const dispatchAgent\s*=.*agentFn/s.test(source)) failures.push(`${script}: missing self-contained dispatch wrapper`);
-    if (!/model:\s*routeModel\(/.test(source)) failures.push(`${script}: missing explicit configured model`);
+    // Every dispatch payload must select one of the four native aliases
+    // either via a literal string or via `pickAlias(...)`. The harness
+    // owns alias selection; raw gateway IDs and `inherit` are forbidden.
+    if (!/model:\s*(?:'haiku'|'sonnet'|'opus'|'fable')/m.test(source) &&
+        !/pickAlias\s*\(/.test(source)) {
+      failures.push(`${script}: missing explicit alias selection`);
+    }
+    if (/args\.routing/.test(source)) {
+      failures.push(`${script}: args.routing plumbing must not reappear`);
+    }
   }
   assert.deepEqual(failures, [], failures.join('\n'));
 });
