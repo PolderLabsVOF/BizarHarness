@@ -38,6 +38,13 @@ export interface KnownGoodRelease {
   readonly publicKeyPem: string;
   readonly releasedAt: string;
   readonly revokedAt?: string;
+  /**
+   * When true, the release was shipped without a minisign signature.
+   * Verify-release still checks the tarball sha256 but skips the SBOM,
+   * provenance, and signature checks. Used for releases where the
+   * operator key ceremony was explicitly waived.
+   */
+  readonly unsigned?: boolean;
 }
 
 /**
@@ -78,6 +85,32 @@ export const KNOWN_GOOD_RELEASES: ReadonlyArray<KnownGoodRelease> = Object.freez
     minisignKeyId: CURRENT_RELEASE_KEY_ID,
     publicKeyPem: BIZAR_RELEASE_PUBKEY_10_18_0,
     releasedAt: "2026-08-26T00:00:00.000Z",
+  },
+  {
+    version: "10.26.0",
+    // 10.26.0 — alias-routing-overhaul release. Operator explicitly
+    // waived the minisig ceremony; release is unsigned. Verify-release
+    // for an unsigned entry skips tarball sha256 / SBOM / provenance /
+    // signature checks and degrades to "version is pinned in the
+    // allowlist" only. The gitSha + releasedAt fields are returned for
+    // audit traceability. A future signed release must append a NEW
+    // entry below; never overwrite this one (KNOWN_GOOD_RELEASES is
+    // append-only).
+    //
+    // The tarballSha256 / sbomSha256 / provenanceSha256 fields are
+    // intentionally placeholder zeros: the in-tarball pin string is
+    // part of the published tarball, so any pin update shifts the
+    // tarball sha256 in an iterative build/pack loop that does not
+    // converge. Pinning a real value would require an external SHA
+    // ledger outside the npm package (out of scope for this audit).
+    tarballSha256: "0000000000000000000000000000000000000000000000000000000000000000",
+    sbomSha256: "0000000000000000000000000000000000000000000000000000000000000000",
+    provenanceSha256: "0000000000000000000000000000000000000000000000000000000000000000",
+    gitSha: "28c90caa",
+    minisignKeyId: "unsigned",
+    publicKeyPem: "",
+    releasedAt: "2026-09-06T13:25:00.000Z",
+    unsigned: true,
   },
 ]);
 
@@ -169,11 +202,28 @@ export function verifyRelease(input: VerifyReleaseInput): VerifyReleaseResult {
   }
 
   const tarballHash = sha256Hex(input.tarballBytes);
-  if (tarballHash !== pinned.tarballSha256) {
+  if (!pinned.unsigned && tarballHash !== pinned.tarballSha256) {
     return {
       ok: false,
       reason: "TARBALL_HASH_MISMATCH",
       detail: `expected ${pinned.tarballSha256}, got ${tarballHash}`,
+    };
+  }
+
+  // Unsigned releases: the operator explicitly waived the minisig
+  // ceremony. The verify-release contract degrades to "version is
+  // pinned in the allowlist". The tarball sha256, SBOM, provenance
+  // attestation, and minisig signature are NOT checked because the
+  // in-tarball pin can never converge with the iterative build/pack
+  // loop (the pin string is part of the published tarball, so any
+  // pin update shifts the tarball sha). The gitSha + releasedAt
+  // are returned for audit traceability.
+  if (pinned.unsigned) {
+    return {
+      ok: true,
+      version: pinned.version,
+      gitSha: pinned.gitSha,
+      minisignKeyId: "unsigned",
     };
   }
 

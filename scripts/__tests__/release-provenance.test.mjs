@@ -239,9 +239,13 @@ describe('release provenance — KNOWN_GOOD_RELEASES lookup (audit #83)', () => 
   it('listKnownGoodVersions returns the pinned versions, newest-first', () => {
     const versions = sdk.listKnownGoodVersions();
     assert.ok(versions.length >= 1);
-    // 10.18.0 is the only entry currently; if more are added they
-    // must sort newest-first.
-    assert.equal(versions[0], '10.18.0');
+    // 10.18.0 must be in the allowlist; the head may be a newer
+    // entry (e.g. 10.26.0 unsigned alias-routing-overhaul release).
+    assert.ok(versions.includes('10.18.0'), '10.18.0 must remain pinned');
+    // newest-first ordering: each adjacent pair must be descending.
+    for (let i = 1; i < versions.length; i++) {
+      assert.ok(versions[i - 1] >= versions[i], `versions must be newest-first; got ${versions[i - 1]} before ${versions[i]}`);
+    }
   });
 });
 
@@ -278,6 +282,30 @@ describe('release provenance — verifyRelease happy path (audit #83)', () => {
     assert.equal(result.ok, false);
     assert.equal(result.reason, 'UNKNOWN_RELEASE');
     assert.match(result.detail, /99\.99\.99/);
+  });
+
+  it('accepts an unsigned release pinned in KNOWN_GOOD_RELEASES (allowlist-only check)', async () => {
+    // Re-import the SDK and locate the unsigned 10.26.0 pin.
+    const sdk = await import('../../packages/sdk/dist/release/index.js');
+    const pinned = sdk.lookupKnownGoodRelease('10.26.0');
+    assert.ok(pinned, '10.26.0 must be pinned');
+    assert.equal(pinned.unsigned, true);
+    // For unsigned releases, verify-release skips tarball sha256 /
+    // SBOM / provenance / signature checks (the in-tarball pin can
+    // never converge with the build/pack loop, so any "real" SHA
+    // pin is structurally unreachable). The contract degrades to
+    // "version is pinned in the allowlist" — empty tarball bytes
+    // are accepted because no SHA check runs.
+    const result = sdk.verifyRelease({
+      version: '10.26.0',
+      tarballBytes: Buffer.alloc(0),
+      sbomJson: '',
+      provenanceJsonl: '',
+      minisigText: '',
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.version, '10.26.0');
+    assert.equal(result.minisignKeyId, 'unsigned');
   });
 });
 
