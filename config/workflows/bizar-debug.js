@@ -11,36 +11,28 @@ export const meta = {
   ],
 }
 
-const WORKFLOW_INPUT = args && typeof args === 'object' ? args : {}
-const WORKFLOW_ROUTING = WORKFLOW_INPUT.routing && typeof WORKFLOW_INPUT.routing === 'object'
-  ? WORKFLOW_INPUT.routing
-  : {}
-const WORKFLOW_DEFAULT_MODEL = typeof WORKFLOW_INPUT.model === 'string'
-  ? WORKFLOW_INPUT.model.trim()
-  : Array.isArray(WORKFLOW_INPUT.models) && typeof WORKFLOW_INPUT.models[0] === 'string'
-    ? WORKFLOW_INPUT.models[0].trim()
-    : ''
-const routeModel = (risk) => {
-  const candidate = WORKFLOW_ROUTING[risk] || WORKFLOW_ROUTING.default || WORKFLOW_DEFAULT_MODEL
-  if (typeof candidate !== 'string') return ''
-  const selected = candidate.trim()
-  return selected
+const ROLE_TO_BIZAR_AGENT = Object.freeze({
+  'research-analyst': 'greg', planner: 'paul', architect: 'paul', implementer: 'todd',
+  'qa-reviewer': 'linda', reviewer: 'linda', adversarial: 'linda', security: 'linda', qa: 'linda',
+})
+function routeAgentType(role = 'todd') {
+  return ROLE_TO_BIZAR_AGENT[role] || (Object.values(ROLE_TO_BIZAR_AGENT).includes(role) ? role : 'todd')
 }
-const routeAgentType = (_risk, role = 'todd') => ({ 'research-analyst': 'greg', planner: 'paul', architect: 'paul', implementer: 'todd', 'qa-reviewer': 'linda', reviewer: 'linda', adversarial: 'linda', security: 'linda', qa: 'linda' }[role] || role)
-if (!routeModel('medium') || !routeModel('high') || !routeAgentType('medium') || !routeAgentType('high')) {
-  return {
-    status: 'blocked',
-    reason: 'No generated Bizar model-agent mapping was supplied for workflow routing. Run bizar models and retry; provider defaults are prohibited.',
-  }
+// Static alias policy: debug is hard. RCA hypothesis, fix, and
+// verification lanes use `opus`; the loop's refine pass defaults to
+// `sonnet` because it is the cheapest discriminating RCA after the
+// initial hypothesis was rejected. Callers may override with
+// `opts.model` when a lane is explicitly hard.
+function pickAlias(risk) {
+  return risk === 'high' ? 'opus' : 'sonnet'
 }
 let WORKFLOW_DISPATCH_SEQUENCE = 0
 const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
   const sequence = ++WORKFLOW_DISPATCH_SEQUENCE
   const prefix = `[Bizar dispatch ${sequence}: ${agentName}; role=${opts.role || 'worker'}; phase=${opts.phase || 'work'}; label=${opts.label || agentName}]`
   const agentOptions = {
-    subagent_type: routeAgentType(opts.risk || 'medium', opts.role),
-    model: routeModel(opts.risk || 'medium'),
-    effort: opts.risk === 'high' ? 'high' : 'medium',
+    subagent_type: routeAgentType(opts.role),
+    model: opts.model || pickAlias(opts.risk || 'medium'),
   }
   if (opts.schema) agentOptions.schema = opts.schema
   if (opts.isolation) agentOptions.isolation = opts.isolation
@@ -83,7 +75,7 @@ const MAX_ITERATIONS = 3
 const iterations = []
 
 phase('Hypothesis')
-const initial = await dispatchAgent(agent, 'rca-hypothesis', `Root-cause bug ${BUG_ID} with the cheapest discriminating experiment. Return {cause, experiment, predictedOutcome}. Do not propose a fix yet.`, { role: 'research-analyst', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'hypothesis:initial', phase: 'Hypothesis', schema: HYPOTHESIS })
+const initial = await dispatchAgent(agent, 'rca-hypothesis', `Root-cause bug ${BUG_ID} with the cheapest discriminating experiment. Return {cause, experiment, predictedOutcome}. Do not propose a fix yet.`, { role: 'research-analyst', risk: 'medium', model: 'opus', capabilities: ['structured-output', 'reasoning'], label: 'hypothesis:initial', phase: 'Hypothesis', schema: HYPOTHESIS })
 iterations.push(initial)
 
 let accepted = null
@@ -115,7 +107,7 @@ if (!accepted) {
 }
 
 phase('Fix')
-const fix = await dispatchAgent(agent, 'fix-author', `Implement the smallest fix + regression test for bug ${BUG_ID} based on the accepted hypothesis. Edit and test in your isolated worktree. Do not commit, push, publish, or deploy.\n${barrierRef({ runId: RUN_ID, phase: 'Hypothesis', label: 'hypothesis:initial', summary: accepted.hypothesis?.cause ? accepted.hypothesis.cause.slice(0, 200) : 'accepted hypothesis' }).promptBlock}`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'fix', phase: 'Fix', isolation: 'worktree' })
+const fix = await dispatchAgent(agent, 'fix-author', `Implement the smallest fix + regression test for bug ${BUG_ID} based on the accepted hypothesis. Edit and test in your isolated worktree. Do not commit, push, publish, or deploy.\n${barrierRef({ runId: RUN_ID, phase: 'Hypothesis', label: 'hypothesis:initial', summary: accepted.hypothesis?.cause ? accepted.hypothesis.cause.slice(0, 200) : 'accepted hypothesis' }).promptBlock}`, { role: 'implementer', risk: 'medium', model: 'opus', capabilities: ['structured-output', 'reasoning'], label: 'fix', phase: 'Fix', isolation: 'worktree' })
 
 phase('Verify')
 const verify = await dispatchAgent(agent, 'fix-verifier', `Re-check the proposed fix for bug ${BUG_ID} against the regression test and adjacent paths. Reject the fix if it is unbounded, out of scope, or already covered.\n${barrierRef({ runId: RUN_ID, phase: 'Fix', label: 'fix', summary: typeof fix === 'string' ? fix.slice(0, 200) : 'fix artifact' }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: 'fix-verify', phase: 'Verify' })

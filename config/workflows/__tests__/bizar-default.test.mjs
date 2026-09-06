@@ -215,14 +215,11 @@ async function runWorkflow(file, args) {
   const source = loadSource(file);
   const { imports, body } = extractBody(source);
   const bindings = await resolveImports(imports);
-  const routedArgs = {
-    ...(args && typeof args === 'object' ? args : {}),
-    routing: {
-      default: 'provider/default', medium: 'provider/mid', high: 'provider/high',
-      agentTypes: { 'provider/default': { greg: 'greg-default', paul: 'paul-default', todd: 'todd-default', linda: 'linda-default' }, 'provider/mid': { greg: 'greg-mid', paul: 'paul-mid', todd: 'todd-mid', linda: 'linda-mid' }, 'provider/high': { greg: 'greg-high', paul: 'paul-high', todd: 'todd-high', linda: 'linda-high' } },
-    },
-  };
-  const runtime = makeRuntime(routedArgs);
+  // Post-cutover: workflows pick one of the four static aliases
+  // (haiku/sonnet/opus/fable) inline. They no longer accept an
+  // `args.routing` gateway-ID plumbing block from the runtime, so the
+  // test passes the raw `args` through unchanged.
+  const runtime = makeRuntime(args);
   const fn = new Function(
     'args', 'agent', 'pipeline', 'parallel', 'phase', 'log',
     ...Object.keys(bindings),

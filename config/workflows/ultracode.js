@@ -10,36 +10,27 @@ export const meta = {
   ],
 }
 
-const WORKFLOW_INPUT = args && typeof args === 'object' ? args : {}
-const WORKFLOW_ROUTING = WORKFLOW_INPUT.routing && typeof WORKFLOW_INPUT.routing === 'object'
-  ? WORKFLOW_INPUT.routing
-  : {}
-const WORKFLOW_DEFAULT_MODEL = typeof WORKFLOW_INPUT.model === 'string'
-  ? WORKFLOW_INPUT.model.trim()
-  : Array.isArray(WORKFLOW_INPUT.models) && typeof WORKFLOW_INPUT.models[0] === 'string'
-    ? WORKFLOW_INPUT.models[0].trim()
-    : ''
-const routeModel = (risk) => {
-  const candidate = WORKFLOW_ROUTING[risk] || WORKFLOW_ROUTING.default || WORKFLOW_DEFAULT_MODEL
-  if (typeof candidate !== 'string') return ''
-  const selected = candidate.trim()
-  return selected
+const ROLE_TO_BIZAR_AGENT = Object.freeze({
+  'research-analyst': 'greg', planner: 'paul', architect: 'paul', implementer: 'todd',
+  'qa-reviewer': 'linda', reviewer: 'linda', adversarial: 'linda', security: 'linda', qa: 'linda',
+})
+function routeAgentType(role = 'todd') {
+  return ROLE_TO_BIZAR_AGENT[role] || (Object.values(ROLE_TO_BIZAR_AGENT).includes(role) ? role : 'todd')
 }
-const routeAgentType = (_risk, role = 'todd') => ({ 'research-analyst': 'greg', planner: 'paul', architect: 'paul', implementer: 'todd', 'qa-reviewer': 'linda', reviewer: 'linda', adversarial: 'linda', security: 'linda', qa: 'linda' }[role] || role)
-if (!routeModel('medium') || !routeModel('high') || !routeAgentType('medium') || !routeAgentType('high')) {
-  return {
-    status: 'blocked',
-    reason: 'No generated Bizar model-agent mapping was supplied for workflow routing. Run bizar models and retry; provider defaults are prohibited.',
-  }
+// Static alias policy: research and implementation lanes default to
+// `sonnet`. The plan auditor and final verifier escalate to `opus`.
+// Callers may override with `opts.model` for any explicit per-lane
+// escalation.
+function pickAlias(risk) {
+  return risk === 'high' ? 'opus' : 'sonnet'
 }
 let WORKFLOW_DISPATCH_SEQUENCE = 0
 const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
   const sequence = ++WORKFLOW_DISPATCH_SEQUENCE
   const prefix = `[Bizar dispatch ${sequence}: ${agentName}; role=${opts.role || 'worker'}; phase=${opts.phase || 'work'}; label=${opts.label || agentName}]`
   const agentOptions = {
-    subagent_type: routeAgentType(opts.risk || 'medium', opts.role),
-    model: routeModel(opts.risk || 'medium'),
-    effort: opts.risk === 'high' ? 'high' : 'medium',
+    subagent_type: routeAgentType(opts.role),
+    model: opts.model || pickAlias(opts.risk || 'medium'),
   }
   if (opts.schema) agentOptions.schema = opts.schema
   if (opts.isolation) agentOptions.isolation = opts.isolation
@@ -118,6 +109,6 @@ phase('Verify')
 const reviews = await parallel(completed.map((result, index) => () => dispatchAgent(agent, `reviewer-${index + 1}`, `Try to refute this implementation result for task "${TASK}". Check correctness, security, scope, test evidence, and integration assumptions. Return only verified findings and required checks.\n${barrierRef({ runId: RUN_ID, phase: 'Implement', label: `implement:${index + 1}:${lanes[index]?.name || ''}`, summary: `review of lane ${lanes[index]?.name || index + 1}` }).promptBlock}`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: `review:${index + 1}`, phase: 'Verify' })))
 // Phase B: persist review artifacts.
 const verifiedReviews = reviews.filter(Boolean);
-const final = await dispatchAgent(agent, 'final-verifier', `Synthesize a bounded integration and verification report for task "${TASK}". Do not claim success without fresh command evidence. Identify conflicts between worktrees, exact integration order, remaining gates, and any required human approvals.\n${barrierRef({ runId: RUN_ID, phase: 'Design', label: 'barrier', summary: `approved plan with ${approved.lanes.length} lanes` }).promptBlock}\n${barrierRef({ runId: RUN_ID, phase: 'Implement', label: 'implement:summary', summary: `${completed.length} lanes complete` }).promptBlock}\n${barrierRef({ runId: RUN_ID, phase: 'Verify', label: 'review:summary', summary: `${verifiedReviews.length} reviews complete` }).promptBlock}`, { role: 'implementer', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'final-verification', phase: 'Verify' })
+const final = await dispatchAgent(agent, 'final-verifier', `Synthesize a bounded integration and verification report for task "${TASK}". Do not claim success without fresh command evidence. Identify conflicts between worktrees, exact integration order, remaining gates, and any required human approvals.\n${barrierRef({ runId: RUN_ID, phase: 'Design', label: 'barrier', summary: `approved plan with ${approved.lanes.length} lanes` }).promptBlock}\n${barrierRef({ runId: RUN_ID, phase: 'Implement', label: 'implement:summary', summary: `${completed.length} lanes complete` }).promptBlock}\n${barrierRef({ runId: RUN_ID, phase: 'Verify', label: 'review:summary', summary: `${verifiedReviews.length} reviews complete` }).promptBlock}`, { role: 'implementer', risk: 'medium', model: 'opus', capabilities: ['structured-output', 'reasoning'], label: 'final-verification', phase: 'Verify' })
 
 return { status: 'ready-for-integration', task: TASK, research, plan: approved, implementation: completed, reviews: reviews.filter(Boolean), final }

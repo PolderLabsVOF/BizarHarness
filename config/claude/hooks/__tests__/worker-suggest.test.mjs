@@ -108,9 +108,11 @@ for (const prompt of [
     assert.match(context, /Adaptive Bizar routing policy/);
     assert.match(context, /Ask one concise question only/);
     assert.match(context, /Agent teams are the default execution method/);
-    assert.match(context, /default enabled operator-selected gateway ID/);
-    assert.match(context, /stable Bizar role name/);
-    assert.match(context, /OMIT the native `model` field/);
+    assert.match(context, /pick ONE of the four native aliases/);
+    assert.match(context, /`haiku`, `sonnet`, `opus`, `fable`/);
+    assert.match(context, /OmniRoute handles ordered failover/);
+    assert.match(context, /Do NOT pass a raw gateway ID/);
+    assert.match(context, /Do NOT read model-router state/);
     assert.match(context, /isolation: "worktree"/);
   });
 }

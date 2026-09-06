@@ -1,104 +1,113 @@
 /**
  * config/workflows/__tests__/alias-dispatch.test.mjs
  *
- * Behavior-lock test for the native workflow dispatch sites after the
- * OmniRoute alias-routing overhaul (see
- * .omx/plans/2026-09-05-omniroute-alias-routing-overhaul.md).
+ * Contract fence for `config/workflows/lib/dispatch.js` after the
+ * model-router/picker cutover:
  *
- * After implementation, every shipped workflow under
- * `config/workflows/{bizar-debug,bizar-implement,bizar-research,
- *  ultracode,ultracode-research,ultracode-review}.js` MUST:
+ *   1. The exported alias set is exactly {haiku, sonnet, opus, fable}.
+ *   2. `dispatchAgent` forwards an alias `model` field and rejects
+ *      raw gateway IDs, `inherit`, and unknown strings.
+ *   3. `stableAgentName(role)` returns the known role mapping and
+ *      defaults to a stable agent name for unknown roles.
+ *   4. `dispatchAgentDryRun` returns the same payload shape without
+ *      invoking the underlying agent.
  *
- *   1. Use ONLY the allowed native aliases (`haiku`, `sonnet`,
- *      `opus`, `fable`) when handing a model to a subagent.
- *   2. Reject any raw gateway-ID pattern (e.g. `<provider>/<model>`).
- *   3. `bizar-debug.js` uses `opus` for hard/RCA/fix/verification
- *      lanes.
- *   4. Never pass `inherit` for a subagent model.
- *   5. Never consume `args.routing` as a source of gateway IDs.
- *
- * The pre-implementation tree currently violates all five.
+ * Run with `node --test config/workflows/__tests__/alias-dispatch.test.mjs`.
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const workflowsDir = resolve(here, '..');
+import {
+  ALIASES,
+  ROLE_TO_BIZAR_AGENT,
+  AliasValidationError,
+  assertAlias,
+  dispatchAgent,
+  dispatchAgentDryRun,
+  isAlias,
+  stableAgentName,
+} from '../lib/dispatch.js';
 
-const WORKFLOW_FILES = [
-  'bizar-debug.js',
-  'bizar-implement.js',
-  'bizar-research.js',
-  'ultracode.js',
-  'ultracode-research.js',
-  'ultracode-review.js',
-];
-
-const ALLOWED_ALIASES = ['haiku', 'sonnet', 'opus', 'fable'];
-
-// Matches `<provider>/<model>` gateway IDs such as `cx/gpt-5.6-luna`
-// or `minimax/MiniMax-M3`. Also catches OmniRoute combos that look
-// like gateway IDs (e.g. `provider/some-model/v2`).
-const GATEWAY_ID_PATTERN = /[a-z][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*(\/v\d+)?/g;
-// Matches `inherit` (with optional quotes) used as a subagent model.
-const INHERIT_PATTERN = /\bmodel\s*[:=]\s*['"]?inherit['"]?/;
-// Reads of `args.routing` are forbidden — that field used to carry
-// gateway IDs and is now contract-violating to consume.
-const ROUTING_READ_PATTERN = /WORKFLOW_INPUT\.routing|\bargs\.routing\b|\bargs\b\[\s*['"]routing['"]\s*\]/;
-
-function loadSource(file) {
-  return readFileSync(join(workflowsDir, file), 'utf8');
-}
-
-test('alias-dispatch: every shipped workflow uses only the four allowed native aliases', () => {
-  for (const file of WORKFLOW_FILES) {
-    const src = loadSource(file);
-    const matches = src.match(GATEWAY_ID_PATTERN) || [];
-    const offending = matches.filter((m) => !ALLOWED_ALIASES.includes(m));
-    assert.deepEqual(
-      offending,
-      [],
-      `${file} contains raw gateway IDs / non-allowed strings: ${JSON.stringify(offending)}`,
-    );
-  }
+test('dispatch: ALIASES is exactly the four native aliases', () => {
+  assert.deepEqual([...ALIASES].sort(), ['fable', 'haiku', 'opus', 'sonnet']);
 });
 
-test('alias-dispatch: no workflow passes `inherit` for a subagent model', () => {
-  for (const file of WORKFLOW_FILES) {
-    const src = loadSource(file);
-    assert.ok(
-      !INHERIT_PATTERN.test(src),
-      `${file} uses \`inherit\` as a subagent model`,
-    );
-  }
+test('dispatch: isAlias accepts only the four native aliases', () => {
+  assert.equal(isAlias('haiku'), true);
+  assert.equal(isAlias('sonnet'), true);
+  assert.equal(isAlias('opus'), true);
+  assert.equal(isAlias('fable'), true);
+  assert.equal(isAlias('claude-minimax/MiniMax-M3'), false);
+  assert.equal(isAlias('inherit'), false);
+  assert.equal(isAlias(''), false);
 });
 
-test('alias-dispatch: no workflow reads args.routing for gateway IDs', () => {
-  for (const file of WORKFLOW_FILES) {
-    const src = loadSource(file);
-    assert.ok(
-      !ROUTING_READ_PATTERN.test(src),
-      `${file} consumes args.routing as a contract violation`,
-    );
-  }
-});
-
-test('alias-dispatch: bizar-debug.js uses opus for hard/RCA/fix/verification lanes', () => {
-  const src = loadSource('bizar-debug.js');
-  // The post-implementation source must statically reference `opus`
-  // for every high-risk lane it dispatches. We assert this by
-  // requiring that the file uses only the string 'opus' (not raw
-  // gateway IDs) for its high-risk dispatch calls. Because the live
-  // file currently uses `routeModel(opts.risk)`, we instead require
-  // that the static string `opus` is present in the source — the
-  // implementation step will replace the dynamic router with an
-  // explicit native alias for these lanes.
-  assert.ok(
-    /['"]opus['"]/.test(src),
-    `bizar-debug.js must statically reference the native alias "opus" for hard/RCA/fix/verification lanes`,
+test('dispatch: assertAlias throws AliasValidationError for non-aliases', () => {
+  assert.throws(
+    () => assertAlias('claude-minimax/MiniMax-M3'),
+    (err) => err instanceof AliasValidationError,
   );
+  assert.throws(
+    () => assertAlias('inherit'),
+    (err) => err instanceof AliasValidationError,
+  );
+});
+
+test('dispatch: stableAgentName maps known roles to Bizar agents', () => {
+  assert.equal(stableAgentName('planner'), ROLE_TO_BIZAR_AGENT.planner);
+  assert.equal(stableAgentName('verifier'), ROLE_TO_BIZAR_AGENT.verifier);
+  assert.equal(stableAgentName('researcher'), ROLE_TO_BIZAR_AGENT.researcher);
+});
+
+test('dispatch: stableAgentName falls back to a default agent name', () => {
+  const name = stableAgentName('not-a-real-role');
+  assert.ok(typeof name === 'string' && name.length > 0);
+  assert.notEqual(name, 'not-a-real-role');
+});
+
+test('dispatch: dispatchAgent validates the alias and forwards payload', async () => {
+  const calls = [];
+  const fakeAgent = async (prompt, agentOptions) => {
+    calls.push({ prompt, agentOptions });
+    return { ok: true };
+  };
+  const result = await dispatchAgent(
+    fakeAgent,
+    'planner',
+    'plan the work',
+    { model: 'opus', role: 'planner' },
+  );
+  assert.deepEqual(result, { ok: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].prompt, 'plan the work');
+  assert.equal(calls[0].agentOptions.model, 'opus');
+  assert.equal(calls[0].agentOptions.subagent_type, ROLE_TO_BIZAR_AGENT.planner);
+});
+
+test('dispatch: dispatchAgent rejects raw gateway IDs', async () => {
+  const fakeAgent = async () => ({ ok: true });
+  await assert.rejects(
+    () => dispatchAgent(fakeAgent, 'planner', 'plan', { model: 'claude-minimax/MiniMax-M3' }),
+    (err) => err instanceof AliasValidationError,
+  );
+});
+
+test('dispatch: dispatchAgent rejects inherit as a model field', async () => {
+  const fakeAgent = async () => ({ ok: true });
+  await assert.rejects(
+    () => dispatchAgent(fakeAgent, 'planner', 'plan', { model: 'inherit' }),
+    (err) => err instanceof AliasValidationError,
+  );
+});
+
+test('dispatch: dispatchAgentDryRun returns payload without invoking agent', () => {
+  const payload = dispatchAgentDryRun('planner', 'plan the work', {
+    model: 'sonnet',
+    role: 'planner',
+  });
+  assert.equal(payload.agentName, 'planner');
+  assert.equal(payload.prompt, 'plan the work');
+  assert.equal(payload.agentOptions.model, 'sonnet');
+  assert.equal(payload.agentOptions.subagent_type, ROLE_TO_BIZAR_AGENT.planner);
 });

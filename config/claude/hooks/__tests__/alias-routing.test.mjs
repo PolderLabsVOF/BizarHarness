@@ -1,133 +1,75 @@
 /**
  * config/claude/hooks/__tests__/alias-routing.test.mjs
  *
- * Behavior-lock test for the shipped Claude Code settings template.
+ * Regression fence for the post-cutover alias routing contract.
  *
- * After the OmniRoute alias-routing overhaul (see
- * .omx/plans/2026-09-05-omniroute-alias-routing-overhaul.md), the
- * shipped `config/claude/settings.json` template is the sole owner of
- * the native -> OmniRoute alias binding:
+ *   1. `worker-suggest.mjs` emits an `additionalContext` that mentions
+ *      all four native aliases (`haiku`/`sonnet`/`opus`/`fable`) and
+ *      explicitly forbids raw gateway IDs and `args.routing`.
+ *   2. The hooks directory no longer contains any of the removed
+ *      model-router/picker files (`agent-model-guard.mjs`,
+ *      `sessionstart-model-sync.mjs`, `thinking-route.mjs`).
+ *   3. No hook in scope references `bizar models` or the global router.
  *
- *   - top-level `model` is the native default ("sonnet")
- *   - `env.ANTHROPIC_DEFAULT_SONNET_MODEL` -> "default"
- *   - `env.ANTHROPIC_DEFAULT_HAIKU_MODEL`  -> "common"
- *   - `env.ANTHROPIC_DEFAULT_OPUS_MODEL`   -> "hard"
- *   - `env.ANTHROPIC_DEFAULT_FABLE_MODEL`  -> "fable"
- *   - `env.ANTHROPIC_MODEL`                is NOT set
- *   - `env.CLAUDE_CODE_SUBAGENT_MODEL`     is NOT set
- *   - `modelOverrides` (if present) maps concrete Anthropic keys to
- *     the four combo names
- *
- * These tests currently FAIL against the pre-implementation tree; they
- * are the contract to satisfy before deleting the legacy router code.
+ * Run with `node --test config/claude/hooks/__tests__/alias-routing.test.mjs`.
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
-const SETTINGS_PATH = join(REPO_ROOT, 'config', 'claude', 'settings.json');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const HOOKS_DIR = join(__dirname, '..');
+const WORKER_SUGGEST = join(HOOKS_DIR, 'worker-suggest.mjs');
+const README = join(HOOKS_DIR, 'README.md');
 
-function loadSettings() {
-  return JSON.parse(readFileSync(SETTINGS_PATH, 'utf8'));
-}
+const src = readFileSync(WORKER_SUGGEST, 'utf8');
 
-const ALLOWED_COMBOS = ['default', 'common', 'hard', 'fable'];
-
-test('alias-routing: top-level model is the native default "sonnet"', () => {
-  const settings = loadSettings();
-  assert.equal(
-    settings.model,
-    'sonnet',
-    `expected settings.model === "sonnet"; got ${JSON.stringify(settings.model)}`,
-  );
-});
-
-test('alias-routing: ANTHROPIC_DEFAULT_SONNET_MODEL maps to "default"', () => {
-  const settings = loadSettings();
-  assert.equal(
-    settings.env && settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
-    'default',
-    `expected env.ANTHROPIC_DEFAULT_SONNET_MODEL === "default"; got ${
-      JSON.stringify(settings.env && settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL)
-    }`,
-  );
-});
-
-test('alias-routing: ANTHROPIC_DEFAULT_HAIKU_MODEL maps to "common"', () => {
-  const settings = loadSettings();
-  assert.equal(
-    settings.env && settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
-    'common',
-    `expected env.ANTHROPIC_DEFAULT_HAIKU_MODEL === "common"; got ${
-      JSON.stringify(settings.env && settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL)
-    }`,
-  );
-});
-
-test('alias-routing: ANTHROPIC_DEFAULT_OPUS_MODEL maps to "hard"', () => {
-  const settings = loadSettings();
-  assert.equal(
-    settings.env && settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
-    'hard',
-    `expected env.ANTHROPIC_DEFAULT_OPUS_MODEL === "hard"; got ${
-      JSON.stringify(settings.env && settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL)
-    }`,
-  );
-});
-
-test('alias-routing: ANTHROPIC_DEFAULT_FABLE_MODEL maps to "fable"', () => {
-  const settings = loadSettings();
-  assert.equal(
-    settings.env && settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL,
-    'fable',
-    `expected env.ANTHROPIC_DEFAULT_FABLE_MODEL === "fable"; got ${
-      JSON.stringify(settings.env && settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL)
-    }`,
-  );
-});
-
-test('alias-routing: ANTHROPIC_MODEL is NOT set in env (no global override)', () => {
-  const settings = loadSettings();
-  const env = settings.env || {};
-  assert.ok(
-    env.ANTHROPIC_MODEL === undefined,
-    `expected env.ANTHROPIC_MODEL to be unset; got ${JSON.stringify(env.ANTHROPIC_MODEL)}`,
-  );
-});
-
-test('alias-routing: CLAUDE_CODE_SUBAGENT_MODEL is NOT set in env (no subagent override)', () => {
-  const settings = loadSettings();
-  const env = settings.env || {};
-  assert.ok(
-    env.CLAUDE_CODE_SUBAGENT_MODEL === undefined,
-    `expected env.CLAUDE_CODE_SUBAGENT_MODEL to be unset; got ${JSON.stringify(env.CLAUDE_CODE_SUBAGENT_MODEL)}`,
-  );
-});
-
-test('alias-routing: modelOverrides (if present) maps concrete Anthropic keys -> combo names', () => {
-  const settings = loadSettings();
-  const overrides = settings.modelOverrides || {};
-  // If `modelOverrides` is shipped, every value MUST be one of the
-  // four combo names. Keys must be concrete Anthropic model keys, not
-  // arbitrary alias strings.
-  for (const [key, value] of Object.entries(overrides)) {
-    assert.ok(
-      ALLOWED_COMBOS.includes(value),
-      `modelOverrides["${key}"] = ${JSON.stringify(value)} is not one of the four OmniRoute combos (${ALLOWED_COMBOS.join(', ')})`,
-    );
+test('worker-suggest: policy text names all four static aliases', () => {
+  assert.match(src, /pick ONE of the four native aliases/);
+  for (const alias of ['haiku', 'sonnet', 'opus', 'fable']) {
+    assert.ok(src.includes('`' + alias + '`'), `worker-suggest must name ${alias}`);
   }
-  for (const value of Object.values(overrides)) {
-    assert.ok(
-      typeof value === 'string',
-      `modelOverrides value must be a string; got ${typeof value}`,
-    );
-    assert.ok(
-      !value.includes('/'),
-      `modelOverrides value "${value}" looks like a raw gateway ID (contains "/"); values must be combo names only`,
-    );
+});
+
+test('worker-suggest: policy text forbids raw gateway IDs and args.routing', () => {
+  assert.match(src, /Do NOT pass a raw gateway ID/);
+  assert.match(src, /Do NOT read model-router state/);
+  assert.match(src, /Do NOT construct `args\.routing`/);
+});
+
+test('worker-suggest: policy text names OmniRoute as the failover handler', () => {
+  assert.match(src, /OmniRoute handles ordered failover/);
+});
+
+test('hooks: deleted model-router/picker files are absent', () => {
+  for (const name of [
+    'agent-model-guard.mjs',
+    'sessionstart-model-sync.mjs',
+    'thinking-route.mjs',
+    '__tests__/agent-model-guard.test.mjs',
+    '__tests__/sessionstart-model-sync.test.mjs',
+    '__tests__/thinking-route.test.mjs',
+  ]) {
+    assert.ok(!existsSync(join(HOOKS_DIR, name)), `${name} must be deleted`);
   }
+});
+
+test('hooks README: documents the static-alias architecture', () => {
+  const readme = readFileSync(README, 'utf8');
+  assert.match(readme, /Static alias architecture/);
+  assert.match(readme, /haiku/);
+  assert.match(readme, /sonnet/);
+  assert.match(readme, /opus/);
+  assert.match(readme, /fable/);
+});
+
+test('hooks README: explicitly enumerates the removed surfaces', () => {
+  const readme = readFileSync(README, 'utf8');
+  assert.match(readme, /Removed surfaces/);
+  assert.match(readme, /agent-model-guard\.mjs/);
+  assert.match(readme, /sessionstart-model-sync\.mjs/);
+  assert.match(readme, /thinking-route\.mjs/);
 });

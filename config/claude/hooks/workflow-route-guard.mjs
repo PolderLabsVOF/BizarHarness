@@ -89,9 +89,10 @@ process.stdin.on('end', () => {
 
     // Coordination is an orchestrator decision, not a hard-coded tool gate.
     // Instructions require orientation, then a team by default; clarification
-    // is conditional on unresolved material choices. Agent calls are
-    // independently protected by agent-model-guard.mjs. Keeping this hook
-    // advisory avoids trapping valid direct, single-worker, and team plans.
+    // is conditional on unresolved material choices. Model alias selection
+    // is policy-driven via worker-suggest.mjs (static aliases + OmniRoute).
+    // Keeping this hook advisory avoids trapping valid direct, single-worker,
+    // and team plans.
   } catch (error) {
     process.stderr.write(`[bizar.workflow-route] ${error?.message || String(error)}\n`);
   }

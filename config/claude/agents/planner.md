@@ -43,23 +43,26 @@ Every plan you produce MUST follow this shape. The user (or Mike, or any downstr
 
 ## Subagent Model Selection
 
-When you delegate implementation, you recommend the model tier. Read the
-operator-global Bizar router (`$BIZAR_HOME/config/claude/model-router.json`) to confirm.
+When you delegate implementation, you recommend the native alias per the
+static alias policy in `office-manager.md`. The harness picks the alias;
+OmniRoute handles ordered failover between configured full IDs for that
+alias — do not consult the operator-global Bizar router, do not read
+`model-router.json`, and do not pass a raw gateway ID.
 
-| Task shape | Route to | Tier |
+| Task shape | Route to | Alias |
 |---|---|---|
-| Read-only Q&A | `@susan` | mid |
-| Clarifying question | `@janet` | budget |
-| Research | `@greg` | default |
-| Mechanical edits / `.bizar/` | `@brenda` | budget |
-| Mid-complexity impl | `@todd` | mid |
-| Complex impl / architecture | `@karen` | high |
-| Last-resort debug | `@carl` | premium |
-| UI/UX design | `@ria` | mid-design |
-| Brand identity | `@brad` | mid-design |
-| Plan audit | `@linda` | high |
-| Browser E2E | `@kevin` | budget |
-| Git ops | `@steve` | default |
+| Read-only Q&A | `@susan` | `haiku` |
+| Clarifying question | `@janet` | `haiku` |
+| Research | `@greg` | `sonnet` |
+| Mechanical edits / `.bizar/` | `@brenda` | `haiku` |
+| Mid-complexity impl | `@todd` | `sonnet` |
+| Complex impl / architecture | `@karen` | `opus` |
+| Last-resort debug | `@carl` | `opus` |
+| UI/UX design | `@ria` | `sonnet` |
+| Brand identity | `@brad` | `sonnet` |
+| Plan audit | `@linda` | `opus` |
+| Browser E2E | `@kevin` | `haiku` |
+| Git ops | `@steve` | `sonnet` |
 
 Always recommend at least 2 parallel implementation streams when the task is decomposable. See AGENT_BASELINE §8.
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+### Changed
+- **Static four-alias dispatch (cutover from model-router/picker)**
+  — Bizar dispatches through four native Claude Code aliases
+  (`haiku`/`sonnet`/`opus`/`fable`); OmniRoute handles ordered
+  failover between configured full IDs for the chosen alias. The
+  `model-router.json`, `BIZAR_MODEL_ROUTER_URL`, picker-style
+  gateway IDs, and `args.routing` plumbing are gone. Workflow scripts
+  inline their own dispatch wrapper and select the alias via
+  `pickAlias(risk)`; agent definitions stay model-agnostic. Removed
+  `agent-model-guard.mjs`, `sessionstart-model-sync.mjs`,
+  `thinking-route.mjs`, the `bizar models` picker, and their
+  companion tests. New contract tests fence the static-alias surface:
+  `config/claude/hooks/__tests__/alias-routing.test.mjs`,
+  `config/claude/hooks/__tests__/alias-hooks.test.mjs`,
+  `config/workflows/__tests__/alias-dispatch.test.mjs`.
+
 ## [10.24.0] - 2026-09-03
 
 ### Added

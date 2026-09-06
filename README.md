@@ -35,21 +35,22 @@ the project you happen to be working on.
 
 | You want | Bizar provides |
 | --- | --- |
-| A clean way to begin | A guided installer and `bizar models` picker |
-| Your own gateway models | Global selection, full-ID subagent definitions, and native alias mapping |
+| A clean way to begin | A guided installer and a static four-alias dispatch surface |
+| Your own gateway models | Four native aliases (`haiku`/`sonnet`/`opus`/`fable`) with OmniRoute handling ordered failover between configured full IDs |
 | Useful parallel work | Isolated worktrees, scoped tasks, and specialist roles |
 | Fewer surprises | Explicit safety checks for releases, publication, deployment, pushes, and destructive operations |
 | Confidence at the end | Tests, architecture checks, E2E checks, and evidence-aware handoff |
 
 ## Start here
 
-Install Bizar globally, install its Claude Code integration, then choose the
-models you want Bizar to use.
+Install Bizar globally and its Claude Code integration. Bizar dispatches
+through four static native aliases — `haiku`, `sonnet`, `opus`, `fable` —
+and OmniRoute handles ordered failover between configured full IDs for the
+chosen alias, so there is no model picker step.
 
 ```sh
 npm install -g @polderlabs/bizar
 bizar install
-bizar models
 ```
 
 Restart Claude Code after installation. The installer adds Bizar's agents, skills, commands, hooks, settings, and the
@@ -59,19 +60,18 @@ for Bizar and OpenKan, not for the Claude Code CLI.
 It preserves your configured gateway endpoint and credential values during a
 clean reinstall.
 
-On a new interactive install, Bizar also asks for an optional default model,
-whether Claude Code agent teams should be enabled, the OpenKan install
-directory, and whether the current project should receive a `.ok/` workspace.
-OpenKan is installed from npm as `@polderlabs/openkan@latest`; its package-owned
-agent and skill are installed into the same Claude configuration. Use
-`bizar install --yes` for CI or a prompt-free refresh.
+On a new interactive install, Bizar also asks whether Claude Code agent teams
+should be enabled, the OpenKan install directory, and whether the current
+project should receive a `.ok/` workspace. OpenKan is installed from npm as
+`@polderlabs/openkan@latest`; its package-owned agent and skill are
+installed into the same Claude configuration. Use `bizar install --yes` for
+CI or a prompt-free refresh.
 
 For a completely fresh Bizar-managed Claude setup while retaining endpoint and
 authentication settings:
 
 ```sh
 bizar install --force
-bizar models
 ```
 
 Then open any repository in Claude Code and describe the outcome you want.
@@ -107,40 +107,36 @@ foregrounded.
 
 ## Your models, everywhere Bizar dispatches
 
-`bizar models` is the single operator-facing place to select models. It
-discovers candidates from your configured gateway and writes your selections to
-the global model router:
+Bizar dispatches through four static native aliases — `haiku`, `sonnet`,
+`opus`, `fable`. Claude Code's native per-call `model` field accepts one of
+these aliases. OmniRoute handles ordered failover between the configured full
+gateway IDs for the chosen alias, so the operator never picks a picker-style
+gateway ID per agent at this layer. There is no `bizar models` picker, no
+`model-router.json`, no `userSelected` block, and no Agent-model-guard hook.
 
-```text
-~/.claude/model-router.json
-```
+The four aliases are the entire dispatch surface:
 
-The router is never stored in a project directory. Bizar uses the selected
-models for direct subagents, workflows, and agent-team teammates.
+- `haiku` — trivial / cheap micro-edits
+- `sonnet` — ordinary implementation, research, planning lanes
+- `opus` — hard / architectural / adversarial / debug / high-risk review lanes
+- `fable` — explicit Anthropic OpenAI-compat surfaces
+
+Workflow scripts (`config/workflows/*.js`) inline a tiny `dispatchAgent`
+wrapper that picks the alias from a static policy; agent definitions stay
+model-agnostic so the harness, not the agent, owns alias selection.
 
 ```mermaid
 flowchart TD
-    Picker["bizar models"] --> Router["Global model router\n~/.claude/model-router.json"]
-    Router --> Definitions["Global Bizar agent definitions\nfull model ID in frontmatter"]
-    Router --> Aliases["sonnet · opus · haiku · fable\ncompatibility aliases"]
-    Definitions --> Agent["Subagents"]
-    Definitions --> Workflow["Workflow workers"]
-    Definitions --> Team["Agent-team teammates"]
+    Policy["Static alias policy\n(office-manager.md + workflow routeModel)"] --> Aliases["haiku · sonnet · opus · fable"]
+    Aliases --> OmniRoute["OmniRoute ordered failover\nper configured full ID"]
+    OmniRoute --> Agent["Subagents"]
+    OmniRoute --> Workflow["Workflow workers"]
+    OmniRoute --> Team["Agent-team teammates"]
 ```
-
-Claude Code's native per-call model field has a small alias vocabulary. Bizar
-avoids making that vocabulary a limitation: it projects each selected gateway
-model into a global subagent definition whose frontmatter contains the full
-model ID. The agent, workflow, and team routes use that definition. The four
-native aliases are compatibility shortcuts only; they do not enable an
-unselected provider or reduce your selected-model pool to four choices.
 
 Useful inspection commands:
 
 ```sh
-bizar models --list
-bizar models --agent-types --json
-bizar models explain todd
 bizar doctor
 ```
 
@@ -153,9 +149,7 @@ also ships 80 skills for planning, debugging, verification, review,
 worktrees, and implementation practice.
 
 The coordinator selects specialists when their expertise reduces a concrete
-risk. It does not create parallel workers merely to look busy. You can inspect
-the installed specialist definition names through `bizar models --agent-types
---json` and use a relevant Bizar specialist directly when needed.
+risk. It does not create parallel workers merely to look busy.
 
 ```text
 Core coordination                 Specialist coverage
@@ -195,7 +189,7 @@ point where an external or difficult-to-reverse decision belongs to you.
 ├── rules/           focused guidance for common development work
 ├── workflows/       native workflow definitions
 ├── settings.json    Bizar-managed Claude Code integration
-└── model-router.json operator-selected model state
+└── agents/          Bizar agent definitions (alias-agnostic)
 
 ~/.config/bizar/
 ├── installed.json   install record
@@ -217,7 +211,6 @@ plane, background daemon, or general-purpose note vault.
 | `bizar install` | Install or refresh Bizar, OpenKan, and the global Claude configuration |
 | `bizar openkan install` | Refresh the managed `@polderlabs/openkan` npm runtime and its agent/skill |
 | `bizar openkan init` | Initialise `.ok/` planning state in the current project |
-| `bizar models` | Discover and select the models Bizar may dispatch |
 | `bizar doctor` | Diagnose the global installation and provider connectivity |
 | `bizar validate` | Run an install-focused health check |
 | `ok task` | Inspect or coordinate scoped worktree tasks (OpenKan-native) |
