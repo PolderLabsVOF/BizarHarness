@@ -54,11 +54,7 @@ const availableModelIds = [
 ];
 
 function startWorkflow(options) {
-  return startWorkflowCore({
-    availableModelIds,
-    registry: testRegistry,
-    ...options,
-  });
+  return startWorkflowCore(options);
 }
 
 function project(t) {
@@ -113,12 +109,11 @@ test('workflow starts snapshot explicit configured models when discovery is unav
     projectRoot: root,
     sessionId: 'session-inherit',
     goal: 'Use configured model when discovery is unavailable',
-    registry: testRegistry,
     requiredAgents: ['mike'],
   });
-  assert.equal(inherited.assignmentSnapshot.decisions.mike.model, testRegistry.tiers.premium.models[0]);
+  assert.equal(inherited.assignmentSnapshot.decisions.mike.alias, 'opus');
   assert.equal(inherited.assignmentSnapshot.decisions.mike.inheritSession, false);
-  assert.equal(inherited.assignmentSnapshot.decisions.mike.reason, 'configured-tier-fallback');
+  assert.equal(inherited.assignmentSnapshot.decisions.mike.reason, 'static-alias');
 
   const state = startWorkflow({
     projectRoot: root,
@@ -127,11 +122,11 @@ test('workflow starts snapshot explicit configured models when discovery is unav
     requiredAgents: ['mike', 'todd'],
   });
   assert.equal(state.assignmentSnapshot.runId, state.runId);
-  assert.equal(state.assignmentSnapshot.gatewayEndpoint, testRegistry.gateway.endpoint);
-  assert.equal(state.assignmentSnapshot.availabilityProbe, testRegistry.gateway.availabilityProbe);
+  assert.equal(state.assignmentSnapshot.gatewayEndpoint, null);
+  assert.equal(state.assignmentSnapshot.availabilityProbe, null);
   assert.equal(Object.keys(state.assignmentSnapshot.decisions).length, 2);
-  assert.equal(state.assignmentSnapshot.decisions.mike.model, testRegistry.tiers.premium.models[0]);
-  assert.equal(state.assignmentSnapshot.decisions.todd.model, testRegistry.tiers.mid.models[0]);
+  assert.equal(state.assignmentSnapshot.decisions.mike.alias, 'opus');
+  assert.equal(state.assignmentSnapshot.decisions.todd.alias, 'sonnet');
   assert.equal(Object.isFrozen(state.assignmentSnapshot), true);
   assert.equal(Object.isFrozen(state.assignmentSnapshot.decisions.mike), true);
 });
@@ -382,12 +377,11 @@ test('workflow validation accepts configured fallback without discovery evidence
     projectRoot: root,
     sessionId: 'session-1',
     goal: 'Validate configured fallback',
-    registry: testRegistry,
     requiredAgents: ['mike'],
   });
   assert.equal(state.assignmentSnapshot.discoveryAttempted, false);
   assert.equal(state.assignmentSnapshot.decisions.mike.inheritSession, false);
-  assert.equal(state.assignmentSnapshot.decisions.mike.model, testRegistry.tiers.premium.models[0]);
+  assert.equal(state.assignmentSnapshot.decisions.mike.alias, 'opus');
   assert.equal(validateWorkflowState(state, {
     projectRoot: root,
     sessionId: 'session-1',

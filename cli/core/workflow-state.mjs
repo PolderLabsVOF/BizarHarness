@@ -346,6 +346,7 @@ export function validateWorkflowState(state, context) {
     assert(typeof agent === 'string' && agent.length > 0, 'INVALID_STATE', 'routing decision agent is invalid');
     assert(decision && typeof decision === 'object', 'INVALID_STATE', `routing decision for ${agent} is invalid`);
     assert(typeof decision.tier === 'string' && decision.tier.length > 0, 'INVALID_STATE', `routing tier for ${agent} is invalid`);
+    assert(['haiku', 'sonnet', 'opus', 'fable'].includes(decision.alias), 'INVALID_STATE', `alias for ${agent} is not a static native alias`);
     assert(decision.model === null || (typeof decision.model === 'string' && decision.model.length > 0), 'INVALID_STATE', `routing model for ${agent} is invalid`);
     assert(typeof decision.inheritSession === 'boolean', 'INVALID_STATE', `routing inheritance for ${agent} is invalid`);
   }
@@ -400,9 +401,7 @@ export function startWorkflow({
   sessionId,
   profile = 'default',
   goal,
-  availableModelIds,
-  registry,
-  requiredAgents,
+  requiredAgents = [],
   now = new Date(),
 }) {
   const paths = resolveWorkflowPaths({ projectRoot, sessionId });
@@ -415,8 +414,6 @@ export function startWorkflow({
     assignmentSnapshot = createRunAssignmentSnapshot({
       runId,
       agentNames: requiredAgents,
-      availableModelIds,
-      registry,
       createdAt: now.toISOString(),
     });
   } catch (error) {
