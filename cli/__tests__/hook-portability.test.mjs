@@ -125,7 +125,7 @@ test('ownership merge removes stale Bizar hooks while preserving foreign handler
   const existing = {
     UserPromptSubmit: [{ hooks: [
       foreign,
-      { type: 'command', command: 'node "$CLAUDE_PROJECT_DIR/.claude/hooks/thinking-route.mjs"' },
+      { type: 'command', command: 'node "$CLAUDE_PROJECT_DIR/.claude/hooks/worker-suggest.mjs"' },
       { type: 'command', command: 'bizar hook user-prompt-submit' },
     ] }],
     CustomEvent: [{ matcher: 'x', hooks: [foreign] }],

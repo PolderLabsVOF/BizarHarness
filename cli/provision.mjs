@@ -612,7 +612,6 @@ export function installGitHooks({ dryRun = false } = {}) {
 const LEGACY_BIZAR_HOOK_FILES = new Set([
   'advisor-context.mjs',
   'agent-grounding.mjs',
-  'agent-model-guard.mjs',
   'auto-instinct.sh',
   'content-style-guard.mjs',
   'control-inbox.mjs',
@@ -632,7 +631,6 @@ const LEGACY_BIZAR_HOOK_FILES = new Set([
   'sessionstart-prime.mjs',
   'simplify-guard.mjs',
   'telemetry.mjs',
-  'thinking-route.mjs',
   'verify-deliverables.mjs',
   'worker-suggest.mjs',
   'workflow-route-guard.mjs',

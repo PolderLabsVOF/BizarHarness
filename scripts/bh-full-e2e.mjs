@@ -140,7 +140,6 @@ check('skill mirror', JSON.stringify(canonicalSkills) === JSON.stringify(mirrore
 
 const requiredHooks = [
   'agent-grounding.mjs',
-  'agent-model-guard.mjs',
   'advisor-context.mjs',
   'bizar-hook-wrapper.sh',
   'control-inbox.mjs',
@@ -156,12 +155,10 @@ const requiredHooks = [
   'pretooluse-bash.mjs',
   'pretooluse-editwrite.mjs',
   'sessionend-recall.mjs',
-  'sessionstart-model-sync.mjs',
   'sessionstart-prime.mjs',
   'simplify-guard.mjs',
   'team-lifecycle.mjs',
   'telemetry.mjs',
-  'thinking-route.mjs',
   'verify-deliverables.mjs',
   'worker-suggest.mjs',
   'workflow-route-guard.mjs',
@@ -179,7 +176,6 @@ const requiredTools = [
   'graph_query', 'graph_path',
   'list_instincts', 'list_decisions',
   'bizar_task', 'bizar_workflow', 'bizar_control', 'bizar_audit',
-  'bizar_model_list',
 ];
 const { BIZAR_TOOLS } = await import('../packages/sdk/dist/mcp/server.js');
 const toolNames = new Set(BIZAR_TOOLS.map((tool) => tool.name));

@@ -80,7 +80,6 @@ export const REQUIRED_HOOKS = [
   'simplify-guard.mjs',
   'team-lifecycle.mjs',
   'telemetry.mjs',
-  'thinking-route.mjs',
   'verify-deliverables.mjs',
   'worker-suggest.mjs',
   'workflow-route-guard.mjs',

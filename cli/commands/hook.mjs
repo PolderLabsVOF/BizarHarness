@@ -41,7 +41,6 @@ export const HOOK_PROGRAMS = Object.freeze({
   'sessionstart-prime': 'sessionstart-prime.mjs',
   'simplify-guard': 'simplify-guard.mjs',
   telemetry: 'telemetry.mjs',
-  'thinking-route': 'thinking-route.mjs',
   'team-lifecycle': 'team-lifecycle.mjs',
   'verify-deliverables': 'verify-deliverables.mjs',
   'worker-suggest': 'worker-suggest.mjs',
@@ -56,7 +55,6 @@ export const EVENT_CHAINS = Object.freeze({
     'keyword-router',
     'workflow-route-guard',
     'worker-suggest',
-    'thinking-route',
     'telemetry',
   ]),
   'session-start': Object.freeze([
