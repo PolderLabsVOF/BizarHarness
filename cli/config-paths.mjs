@@ -14,18 +14,6 @@ export function resolveBizarHome({ env = process.env, cwd = process.cwd() } = {}
   return join(home, '.config', 'bizar');
 }
 
-export function resolveGlobalModelRouter(options = {}) {
-  const { env = process.env, cwd = process.cwd() } = options;
-  const override = typeof env.BIZAR_MODEL_ROUTER_CONFIG === 'string'
-    ? env.BIZAR_MODEL_ROUTER_CONFIG.trim()
-    : '';
-  if (override) return isAbsolute(override) ? override : resolve(cwd, override);
-  // Claude Code reads hooks, agents, skills, and model-router from ~/.claude/.
-  // Use ~/.claude/model-router.json as the single canonical location so the
-  // hook and the CLI always agree on the same file.
-  return join(resolveClaudeConfigDir({ env, cwd }), 'model-router.json');
-}
-
 export function resolveGlobalLearningDir(options = {}) {
   return join(resolveBizarHome(options), 'learning');
 }

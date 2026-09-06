@@ -10,8 +10,6 @@ import {
   resumeWorkflow,
   startWorkflow,
 } from '../core/workflow-state.mjs';
-import { loadModelRouter } from '../../config/agents/model-assignment.mjs';
-import { resolveGlobalModelRouter } from '../config-paths.mjs';
 
 const DEFAULT_PROBE_TIMEOUT_MS = 3_000;
 
@@ -21,96 +19,15 @@ function normalizeEndpoint(value) {
   return normalized || null;
 }
 
-function requireEffectiveInferenceEndpoint(registry, env = process.env) {
-  const configuredEndpoint = normalizeEndpoint(registry?.gateway?.endpoint);
+function requireEffectiveInferenceEndpoint(env = process.env) {
   const inferenceEndpoint = normalizeEndpoint(env.ANTHROPIC_BASE_URL);
   if (!inferenceEndpoint) {
     throw new WorkflowStateError(
       'INFERENCE_ENDPOINT_REQUIRED',
-      `workflow start requires ANTHROPIC_BASE_URL=${registry?.gateway?.endpoint || '<configured gateway>'}`,
+      'workflow start requires ANTHROPIC_BASE_URL to point at the inference gateway',
     );
   }
-  if (inferenceEndpoint !== configuredEndpoint) {
-    throw new WorkflowStateError(
-      'INFERENCE_ENDPOINT_MISMATCH',
-      `ANTHROPIC_BASE_URL must match the configured workflow gateway ${registry.gateway.endpoint}`,
-    );
-  }
-  const routerEndpointValue = env.BIZAR_MODEL_ROUTER_URL;
-  if (typeof routerEndpointValue === 'string' && routerEndpointValue !== '') {
-    const routerEndpoint = normalizeEndpoint(routerEndpointValue);
-    if (!routerEndpoint || routerEndpoint !== configuredEndpoint) {
-      throw new WorkflowStateError(
-        'INFERENCE_ENDPOINT_MISMATCH',
-        `BIZAR_MODEL_ROUTER_URL must not contradict the configured workflow gateway ${registry.gateway.endpoint}`,
-      );
-    }
-  }
-}
-
-function probeUrl(registry) {
-  const endpoint = registry?.gateway?.endpoint;
-  const probe = registry?.gateway?.availabilityProbe;
-  if (typeof endpoint !== 'string' || !endpoint || typeof probe !== 'string' || !probe) {
-    throw new WorkflowStateError(
-      'MODEL_REGISTRY_INVALID',
-      'model registry requires gateway.endpoint and gateway.availabilityProbe',
-    );
-  }
-  return `${endpoint.replace(/\/+$/, '')}/${probe.replace(/^\/+/, '')}?limit=1000`;
-}
-
-export async function probeAvailableModels({
-  registry,
-  fetchImpl = globalThis.fetch,
-  authToken = process.env.ANTHROPIC_AUTH_TOKEN || process.env.BIZAR_MODEL_ROUTER_TOKEN,
-  timeoutMs = DEFAULT_PROBE_TIMEOUT_MS,
-} = {}) {
-  if (typeof fetchImpl !== 'function') {
-    throw new WorkflowStateError('GATEWAY_UNAVAILABLE', 'this Node runtime has no fetch implementation');
-  }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const headers = { Accept: 'application/json' };
-    if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    const response = await fetchImpl(probeUrl(registry), {
-      method: 'GET',
-      headers,
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new WorkflowStateError(
-        'GATEWAY_UNAVAILABLE',
-        `model availability probe returned HTTP ${response.status}`,
-      );
-    }
-    let payload;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new WorkflowStateError('GATEWAY_RESPONSE_INVALID', 'model availability probe returned invalid JSON');
-    }
-    if (!payload || !Array.isArray(payload.data)) {
-      throw new WorkflowStateError('GATEWAY_RESPONSE_INVALID', 'model availability response must contain a data array');
-    }
-    const ids = payload.data.map((entry) => entry?.id);
-    if (ids.some((id) => typeof id !== 'string' || !id || id.trim() !== id)) {
-      throw new WorkflowStateError('GATEWAY_RESPONSE_INVALID', 'model availability response contains an invalid exact model id');
-    }
-    if (new Set(ids).size !== ids.length) {
-      throw new WorkflowStateError('GATEWAY_RESPONSE_INVALID', 'model availability response contains duplicate model ids');
-    }
-    return ids;
-  } catch (error) {
-    if (error instanceof WorkflowStateError) throw error;
-    if (error?.name === 'AbortError') {
-      throw new WorkflowStateError('GATEWAY_TIMEOUT', `model availability probe timed out after ${timeoutMs}ms`);
-    }
-    throw new WorkflowStateError('GATEWAY_UNAVAILABLE', `model availability probe failed: ${error?.message || String(error)}`);
-  } finally {
-    clearTimeout(timeout);
-  }
+  return inferenceEndpoint;
 }
 
 function parseFlags(args) {
@@ -118,7 +35,7 @@ function parseFlags(args) {
   const values = new Set([
     '--profile', '--workflow', '--mode', '--project', '--session', '--session-id',
     '--run', '--run-id', '--revision', '--expected-revision', '--stage', '--expected-stage',
-    '--reason', '--goal', '--evidence', '--router',
+    '--reason', '--goal', '--evidence',
   ]);
   // Boolean flags take no value. Long flags use the kebab->camel key;
   // short flags carry an explicit key mapping.
@@ -162,7 +79,6 @@ function showHelp() {
   Common flags:
     --project <path>    Project root (defaults to the current directory)
     --session <id>      Claude session id (defaults to CLAUDE_SESSION_ID)
-    --router <path>     Strict model router registry (defaults to the shipped registry)
     --mode <name>       Routing hint for start (ralplan routes to the 8-step consensus protocol)
     --deliberate        Force the pre-mortem round on a ralplan-shaped workflow
     --advisory          Run the protocol without enforced gates (observability only)
@@ -286,24 +202,22 @@ export async function run(name, args, isHelpRequest) {
           '--mode cannot be combined with --profile or --workflow; --mode owns the routing hint',
         );
       }
-      const registry = loadModelRouter(
-        flags.router || process.env.BIZAR_MODEL_ROUTER_PATH || resolveGlobalModelRouter(),
-      );
-      let availableModelIds;
+      // The picker/router is gone; workflows no longer probe a model list
+      // or load a model-router registry. Native Claude Code resolves the
+      // alias via the four ANTHROPIC_DEFAULT_*_MODEL env vars shipped in
+      // config/claude/settings.json. We still require ANTHROPIC_BASE_URL
+      // so an operator without a gateway cannot silently inherit a
+      // provider default.
       try {
-        requireEffectiveInferenceEndpoint(registry);
-        availableModelIds = await probeAvailableModels({ registry });
-      } catch {
-        // Discovery is optional; the resolver still supplies an explicit
-        // enabled configured-tier model. Never inherit a provider default.
-        availableModelIds = undefined;
+        requireEffectiveInferenceEndpoint();
+      } catch (error) {
+        if (!(error instanceof WorkflowStateError)) throw error;
+        throw error;
       }
       state = startWorkflow({
         ...ctx,
         profile: routing.profile,
         goal: flags.goal,
-        registry,
-        availableModelIds,
       });
       if (routing.routing.mode !== null && !flags.json) {
         // Surface the routing hint in human mode. In JSON mode the

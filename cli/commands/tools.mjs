@@ -15,7 +15,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { resolveClaudeConfigDir, resolveGlobalModelRouter } from '../config-paths.mjs';
+import { resolveClaudeConfigDir } from '../config-paths.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, '..', '..');
 const CLAUDE_DIR = resolveClaudeConfigDir();
@@ -80,8 +80,6 @@ export async function runTools(cmdArgs) {
 
   const settingsPath = join(CLAUDE_DIR, 'settings.json');
   const hasSettings = existsSync(settingsPath);
-  const modelRouterPath = resolveGlobalModelRouter();
-  const hasModelRouter = existsSync(modelRouterPath);
 
   const summary = {
     userLevel: CLAUDE_DIR,
@@ -92,7 +90,6 @@ export async function runTools(cmdArgs) {
     wiredCommands,
     mcpTools,
     settings: { path: settingsPath, present: hasSettings },
-    modelRouter: { path: modelRouterPath, present: hasModelRouter },
   };
 
   if (asJson) {
@@ -118,8 +115,24 @@ export async function runTools(cmdArgs) {
   section(`wired bizar commands (${wiredCommands.length})`, wiredCommands.map((c) => 'bizar ' + c));
   console.log(chalk.bold('\n  settings'));
   console.log(`    ${hasSettings ? '✓' : '✗'} ${settingsPath}`);
-  console.log(chalk.bold('  model-router'));
-  console.log(`    ${hasModelRouter ? '✓' : '✗'} ${modelRouterPath}`);
+  if (hasSettings) {
+    try {
+      const parsed = JSON.parse(readFileSync(settingsPath, 'utf8'));
+      const env = (parsed && parsed.env) || {};
+      const aliases = {
+        sonnet: env.ANTHROPIC_DEFAULT_SONNET_MODEL,
+        haiku: env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+        opus: env.ANTHROPIC_DEFAULT_OPUS_MODEL,
+        fable: env.ANTHROPIC_DEFAULT_FABLE_MODEL,
+      };
+      console.log(chalk.bold('  alias map'));
+      for (const [key, value] of Object.entries(aliases)) {
+        console.log(`    ${key.padEnd(8)} → ${value || '(unset)'}`);
+      }
+      const model = parsed?.model;
+      if (model) console.log(chalk.dim(`    default model: ${model}`));
+    } catch { /* ignore malformed settings */ }
+  }
 }
 
 export async function run(name, args, isHelpRequest) {

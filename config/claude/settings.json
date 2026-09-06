@@ -70,9 +70,20 @@
   "workflowSizeGuideline": "small",
   "disableAutoCompact": false,
   "autoDreamEnabled": true,
+  "model": "sonnet",
+  "modelOverrides": {
+    "claude-sonnet-5": "default",
+    "claude-haiku-4-5-20251001": "common",
+    "claude-opus-5": "hard",
+    "claude-fable-5": "fable"
+  },
   "env": {
     "BIZAR_HOME": "${HOME}/.config/bizar",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "default",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "common",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "hard",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "fable"
   },
   "hooks": {
     "UserPromptSubmit": [

@@ -26,8 +26,7 @@ import chalk from 'chalk';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { resolveBizarHome, resolveClaudeConfigDir, resolveGlobalModelRouter } from '../config-paths.mjs';
-import { configuredEnabledModels, listModels, resolveEndpoint } from './models.mjs';
+import { resolveBizarHome, resolveClaudeConfigDir } from '../config-paths.mjs';
 
 function claudeDir() { return resolveClaudeConfigDir(); }
 function bizarHome() { return resolveBizarHome(); }
@@ -54,9 +53,13 @@ export const REQUIRED_COMMANDS = [
 ];
 
 // v6.3.0 — Claude Code hook adapter scripts (executable, .mjs extension).
+// OmniRoute alias-routing overhaul (10.25.x): `agent-model-guard.mjs` and
+// `sessionstart-model-sync.mjs` are removed from active registration AND
+// from required-hook validation. Settings.json's model + modelOverrides
+// is the sole alias binding; native Claude Code validates the alias/model
+// setting on its own.
 export const REQUIRED_HOOKS = [
   'agent-grounding.mjs',
-  'agent-model-guard.mjs',
   'advisor-context.mjs',
   'bizar-hook-wrapper.sh',
   'completion-artifact.mjs',
@@ -73,7 +76,6 @@ export const REQUIRED_HOOKS = [
   'pretooluse-bash.mjs',
   'pretooluse-editwrite.mjs',
   'sessionend-recall.mjs',
-  'sessionstart-model-sync.mjs',
   'sessionstart-prime.mjs',
   'simplify-guard.mjs',
   'team-lifecycle.mjs',
@@ -350,22 +352,27 @@ const CHECKS = {
   },
 
   'provider-reachable': async () => {
-    const { endpoint, authToken } = resolveEndpoint();
-    if (!endpoint) {
-      const path = resolveGlobalModelRouter();
-      const router = readJsonSafe(path);
-      const fallback = router ? configuredEnabledModels(router) : [];
-      if (fallback.length === 0) {
-        throw new Error(`no gateway URL or enabled configured model in ${path}; implicit defaults are prohibited`);
-      }
-      return `no gateway URL; explicit configured fallback is ${fallback[0]}`;
+    // The picker/router is gone. Provider reachability is the operator's
+    // concern — Claude Code (or any HTTP client) probes its own gateway.
+    // We only confirm an operator-configured gateway URL is present and
+    // that the four alias env vars map to the four OmniRoute combos.
+    const path = settingsJsonPath();
+    const settings = readJsonSafe(path);
+    const env = (settings && typeof settings === 'object' && settings.env) || {};
+    const aliasMap = {
+      sonnet: env.ANTHROPIC_DEFAULT_SONNET_MODEL,
+      haiku: env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+      opus: env.ANTHROPIC_DEFAULT_OPUS_MODEL,
+      fable: env.ANTHROPIC_DEFAULT_FABLE_MODEL,
+    };
+    const missing = Object.entries(aliasMap).filter(([, v]) => typeof v !== 'string' || !v.trim()).map(([k]) => k);
+    if (missing.length > 0) {
+      throw new Error(`alias env map missing entries in ${path}: ${missing.join(', ')}`);
     }
-    try {
-      const models = await listModels({ endpoint, authToken, timeoutMs: 4000 });
-      return `provider reachable at ${endpoint} (${models.length} models)`;
-    } catch (err) {
-      throw new Error(`provider at ${endpoint} unreachable: ${err.message ?? err}`);
-    }
+    const endpoint = env.ANTHROPIC_BASE_URL;
+    return endpoint
+      ? `provider gateway configured at ${endpoint}; aliases: sonnet→${aliasMap.sonnet}, haiku→${aliasMap.haiku}, opus→${aliasMap.opus}, fable→${aliasMap.fable}`
+      : `no gateway URL configured; default provider is Anthropic; aliases: sonnet→${aliasMap.sonnet}, haiku→${aliasMap.haiku}, opus→${aliasMap.opus}, fable→${aliasMap.fable}`;
   },
 
   'claude-md-mirrored': async () => {

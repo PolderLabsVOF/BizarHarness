@@ -88,7 +88,6 @@ function freshFixture() {
     env: {
       ANTHROPIC_BASE_URL: 'https://router.example/v1',
       ANTHROPIC_AUTH_TOKEN: 'op-secret-token',
-      BIZAR_MODEL_ROUTER_URL: 'https://router.example/v1',
       BIZAR_HOME: bizarHome,
       MY_USER_VAR: 'kept-on-disk',
     },
@@ -277,7 +276,6 @@ test('forceCleanInstall stashes ANTHROPIC_* and BIZAR_* into BIZAR_SAVED_ENV', a
     const stash = JSON.parse(process.env.BIZAR_SAVED_ENV);
     assert.equal(stash.ANTHROPIC_BASE_URL, 'https://router.example/v1');
     assert.equal(stash.ANTHROPIC_AUTH_TOKEN, 'op-secret-token');
-    assert.equal(stash.BIZAR_MODEL_ROUTER_URL, 'https://router.example/v1');
     assert.ok(stash.BIZAR_HOME, 'BIZAR_HOME must be stashed');
     // MY_USER_VAR is intentionally NOT in the preserve set.
     assert.equal(stash.MY_USER_VAR, undefined, 'non-preserve env keys must NOT leak into stash');
@@ -369,7 +367,6 @@ test('force + writeClaudeSettings: template emits empty allow + operator env sta
     // F-183 — operator env was merged back from the stash.
     assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://router.example/v1');
     assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'op-secret-token');
-    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://router.example/v1');
     assert.ok(settings.env.BIZAR_HOME, 'BIZAR_HOME must be present in re-emitted settings');
   } finally { cleanupFixture(home); }
 });
@@ -519,7 +516,7 @@ test('FORCE_CLEAN_PRESERVE_ENV_KEYS is a non-empty frozen list with the canonica
   assert.ok(Array.isArray(FORCE_CLEAN_PRESERVE_ENV_KEYS));
   assert.ok(FORCE_CLEAN_PRESERVE_ENV_KEYS.length > 0);
   assert.ok(Object.isFrozen(FORCE_CLEAN_PRESERVE_ENV_KEYS), 'preserve-set must be frozen');
-  for (const key of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'BIZAR_MODEL_ROUTER_URL', 'BIZAR_HOME']) {
+  for (const key of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'BIZAR_HOME']) {
     assert.ok(
       FORCE_CLEAN_PRESERVE_ENV_KEYS.includes(key),
       `FORCE_CLEAN_PRESERVE_ENV_KEYS must include ${key}`,

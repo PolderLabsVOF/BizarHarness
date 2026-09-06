@@ -128,65 +128,18 @@ test('provisioner reports the root package version', async () => {
   assert.equal(BIZAR_VERSION, pkg.version);
 });
 
-test('configured model metadata supplies Claude Code context-window enforcement', async () => {
-  const { configuredModelContextTokens } = await import('./provision.mjs');
-  const router = { userSelected: { profiles: { 'provider/model': { limits: { contextTokens: 1048576 } } } } };
-  assert.equal(configuredModelContextTokens(router, 'provider/model'), 1048576);
-  assert.equal(configuredModelContextTokens(router, 'provider/missing'), undefined);
-});
-
-test('recognized Claude override keys retain configured gateway values', async () => {
-  const { buildClaudeModelOverrides, CLAUDE_MODEL_OVERRIDE_KEYS } = await import('./commands/models.mjs');
-  const ids = ['cx/gpt-5.6-luna', 'minimax/MiniMax-M3'];
-  const mapped = buildClaudeModelOverrides(ids);
-  assert.deepEqual(Object.keys(mapped), [...CLAUDE_MODEL_OVERRIDE_KEYS]);
-  assert.equal(mapped['claude-fable-5'], ids[0]);
-  assert.equal(mapped['claude-opus-5'], ids[1]);
-  assert.equal(mapped['claude-sonnet-5'], ids[0]);
-  assert.ok(Object.values(mapped).every((id) => ids.includes(id)));
-  assert.ok(Object.keys(mapped).every((id) => id.startsWith('claude-')));
-  assert.equal(mapped['cx/gpt-5.6-luna'], undefined);
-});
-
-test('model router ownership recognizes Bizar schemas and preserves foreign schemas', async () => {
-  const { isBizarManagedModelRouter } = await import('./provision.mjs');
-  assert.equal(isBizarManagedModelRouter({ $schema: 'https://bizar.dev/schema/model-router.v1.json' }), true);
-  assert.equal(isBizarManagedModelRouter({ $schema: 'https://bizar.dev/schema/model-router.v2.json' }), true);
-  assert.equal(isBizarManagedModelRouter({ $schema: 'https://example.test/custom-router.json' }), false);
-  assert.equal(isBizarManagedModelRouter(null), false);
-});
-
-test('syncModelRouter creates and preserves only the global Bizar router', async () => {
-  // Router lives under CLAUDE_CONFIG_DIR (~/.claude/model-router.json). Set both
-  // env vars so resolveGlobalModelRouter() resolves correctly.
-  const home = mkdtempSync(join(tmpdir(), 'bizar-global-router-'));
-  const claudeDir = join(home, '.claude');
-  mkdirSync(claudeDir, { recursive: true });
-  const previousBizarHome = process.env.BIZAR_HOME;
-  const previousClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
-  process.env.BIZAR_HOME = join(home, '.config', 'bizar');
-  process.env.CLAUDE_CONFIG_DIR = claudeDir;
-  try {
-    const { syncModelRouter } = await import('./provision.mjs');
-    const first = await syncModelRouter();
-    const routerPath = join(claudeDir, 'model-router.json');
-    assert.equal(first.path, routerPath);
-    assert.equal(existsSync(routerPath), true);
-    const created = JSON.parse(readFileSync(routerPath, 'utf8'));
-    assert.deepEqual(created.userSelected.models, []);
-    assert.deepEqual(created.disabledProviders, ['anthropic']);
-    writeFileSync(routerPath, JSON.stringify({ userSelected: { models: ['operator/model'] } }));
-    const second = await syncModelRouter({ force: true });
-    assert.equal(second.preserved, true);
-    assert.deepEqual(JSON.parse(readFileSync(routerPath, 'utf8')).userSelected.models, ['operator/model']);
-    assert.equal(existsSync(join(REPO_ROOT, 'config', 'claude', 'model-router.json')), false);
-  } finally {
-    if (previousBizarHome === undefined) delete process.env.BIZAR_HOME;
-    else process.env.BIZAR_HOME = previousBizarHome;
-    if (previousClaudeConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = previousClaudeConfigDir;
-    rmSync(home, { recursive: true, force: true });
-  }
+test('settings template ships the alias binding as the canonical source', async () => {
+  // F-183 / OmniRoute overhaul: `config/claude/settings.json` is the sole
+  // alias binding. The writer merges `model` + `modelOverrides` + the four
+  // ANTHROPIC_DEFAULT_*_MODEL env vars instead of synthesising any router.
+  const { REPO_ROOT } = await import('./provision.mjs');
+  const template = JSON.parse(readFileSync(join(REPO_ROOT, 'config', 'claude', 'settings.json'), 'utf8'));
+  assert.equal(template.model, 'sonnet');
+  assert.ok(template.modelOverrides, 'modelOverrides must be present');
+  assert.equal(template.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'default');
+  assert.equal(template.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'common');
+  assert.equal(template.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'hard');
+  assert.equal(template.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'fable');
 });
 
 describe('syncConfigExtras() — native workflows', () => {
@@ -266,19 +219,12 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
   const home = mkdtempSync(join(tmpdir(), 'bizar-settings-'));
   const claudeDir = join(home, '.claude');
   const bizarHome = join(home, '.config', 'bizar');
-  // Router lives under CLAUDE_CONFIG_DIR (~/.claude/model-router.json) — the
-  // single canonical location that both the CLI and Claude Code hooks agree on.
-  const routerPath = join(claudeDir, 'model-router.json');
   // F-169 + F-180: install the wrapper shim into the test claudeDir so
   // `resolveHookCommand` emits the wrapper-path command (its executable
   // form). `syncConfigExtras` does this on real installs.
   mkdirSync(join(claudeDir, 'hooks'), { recursive: true });
   copyFileSync(WRAPPER_SRC, join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh'));
   chmodSync(join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh'), 0o755);
-  mkdirSync(dirname(routerPath), { recursive: true });
-  writeFileSync(routerPath, JSON.stringify({
-    userSelected: { models: ['cx/gpt-5.6-luna', 'minimax/MiniMax-M3'] },
-  }));
   try {
     const script = `
       import { writeClaudeSettings } from './cli/provision.mjs';
@@ -293,7 +239,6 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
         CLAUDE_CONFIG_DIR: claudeDir,
         BIZAR_HOME: bizarHome,
         ANTHROPIC_BASE_URL: 'https://gateway.test/v1',
-        BIZAR_MODEL_ROUTER_URL: 'https://gateway.test/v1',
       },
       encoding: 'utf8',
     });
@@ -311,14 +256,22 @@ test('generated Claude settings contain guarded autonomy and current runtime pat
     assert.equal(settings.hooks.TeammateIdle[0].hooks[0].command, `${join(claudeDir, 'hooks', 'bizar-hook-wrapper.sh')} teammate-idle`);
     assert.equal(settings.mcpServers['agent-browser'].command, 'agent-browser');
     assert.equal(settings.env.BIZAR_HOME, bizarHome);
-    assert.equal(settings.model, 'cx/gpt-5.6-luna');
-    assert.equal(settings.env.ANTHROPIC_MODEL, 'cx/gpt-5.6-luna');
-    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, '1');
-    assert.equal(Object.keys(settings.modelOverrides).length, 16);
-    assert.ok(Object.values(settings.modelOverrides)
-      .every((id) => ['cx/gpt-5.6-luna', 'minimax/MiniMax-M3'].includes(id)));
-    assert.equal(settings.modelOverrides['claude-sonnet-5'], 'cx/gpt-5.6-luna');
-    assert.equal(settings.modelOverrides['cx/gpt-5.6-luna'], undefined);
+    // OmniRoute alias binding: the template ships `model: 'sonnet'` plus
+    // a modelOverrides block. The writer MUST NOT synthesise ANTHROPIC_MODEL
+    // or modelOverrides from any router config.
+    assert.equal(settings.model, 'sonnet');
+    assert.equal(settings.env.ANTHROPIC_MODEL, undefined);
+    assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, undefined);
+    assert.equal(settings.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, undefined);
+    assert.ok(settings.modelOverrides);
+    assert.equal(settings.modelOverrides['claude-sonnet-5'], 'default');
+    assert.equal(settings.modelOverrides['claude-haiku-4-5-20251001'], 'common');
+    assert.equal(settings.modelOverrides['claude-opus-5'], 'hard');
+    assert.equal(settings.modelOverrides['claude-fable-5'], 'fable');
+    assert.equal(settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL, 'default');
+    assert.equal(settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, 'common');
+    assert.equal(settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL, 'hard');
+    assert.equal(settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL, 'fable');
     assert.equal(settings.disableAutoCompact, false);
     assert.ok(settings.autoMode.soft_deny.some((rule) => rule.includes('pull-request mutations')));
     // F-176: full permissions by default — deny/ask ship empty; external

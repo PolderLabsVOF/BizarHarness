@@ -20,7 +20,10 @@
  *   hook-files-installed:    all shipped hook entrypoints are executable
  *   tools-on-path:           at least one of semble/skills/claude
  *   bizar-home:              BIZAR_HOME exists
- *   provider-reachable:       provider gateway responds
+ *   alias-map:               ANTHROPIC_DEFAULT_*_MODEL entries are present
+ *                            and equal default/common/hard/fable
+ *   legacy-router:           non-destructive warning if ~/.claude/model-router.json
+ *                            still exists on disk (no Bizar runtime reads it)
  *
  * Usage:
  *   import { runDoctor } from "./doctor.mjs";
@@ -34,14 +37,12 @@ import { join } from 'node:path';
 import {
   resolveBizarHome,
   resolveClaudeConfigDir,
-  resolveGlobalModelRouter,
 } from './config-paths.mjs';
 import {
   REQUIRED_AGENTS,
   REQUIRED_COMMANDS,
   REQUIRED_HOOKS,
 } from './commands/validate.mjs';
-import { configuredEnabledModels, listModels, resolveEndpoint } from './commands/models.mjs';
 import { validateNativeWorkflowDirectory } from '../config/workflows/lib/native-contract.mjs';
 import { resolveOpenKanHome, verifyOpenKanRuntime } from './openkan.mjs';
 
@@ -195,28 +196,36 @@ async function checkOpenKanRuntime() {
   return `OpenKan ${home} is runnable (${result.launcher})`;
 }
 
-async function checkProviderReachable() {
-  const { endpoint, authToken } = resolveEndpoint();
-  if (!endpoint) {
-    const routerPath = resolveGlobalModelRouter();
-    let router;
-    try {
-      router = JSON.parse(readFileSync(routerPath, 'utf8'));
-    } catch {
-      throw new Error(`no provider URL and no readable global model router at ${routerPath}`);
+async function checkAliasMap() {
+  const settingsPath = join(resolveClaudeConfigDir(), 'settings.json');
+  const settings = readFileSync(settingsPath, 'utf8');
+  const parsed = JSON.parse(settings);
+  const env = (parsed && typeof parsed === 'object' && parsed.env) || {};
+  const expected = {
+    ANTHROPIC_DEFAULT_SONNET_MODEL: 'default',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'common',
+    ANTHROPIC_DEFAULT_OPUS_MODEL: 'hard',
+    ANTHROPIC_DEFAULT_FABLE_MODEL: 'fable',
+  };
+  const mismatches = [];
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    const actual = env[key];
+    if (typeof actual !== 'string' || !actual.trim()) {
+      mismatches.push(`${key}=<unset>`);
+    } else if (actual !== expectedValue) {
+      mismatches.push(`${key}=${actual} (expected ${expectedValue})`);
     }
-    const configured = configuredEnabledModels(router);
-    if (configured.length === 0) {
-      throw new Error('no enabled configured model; implicit provider defaults are prohibited');
-    }
-    return `no gateway URL; explicit configured fallback is ${configured[0]}`;
   }
-  try {
-    const models = await listModels({ endpoint, authToken, timeoutMs: 3000 });
-    return `provider at ${endpoint} ok (${models.length} models)`;
-  } catch (err) {
-    throw new Error(`provider at ${endpoint} unreachable: ${err.message ?? err}`);
+  if (mismatches.length > 0) {
+    throw new Error(`alias map drift in ${settingsPath}: ${mismatches.join(', ')}`);
   }
+  return `alias map ok (sonnet→default, haiku→common, opus→hard, fable→fable)`;
+}
+
+async function checkLegacyRouterPresent() {
+  const routerPath = join(resolveClaudeConfigDir(), 'model-router.json');
+  if (!existsSync(routerPath)) return 'no legacy model-router.json present';
+  return `legacy model-router.json present at ${routerPath} — safe to delete (no Bizar runtime reads it)`;
 }
 
 // ── runner ──────────────────────────────────────────────────────────────────
@@ -235,7 +244,8 @@ const CHECKS = [
   { name: 'tools-on-path',             run: checkToolsAvailable },
   { name: 'bizar-home',                run: checkBizarHome },
   { name: 'openkan-runtime',           run: checkOpenKanRuntime },
-  { name: 'provider-reachable',        run: checkProviderReachable },
+  { name: 'alias-map',                 run: checkAliasMap },
+  { name: 'legacy-router',             run: checkLegacyRouterPresent },
 ];
 
 export async function runDoctor(opts = {}) {

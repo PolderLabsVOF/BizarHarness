@@ -109,7 +109,9 @@ describe('interactive installer provider setup', () => {
     assert.equal(result.configured, true);
     assert.equal(hiddenCalls, 1);
     assert.equal(env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
-    assert.equal(env.BIZAR_MODEL_ROUTER_URL, 'https://gateway.example/v1');
+    // The legacy BIZAR_MODEL_ROUTER_URL mirror is no longer projected
+    // into the install environment.
+    assert.equal(env.BIZAR_MODEL_ROUTER_URL, undefined);
     assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'top-secret-value');
     assert.match(io.read(), /valid http:\/\/ or https:\/\/ URL/);
     assert.doesNotMatch(io.read(), /top-secret-value/);
@@ -197,7 +199,7 @@ describe('interactive installer provider setup', () => {
       CLAUDE_CONFIG_DIR: join(home, '.claude'),
       BIZAR_HOME: join(home, '.config', 'bizar'),
     };
-    for (const key of ['ANTHROPIC_BASE_URL', 'BIZAR_MODEL_ROUTER_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY']) {
+    for (const key of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY']) {
       delete childEnv[key];
     }
     const script = `
@@ -226,7 +228,8 @@ describe('interactive installer provider setup', () => {
       assert.equal(child.status, 0, child.stderr || child.stdout);
       const settings = JSON.parse(readFileSync(join(home, '.claude', 'settings.json'), 'utf8'));
       assert.equal(settings.env.ANTHROPIC_BASE_URL, 'https://gateway.example/v1');
-      assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, 'https://gateway.example/v1');
+      // Legacy BIZAR_MODEL_ROUTER_URL is no longer mirrored into settings.
+      assert.equal(settings.env.BIZAR_MODEL_ROUTER_URL, undefined);
       assert.equal(settings.env.ANTHROPIC_AUTH_TOKEN, 'test-provider-token');
       assert.doesNotMatch(child.stdout, /test-provider-token/);
       assert.doesNotMatch(child.stderr, /test-provider-token/);

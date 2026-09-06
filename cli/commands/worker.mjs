@@ -1,16 +1,21 @@
 /**
- * Exact-model process workers.
+ * Process workers spawned with a native Claude alias.
  *
  * This command is the separately launched alternative: it creates an isolated
- * worktree and starts a top-level Claude process with the literal gateway ID
- * selected through `bizar models`. No global settings are rewritten per
- * worker, so parallel workers cannot race each other's model selection.
+ * worktree and starts a top-level Claude process with a native alias
+ * (default `sonnet`). No global settings are rewritten per worker, so
+ * parallel workers cannot race each other's model selection. The alias is
+ * passed through to `claude --model <alias>`; native Claude Code is the
+ * sole authority on alias-to-combo resolution.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { resolveBizarHome, resolveClaudeConfigDir, resolveGlobalModelRouter } from '../config-paths.mjs';
+import { resolveBizarHome, resolveClaudeConfigDir } from '../config-paths.mjs';
+
+const NATIVE_ALIASES = Object.freeze(new Set(['sonnet', 'haiku', 'opus', 'fable']));
+const DEFAULT_ALIAS = 'sonnet';
 
 function runGit(args, cwd) {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -18,14 +23,18 @@ function runGit(args, cwd) {
   return result.stdout.trim();
 }
 
-function readRouter() {
-  const path = resolveGlobalModelRouter();
-  try { return JSON.parse(readFileSync(path, 'utf8')); } catch { throw new Error('Global Bizar model router is missing or invalid; run `bizar models`.'); }
+function normalizeAlias(value) {
+  const alias = typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : DEFAULT_ALIAS;
+  if (!NATIVE_ALIASES.has(alias)) {
+    throw new Error(`worker start requires a native alias (sonnet | haiku | opus | fable); got "${alias}"`);
+  }
+  return alias;
 }
 
-export function enabledModels(router) {
-  const disabled = new Set((router.disabledProviders || []).filter((id) => typeof id === 'string').map((id) => id.trim().toLowerCase()));
-  return (router.userSelected?.models || []).filter((id) => typeof id === 'string' && id.trim() && ![...disabled].some((prefix) => id.toLowerCase().startsWith(prefix)));
+export function enabledModels() {
+  // Retained for backwards compatibility with `cli/commands/worker.test.mjs`.
+  // The picker is gone; native aliases are the only legal `model` values.
+  return [...NATIVE_ALIASES];
 }
 
 function workerRoot() { return join(resolveBizarHome(), 'workers'); }
@@ -36,23 +45,21 @@ function writeState(state) {
 }
 
 export function buildWorkerPlan({ repoRoot = process.cwd(), model, task, agent = 'todd' } = {}) {
-  if (!model || typeof model !== 'string') throw new Error('worker start requires --model <selected gateway model id>.');
   if (!task || typeof task !== 'string') throw new Error('worker start requires --task <bounded task>.');
-  const router = readRouter();
-  if (!enabledModels(router).includes(model)) throw new Error(`Model ${model} is not an enabled global bizar models selection.`);
+  const normalized = normalizeAlias(model);
   const root = runGit(['rev-parse', '--show-toplevel'], repoRoot);
   const id = `worker-${randomUUID().slice(0, 8)}`;
   const branch = `wt/${id}`;
   const worktree = join(dirname(root), `${basename(root)}-${id}`);
   const logPath = join(workerRoot(), `${id}.log`);
-  return { id, root, branch, worktree, model, task: task.trim(), agent, logPath };
+  return { id, root, branch, worktree, model: normalized, task: task.trim(), agent, logPath };
 }
 
 export function workerClaudeArgs(plan) {
   return [
     '--print', '--name', `bizar-${plan.id}`, '--model', plan.model,
     '--permission-mode', 'acceptEdits', '--agent', plan.agent,
-    `${plan.task}\n\nYou are an exact-model Bizar process worker in ${plan.worktree}. Work only in this worktree. Do not spawn subagents. Implement and test the bounded task, commit one logical change locally, never push, then report the commit and verification.`,
+    `${plan.task}\n\nYou are an isolated Bizar process worker in ${plan.worktree}, running with the native "${plan.model}" alias. Work only in this worktree. Do not spawn subagents. Implement and test the bounded task, commit one logical change locally, never push, then report the commit and verification.`,
   ];
 }
 
@@ -75,12 +82,14 @@ function listWorkers() {
 
 function usage() {
   console.log(`
-  bizar worker start --model <selected-id> --task <task> [--agent todd] [--background]
+  bizar worker start --model <sonnet|haiku|opus|fable> --task <task> [--agent todd] [--background]
   bizar worker list [--json]
 
-  Starts an isolated top-level Claude Code process in a wt/ worktree with the
-  exact selected gateway model. Use this when a separately launched worktree
-  process is useful. Merge completed branches with bizar worktree-merge <branch>.
+  Starts an isolated top-level Claude Code process in a wt/ worktree with a
+  native alias. Default alias is "sonnet". Native Claude Code maps the
+  alias to an OmniRoute combo via the four ANTHROPIC_DEFAULT_*_MODEL
+  env vars in config/claude/settings.json. Merge completed branches with
+  bizar worktree-merge <branch>.
 `);
 }
 
@@ -108,7 +117,7 @@ export async function run(name, args, isHelpRequest) {
   });
   child.once('error', (error) => {
     writeState({ ...state, status: 'failed', exitedAt: new Date().toISOString(), error: error.message });
-    console.error(`Unable to start exact-model worker: ${error.message}`);
+    console.error(`Unable to start isolated worker: ${error.message}`);
   });
   state.pid = child.pid || null;
   writeState(state);

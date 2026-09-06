@@ -35,42 +35,18 @@
 import chalk from 'chalk';
 import { existsSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { resolveClaudeConfigDir, resolveGlobalModelRouter } from '../config-paths.mjs';
-import { configuredFallbackModels } from './models.mjs';
+import { resolveClaudeConfigDir } from '../config-paths.mjs';
 
 const CLAUDE_DIR = resolveClaudeConfigDir();
 const SETTINGS_PATH = join(CLAUDE_DIR, 'settings.json');
-// 10.22.0 / Phase 4 spirit-of-constraint: the install model id comes
-// from the operator's `userSelected.models[0]`, not a hardcoded literal.
-// The Bizar global router is the sole model-policy source.
-const BIZAR_ROUTER_PATH = resolveGlobalModelRouter();
-
-function readConfiguredModels() {
-  for (const path of [BIZAR_ROUTER_PATH]) {
-    if (!existsSync(path)) continue;
-    try {
-      const parsed = JSON.parse(readFileSync(path, 'utf8'));
-      const list = Array.isArray(parsed?.userSelected?.models)
-        ? parsed.userSelected.models.filter((id) => typeof id === 'string' && id.trim())
-        : [];
-      if (list.length > 0) return list;
-      const fallback = configuredFallbackModels(parsed);
-      if (fallback.length > 0) return fallback;
-      // An explicit empty selection is an intentional global policy.
-      if (path === BIZAR_ROUTER_PATH && parsed && typeof parsed === 'object'
-          && Array.isArray(parsed.userSelected?.models)) {
-        return [];
-      }
-    } catch { /* keep falling through */ }
-  }
-  return [];
-}
 
 const STATIC_FAVORED = {
   permissions: { defaultMode: 'bypassPermissions' },
   worktree: { bgIsolation: 'worktree' },
-  // `model` is intentionally absent — `buildFavored()` derives it from
-  // userSelected.models[0] (or omits it when empty).
+  // `model` is intentionally absent — settings.json ships the alias
+  // binding (model + modelOverrides + the four ANTHROPIC_DEFAULT_*_MODEL
+  // env vars) as the canonical source. `upgrade-defaults` only re-applies
+  // the safe Bizar-owned UX defaults, not model policy.
   alwaysThinkingEnabled: true,
   effortLevel: 'high',
   skipDangerousModePermissionPrompt: true,
@@ -79,10 +55,7 @@ const STATIC_FAVORED = {
 };
 
 function buildFavored() {
-  const out = { ...STATIC_FAVORED };
-  const picks = readConfiguredModels();
-  if (picks[0]) out.model = picks[0];
-  return out;
+  return { ...STATIC_FAVORED };
 }
 
 export async function run(name, args, isHelpRequest) {

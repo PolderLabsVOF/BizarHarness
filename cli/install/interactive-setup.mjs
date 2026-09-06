@@ -18,9 +18,11 @@ export function readProviderSettings(path = providerSettingsPath()) {
 
 export function detectProviderConfiguration({ env = process.env, settings = {} } = {}) {
   const settingsEnv = settings?.env && typeof settings.env === 'object' ? settings.env : {};
-  const url = env.BIZAR_MODEL_ROUTER_URL?.trim()
-    || env.ANTHROPIC_BASE_URL?.trim()
-    || settingsEnv.BIZAR_MODEL_ROUTER_URL?.trim()
+  // The picker surface is gone; we no longer consult a separate
+  // BIZAR_MODEL_ROUTER_URL. The install only configures
+  // ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN; the four aliases
+  // (sonnet/haiku/opus/fable) are bound by the shipped settings template.
+  const url = env.ANTHROPIC_BASE_URL?.trim()
     || settingsEnv.ANTHROPIC_BASE_URL?.trim()
     || '';
   const key = env.ANTHROPIC_AUTH_TOKEN?.trim()
@@ -173,7 +175,6 @@ export async function runInteractiveSetup({
   }
 
   env.ANTHROPIC_BASE_URL = url;
-  env.BIZAR_MODEL_ROUTER_URL = url;
   env.ANTHROPIC_AUTH_TOKEN = key;
   writeLine(output, '  ✓ Provider configuration ready; the key will be stored in global Claude settings.');
 
