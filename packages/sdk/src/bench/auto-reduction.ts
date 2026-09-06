@@ -37,9 +37,9 @@
  *      recommendation but leave widening to the reviewer policy).
  *   3. Otherwise, keep current fan-out.
  *
- * Why pure: the rule is consulted from `select-dispatch-model.ts`
- * (router) and from `bizar bench recommend-fan-out`; both contexts
- * want the same answer for the same inputs, with no I/O surprise.
+ * Why pure: the rule is consulted from `bizar bench recommend-fan-out`
+ * (CLI) and from orchestrator fan-out policy; both contexts want the
+ * same answer for the same inputs, with no I/O surprise.
  */
 
 export const AUTO_REDUCTION_SCHEMA_VERSION = "1.0.0";

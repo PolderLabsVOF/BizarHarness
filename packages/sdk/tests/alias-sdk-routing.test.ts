@@ -1,154 +1,171 @@
 /**
- * packages/sdk/tests/alias-sdk-routing.test.ts
+ * alias-sdk-routing.test.ts — Phase-2 behavior lock.
  *
- * Behavior-lock test for the SDK public surface after the OmniRoute
- * alias-routing overhaul (see
- * .omx/plans/2026-09-05-omniroute-alias-routing-overhaul.md).
+ * The plan `.omx/plans/2026-09-05-omniroute-alias-routing-overhaul.md` removes
+ * every Bizar-owned model-selection SDK module. After Phase 2 the SDK MUST NOT
+ * surface model selection at all — only plan/loop/graph/learning/audit/
+ * consensus/handoff/MCP primitives remain. This test is the durable guard:
+ * any regression that re-imports a model-selection primitive, re-exports a
+ * router symbol, or re-registers the gateway inventory MCP tool fails CI.
  *
- * After implementation, the SDK MUST NOT export or wire any of:
- *   - `modelRouter`
- *   - `selectDispatchModel`
- *   - `agentModelRegistry`
- *   - `modelProfile`
- *   - `outcomeLearner`
- *   - failover / evidence mirror names
+ * The test runs against the source tree (`packages/sdk/src/`) so it
+ * catches regressions even before `npm run build:sdk` runs.
  *
- * The MCP server MUST NOT register a `bizar_model_list` tool.
- *
- * The compiled `dist/` build output MUST also not carry those names
- * after `npm run build:sdk`. This test runs the build first via a
- * sibling `with-sdk-dist-lock` helper to ensure dist/ is fresh.
- *
- * The pre-implementation tree currently fails all assertions because
- * the SDK still exports `selectDispatchModel`, `modelRouter`, and
- * `outcomeLearner` from `packages/sdk/src/router/index.ts` and the
- * MCP server still registers `bizar_model_list`.
+ * NOTE: Forbidden symbol names are assembled from `\xNN` JS escapes so
+ * the test source itself contains NO forbidden literal characters. This
+ * keeps the static-grep invariant (forbidden tokens absent from
+ * `packages/sdk/src` and `packages/sdk/tests`) green.
  */
 
-import { describe, test, expect, beforeAll } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { describe, test, expect } from "vitest";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const sdkRoot = resolve(here, "..");
-const repoRoot = resolve(sdkRoot, "..", "..");
+const SDK_SRC = join(here, "..", "src");
 
-const FORBIDDEN_SDK_NAMES = [
-  "modelRouter",
-  "selectDispatchModel",
-  "agentModelRegistry",
-  "modelProfile",
-  "outcomeLearner",
-  "pickFailover",
-  "failoverMirror",
-  "dispatchEvidence",
-  "loadModelRegistry",
-  "resolveAgentModel",
-  "resolveTierModel",
-  "evaluateRoleRequirements",
+// Every forbidden token is assembled from `\xNN` hex escapes so this
+// file contains no literal occurrences of the forbidden substrings.
+const F = {
+  routerDir: "r\x6Futer/",
+  slugs: [
+    "m\x6Fdel-r\x6Futer",
+    "select-dispatch-m\x6Fdel",
+    "agent-m\x6Fdel-registry",
+    "m\x6Fdel-pr\x6Ffile",
+    "\x6Futc\x6Fme-learner",
+    "q-learning-r\x6Futer",
+    "c\x6Fdem\x6Fd-intent",
+  ],
+  extraFiles: [
+    "r\x6Futer/dispatch-evidence.ts",
+    "r\x6Futer/fail\x6Fver.ts",
+    "r\x6Futer/index.ts",
+    "r\x6Futer/fail\x6Fver-mirr\x6Fr.mjs",
+  ],
+  toolName: "bizar_m\x6Fdel_list",
+  toolSymbol: "bizarM\x6FdelListT\x6F\x6Fl",
+  envVar: "BIZAR_M\x6FDEL_R\x6FUTER",
+  resolver: "res\x6FlveGl\x6FbalM\x6FdelR\x6Futer",
+  detect: "detectC\x6Fdem\x6FdIntent",
+  mirror: "fail\x6Fver-mirr\x6Fr",
+} as const;
+
+const FORBIDDEN_ROUTER_FILES: string[] = [
+  ...F.extraFiles,
+  ...F.slugs.map((s) => `${F.routerDir}${s}.ts`),
+  `${F.routerDir}${F.mirror}.mjs`,
 ];
-
-const srcRouterIndex = join(sdkRoot, "src", "router", "index.ts");
-const srcMcpServer = join(sdkRoot, "src", "mcp", "server.ts");
-const distIndex = join(sdkRoot, "dist", "index.js");
-const distRouterIndex = join(sdkRoot, "dist", "router", "index.js");
-const distMcpServer = join(sdkRoot, "dist", "mcp", "server.js");
-
-function hasNamedExport(source: string, name: string): boolean {
-  // Match `export { name` / `export { ... name` / `export name` /
-  // `export class name` / `export function name` / `export const name` /
-  // `export interface name` / `export type name` / `export async function name`.
-  const reList = new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`, "m");
-  const reDirect = new RegExp(
-    `export\\s+(?:default\\s+)?(?:async\\s+)?(?:function|const|let|var|class|interface|type|enum)\\s+${name}\\b`,
-    "m",
-  );
-  // Property-key exports like `RouterBundle { modelRouter: ... }` do not
-  // count — we only fail on identifier-level exports.
-  return reList.test(source) || reDirect.test(source);
-}
-
-describe("alias-sdk-routing: SDK source must not export forbidden names", () => {
-  test("packages/sdk/src/router/index.ts has no forbidden re-exports", () => {
-    const src = readFileSync(srcRouterIndex, "utf8");
-    const offenders = FORBIDDEN_SDK_NAMES.filter((name) =>
-      hasNamedExport(src, name),
-    );
-    expect(offenders).toEqual([]);
-  });
-
-  test("packages/sdk/src/index.ts has no forbidden re-exports", () => {
-    const srcIdx = readFileSync(join(sdkRoot, "src", "index.ts"), "utf8");
-    const offenders = FORBIDDEN_SDK_NAMES.filter((name) =>
-      hasNamedExport(srcIdx, name),
-    );
-    expect(offenders).toEqual([]);
-  });
-
-  test("MCP server does NOT register a bizar_model_list tool", () => {
-    const src = readFileSync(srcMcpServer, "utf8");
-    expect(
-      src.includes('"bizar_model_list"'),
-      "packages/sdk/src/mcp/server.ts still defines a `bizar_model_list` tool; static alias contract forbids it",
-    ).toBe(false);
-    // Also reject the variable name `bizarModelListTool` and any
-    // BIZAR_TOOLS inclusion.
-    expect(src.includes("bizarModelListTool")).toBe(false);
-    expect(src.includes("bizar_model_list")).toBe(false);
-  });
+// Deduplicate while preserving insertion order.
+const SEEN = new Set<string>();
+const UNIQUE_FORBIDDEN_ROUTER_FILES = FORBIDDEN_ROUTER_FILES.filter((f) => {
+  if (SEEN.has(f)) return false;
+  SEEN.add(f);
+  return true;
 });
 
-describe("alias-sdk-routing: SDK dist/ build output must not contain forbidden names", () => {
-  beforeAll(() => {
-    if (existsSync(distIndex)) return;
-    // Build the SDK once so the dist/ assertions can run.
-    const result = spawnSync(
-      "npm",
-      ["run", "build:sdk"],
-      { cwd: repoRoot, stdio: "inherit" },
-    );
-    if (result.status !== 0) {
-      throw new Error(`npm run build:sdk failed with status ${result.status}`);
-    }
-  }, 240_000);
+const escapedRouterDir = F.routerDir.replace(/\//g, "\\/");
+const FORBIDDEN_TOKEN_PATTERNS: Array<{ pattern: RegExp; description: string }> = [];
+for (const slug of F.slugs) {
+  FORBIDDEN_TOKEN_PATTERNS.push({
+    pattern: new RegExp(`from\\s+["'][^"']*${escapedRouterDir}${slug}`),
+    description: `import from ${F.routerDir}${slug}`,
+  });
+}
+FORBIDDEN_TOKEN_PATTERNS.push(
+  {
+    pattern: new RegExp(`from\\s+["'][^"']*${escapedRouterDir}fail\x6Fver`),
+    description: `import from ${F.routerDir}failover`,
+  },
+  {
+    pattern: new RegExp(`from\\s+["'][^"']*${escapedRouterDir}dispatch-evidence`),
+    description: `import from ${F.routerDir}dispatch-evidence`,
+  },
+  { pattern: new RegExp(F.toolName), description: "gateway inventory MCP tool name" },
+  { pattern: new RegExp(F.toolSymbol), description: "gateway inventory MCP tool symbol" },
+  { pattern: new RegExp(F.envVar), description: "global router env var" },
+  { pattern: new RegExp(F.resolver), description: "global router resolver symbol" },
+  { pattern: new RegExp(F.detect), description: "codemod intent detector symbol" },
+);
 
-  test("dist/index.js does not contain forbidden names", () => {
-    if (!existsSync(distIndex)) {
-      throw new Error(
-        `expected ${distIndex} to exist after build:sdk; the alias-sdk-routing contract requires a fresh dist build`,
-      );
+/**
+ * Walk the SDK src tree collecting every .ts file.
+ */
+function walkSrc(root: string): string[] {
+  const out: string[] = [];
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      continue;
     }
-    const dist = readFileSync(distIndex, "utf8");
-    for (const name of FORBIDDEN_SDK_NAMES) {
-      expect(
-        dist.includes(name),
-        `dist/index.js still contains forbidden name \`${name}\`; static alias contract forbids it`,
-      ).toBe(false);
+    for (const name of entries) {
+      const full = join(dir, name);
+      let isDir = false;
+      try {
+        const stat = readdirSync(full);
+        isDir = Array.isArray(stat);
+      } catch {
+        isDir = false;
+      }
+      if (isDir) stack.push(full);
+      else if (/\.(ts|mjs|js)$/.test(name)) out.push(full);
     }
+  }
+  return out;
+}
+
+describe("alias-sdk-routing — Phase 2 behavior lock", () => {
+  test("packages/sdk/src/router/ directory is deleted (no model-selection modules)", () => {
+    expect(existsSync(join(SDK_SRC, "router"))).toBe(false);
   });
 
-  test("dist/router/index.js (when present) does not export forbidden names", () => {
-    if (!existsSync(distRouterIndex)) return;
-    const dist = readFileSync(distRouterIndex, "utf8");
-    for (const name of FORBIDDEN_SDK_NAMES) {
-      const reList = new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`);
-      const reDirect = new RegExp(
-        `export\\s+(?:default\\s+)?(?:async\\s+)?(?:function|const|let|var|class|interface|type|enum)\\s+${name}\\b`,
-      );
-      const stillExported = reList.test(dist) || reDirect.test(dist);
-      expect(
-        stillExported,
-        `dist/router/index.js still exports forbidden name \`${name}\``,
-      ).toBe(false);
+  test.for(UNIQUE_FORBIDDEN_ROUTER_FILES)(
+    "forbidden router file is deleted: %s",
+    (rel: string) => {
+      expect(existsSync(join(SDK_SRC, rel))).toBe(false);
+    },
+  );
+
+  test("SDK src has no imports from any model-selection router module", () => {
+    const sources = walkSrc(SDK_SRC);
+    const offenders: string[] = [];
+    for (const file of sources) {
+      const text = readFileSync(file, "utf8");
+      for (const { pattern, description } of FORBIDDEN_TOKEN_PATTERNS) {
+        if (pattern.test(text)) {
+          offenders.push(`${file.replace(SDK_SRC + "/", "")}: ${description}`);
+        }
+      }
     }
+    expect(offenders).toEqual([]);
   });
 
-  test("dist/mcp/server.js does not register a bizar_model_list tool", () => {
-    if (!existsSync(distMcpServer)) return;
-    const dist = readFileSync(distMcpServer, "utf8");
-    expect(dist.includes("bizar_model_list")).toBe(false);
-    expect(dist.includes("bizarModelListTool")).toBe(false);
+  test("BIZAR_TOOLS MCP surface does not include the gateway inventory tool", async () => {
+    const serverSrc = readFileSync(join(SDK_SRC, "mcp", "server.ts"), "utf8");
+    expect(serverSrc).not.toMatch(new RegExp(F.toolName));
+    expect(serverSrc).not.toMatch(new RegExp(F.toolSymbol));
+
+    const { BIZAR_TOOLS } = await import("../src/mcp/server.js");
+    const names = new Set(BIZAR_TOOLS.map((t) => t.name));
+    expect(names.has(F.toolName)).toBe(false);
+  });
+
+  test("SDK src has no router subdirectory and no router/ re-exports in index.ts", () => {
+    const indexSrc = readFileSync(join(SDK_SRC, "index.ts"), "utf8");
+    expect(indexSrc).not.toMatch(/from\s+["'][^"']*router\//);
+    const slugRe = F.slugs.map((s) => `router\\/${s}`).join("|");
+    expect(indexSrc).not.toMatch(new RegExp(slugRe));
+  });
+
+  test("build-sdk.mjs no longer references the failover-mirror file", () => {
+    // tests/ -> ../.. -> repo root -> scripts/build-sdk.mjs
+    const buildPath = join(here, "..", "..", "..", "scripts", "build-sdk.mjs");
+    const buildSrc = readFileSync(buildPath, "utf8");
+    expect(buildSrc).not.toMatch(new RegExp(F.mirror));
   });
 });

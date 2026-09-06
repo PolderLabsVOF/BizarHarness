@@ -1,7 +1,6 @@
 /**
  * mcp-agent-tools.test.ts — end-to-end regression for the F-146 agent-facing
- * MCP tool wrappers (OpenKan-native bizar_task, bizar_workflow, bizar_control, bizar_audit,
- * bizar_model_list).
+ * MCP tool wrappers (OpenKan-native bizar_task, bizar_workflow, bizar_control, bizar_audit).
  *
  * Each test invokes the tool's `handler` directly against the compiled SDK,
  * which shells out to native `ok task <action> --json` for task state. We assert the
@@ -30,9 +29,9 @@ async function callText(toolName: string, args: unknown): Promise<string> {
 }
 
 describe("F-146 agent-facing CLI wrapper tools", () => {
-  test("all five wrappers are registered in BIZAR_TOOLS", () => {
+  test("all four wrappers are registered in BIZAR_TOOLS", () => {
     const names = new Set(BIZAR_TOOLS.map((t) => t.name));
-    for (const name of ["bizar_task", "bizar_workflow", "bizar_control", "bizar_audit", "bizar_model_list"]) {
+    for (const name of ["bizar_task", "bizar_workflow", "bizar_control", "bizar_audit"]) {
       expect(names.has(name), `missing wrapper tool: ${name}`).toBe(true);
     }
   });
@@ -66,15 +65,6 @@ describe("F-146 agent-facing CLI wrapper tools", () => {
 
   test("bizar_audit handler returns JSON or a structured error", async () => {
     const text = await callText("bizar_audit", {});
-    if (text.startsWith("error:")) {
-      expect(typeof text).toBe("string");
-      return;
-    }
-    expect(() => JSON.parse(text)).not.toThrow();
-  });
-
-  test("bizar_model_list handler returns JSON or a structured error", async () => {
-    const text = await callText("bizar_model_list", {});
     if (text.startsWith("error:")) {
       expect(typeof text).toBe("string");
       return;

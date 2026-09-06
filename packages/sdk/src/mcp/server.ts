@@ -501,25 +501,6 @@ const bizarAuditTool = defineTool<Record<string, string>>(
   { readOnlyHint: true },
 );
 
-// `bizar model list --json` — gateway model inventory.
-const bizarModelListTool = defineTool<Record<string, string>>(
-  "bizar_model_list",
-  "Wrapper around `bizar models --json`. Returns ONLY the models the user has explicitly enabled via `bizar models` in the global Bizar router (`$BIZAR_HOME/config/claude/model-router.json#userSelected`). Live discovery is filtered out by default to avoid surfacing dozens of unrelated models. An empty list means no agent dispatch is permitted until the operator configures models.",
-  {},
-  async () => {
-    try {
-      // Prefer the new `bizar models` surface; fall back to the legacy
-      // `bizar model list` alias for older installs. The CLI is responsible
-      // for filtering to userSelected.
-      const r = runBizar(["models", "--json"]);
-      if (!r.ok) return err(r.error);
-      const parsed = readJsonSafe<unknown>(r.stdout);
-      return ok(parsed !== null ? JSON.stringify(parsed) : r.stdout);
-    } catch (e) { return err(String(e)); }
-  },
-  { readOnlyHint: true },
-);
-
 // ---------------------------------------------------------------------------
 // F-202 Phase 1 — OMX adoption scaffolding tools.
 //
@@ -643,7 +624,6 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   bizarWorkflowTool,
   bizarControlTool,
   bizarAuditTool,
-  bizarModelListTool,
   // F-202 Phase 1 — OMX adoption scaffolding tools.
   ambiguityScoreTool,
   deepInterviewStatusTool,
