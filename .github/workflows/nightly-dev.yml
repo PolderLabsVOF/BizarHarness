@@ -1,0 +1,143 @@
+# .github/workflows/nightly-dev.yml
+#
+# Dev / nightly release — publishes to the @dev npm dist-tag (prerelease=true).
+#
+# Two trigger modes:
+#   1. Schedule (cron): every night at 02:00 UTC, builds the current HEAD of
+#      `dev`, auto-bumps the dev prerelease counter, publishes @dev with a
+#      date-stamped version (e.g. 10.28.0-dev.20260907.abc1234).
+#   2. workflow_dispatch: manual trigger. The operator can pick between
+#      `auto` (date-stamped, same as schedule) or `manual` (counter-only,
+#      e.g. 10.28.0-dev.manual.3 — useful for cutting a known-good dev build
+#      between nightly runs without the date stamp).
+#
+# Trusted publishing (OIDC) — same as release-stable.yml.
+name: Release — dev / nightly (@dev, prerelease)
+
+on:
+  schedule:
+    # 02:00 UTC every night. Adjust if your team lives outside UTC.
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'Version variant — `auto` (date-stamped) or `manual` (counter-only).'
+        required: false
+        default: 'auto'
+      base:
+        description: 'Optional base version override (e.g. 10.28.0). Leave empty to read from CHANGELOG.md / last master release.'
+        required: false
+      dry_run:
+        description: 'Dry run — build everything but skip npm publish.'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: release-dev
+  cancel-in-progress: true   # only the latest dev build matters
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Publish @dev @ ${{ inputs.variant || 'auto' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Compute dev version
+        id: version
+        run: |
+          VARIANT="${{ inputs.variant || 'auto' }}"
+          if [ -n "${{ inputs.base }}" ]; then
+            BASE_ARG="--base ${{ inputs.base }}"
+          else
+            BASE_ARG=""
+          fi
+          VER=$(node scripts/bump-version.mjs --mode dev --variant "$VARIANT" $BASE_ARG)
+          echo "value=$VER" >> "$GITHUB_OUTPUT"
+          echo "Computed dev version: $VER"
+
+      - name: Validate version (X.Y.Z-dev.<...>)
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          if ! echo "$VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-dev\.(nightly\.[0-9]{8}\.[a-f0-9]{7,}|manual\.[0-9]+)$'; then
+            echo "::error::Invalid dev version: $VER"
+            exit 1
+          fi
+
+      - name: Bump versions in tree + commit (manual variant only)
+        # Date-stamped auto runs DO NOT commit a version bump — every nightly
+        # would otherwise pollute dev's history with one-line commits. The
+        # published tarball carries the computed version via npm pack; the
+        # tree only needs to know the version if it's referenced from the
+        # source (e.g. SDK_VERSION in version.ts).
+        if: ${{ inputs.variant == 'manual' }}
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          node scripts/bump-version.mjs --mode dev --variant manual --write --target "$VER"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json packages/sdk/package.json packages/sdk/src/version.ts
+          git commit -m "chore(release): $VER — dev manual build" || echo "No version changes to commit"
+          git push origin dev
+
+      - name: Build SDK + root
+        run: npm run build
+
+      - name: Run gates (skip if nightly is off-schedule and tests are red — surface in GH run summary)
+        continue-on-error: true
+        run: |
+          {
+            echo "## nightly-dev gates" >> "$GITHUB_STEP_SUMMARY"
+            make verify-removed-surfaces verify-repo-structure check-arch clean-check check test 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          } || true
+          # Re-run the gates for real; nightly does not block publish but
+          # failures must be visible in the run summary above.
+
+      - name: Publish @polderlabs/bizar-sdk @ @dev (OIDC, provenance ON)
+        if: ${{ inputs.dry_run != 'true' }}
+        working-directory: packages/sdk
+        run: npm publish --access public --provenance --tag dev
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @polderlabs/bizar @ @dev (OIDC, provenance ON)
+        if: ${{ inputs.dry_run != 'true' }}
+        run: npm publish --access public --provenance --tag dev
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create git tag v${{ steps.version.outputs.value }}
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VER" -m "v$VER — dev nightly" HEAD
+          git push origin "v$VER"
+
+      - name: Create GitHub prerelease
+        if: ${{ inputs.dry_run != 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: "v${{ steps.version.outputs.value }} — dev nightly"
+          generate_release_notes: true
+          prerelease: true

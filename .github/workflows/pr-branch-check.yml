@@ -1,0 +1,63 @@
+# .github/workflows/pr-branch-check.yml
+#
+# Branch-targeting check. Ensures PRs against the three release branches
+# follow the intended promotion flow:
+#   feature/* → dev     (allowed)
+#   dev       → beta    (allowed)
+#   beta      → master  (allowed)
+# Anything else is rejected at PR-open time with a clear hint.
+#
+# This is a guidance hook, not a hard gate — repo admins can override the
+# branch-protection rule from the GitHub UI when an emergency cut needs to
+# bypass the flow. The intent is to catch accidental PRs early.
+name: PR branch routing
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    name: Enforce branch promotion flow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate base branch
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          case "$BASE" in
+            master)
+              if [ "${{ github.head_ref }}" != "beta" ]; then
+                echo "::error::PRs into master must come from beta. Got: ${{ github.head_ref }}"
+                exit 1
+              fi
+              echo "✓ beta → master (allowed)"
+              ;;
+            beta)
+              if [ "${{ github.head_ref }}" != "dev" ]; then
+                echo "::error::PRs into beta must come from dev. Got: ${{ github.head_ref }}"
+                exit 1
+              fi
+              echo "✓ dev → beta (allowed)"
+              ;;
+            dev)
+              # dev accepts any feature/* branch
+              if [[ "${{ github.head_ref }}" =~ ^(feat|fix|chore|docs|refactor|perf|test)/ ]] || \
+                 [ "${{ github.head_ref }}" == "master" ]; then
+                echo "✓ ${{ github.head_ref }} → dev (allowed)"
+              else
+                echo "::notice::PR into dev from non-conventional branch name (${{ github.head_ref }}). Allowed but consider feat/fix/chore prefix."
+              fi
+              ;;
+            *)
+              # Non-release target — fine, this workflow only enforces the
+              # promotion flow on the three release branches.
+              echo "Target branch is $BASE — not enforcing promotion flow."
+              ;;
+          esac

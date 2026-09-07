@@ -1,0 +1,91 @@
+# .github/workflows/ci.yml
+#
+# Continuous integration — runs the full Bizar gate on every push and PR
+# targeting the three release branches (master / beta / dev) and on
+# feature branches that open PRs against them. This is the only CI surface;
+# it never publishes, signs, or mutates registry state.
+#
+# Local equivalent:
+#   make verify-removed-surfaces verify-repo-structure check-arch \
+#        clean-check check test
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - beta
+      - dev
+  pull_request:
+    branches:
+      - master
+      - beta
+      - dev
+
+# Cancel in-progress runs of the same workflow on the same ref so CI feedback
+# stays current on rapid pushes to feature branches.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Gate (${{ matrix.os }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ matrix.node }}-${{ hashFiles('**/package.json', '**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-${{ matrix.node }}-
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript gate (make check)
+        run: make check
+
+      - name: Verify removed surfaces
+        run: make verify-removed-surfaces
+
+      - name: Verify repo structure
+        run: make verify-repo-structure
+
+      - name: Architectural invariants (make check-arch)
+        run: make check-arch
+
+      - name: Clean-check (hygiene gate)
+        run: make clean-check
+
+      - name: Tests (make test)
+        run: make test
+
+      - name: SDK build + dist lock
+        run: npm run build:sdk
+
+      - name: Upload SDK build artifact (for downstream release workflows)
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-dist-${{ github.sha }}
+          path: packages/sdk/dist
+          retention-days: 7

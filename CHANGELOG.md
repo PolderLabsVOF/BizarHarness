@@ -1,7 +1,47 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+- **Three-tier release branches + automatic CI/CD with OIDC trusted
+  publishing** — `master` (stable `@latest`), `beta` (`@beta`),
+  and `dev` (`@dev` nightly + manual). Five new GitHub Actions
+  workflows under `.github/workflows/`:
+  - `ci.yml` — runs the full Bizar gate on every push + PR to
+    `master`, `beta`, `dev` (Makefile targets: `verify-removed-surfaces`,
+    `verify-repo-structure`, `check-arch`, `clean-check`, `check`,
+    `test`).
+  - `release-stable.yml` — publishes `@polderlabs/bizar` and
+    `@polderlabs/bizar-sdk` to npm `@latest` on a `chore(release):`
+    push to `master`, or via `workflow_dispatch` with an explicit
+    version override.
+  - `release-beta.yml` — publishes to `@beta` (prerelease=true) on
+    every push to `beta`; auto-increments the `beta.N` counter.
+  - `nightly-dev.yml` — cron 02:00 UTC + `workflow_dispatch`
+    publishes to `@dev`. Manual variant (`vX.Y.Z-dev.manual.N`) cuts
+    a fresh build between nightly runs; auto variant
+    (`vX.Y.Z-dev.nightly.YYYYMMDD.<short-sha>`) runs on schedule and
+    does not commit version bumps to `dev`.
+  - `pr-branch-check.yml` — enforces the promotion flow: PRs into
+    `master` must come from `beta`; PRs into `beta` must come from
+    `dev`. Feature branches (`feat|fix|chore|.../*`) target `dev`.
+- **Version-bump helper (`scripts/bump-version.mjs`)** — single
+  source of truth for version computation, called by every release
+  workflow and exposed to operators as `npm run release:bump -- --mode
+  <stable|beta|dev>`. Reads `packages/sdk/src/version.ts` as the
+  authoritative version; writes all three version files atomically.
+  Drives conventional-commit-based bumps on `master` (BREAKING →
+  major, `feat:` → minor, otherwise patch) and counter-based bumps on
+  `beta`/`dev`.
+- **Operator documentation** — four new docs:
+  `docs/branches.md`, `docs/versioning.md`, `docs/development.md`,
+  `docs/trusted-publishing.md` (the last is the operator-side setup
+  guide for npmjs.com Trusted Publishers).
+
 ### Changed
+- **Fixed wrong `repository.url`** in `package.json` (was pointing at
+  the `DrB0rk` fork) and added `repository` to
+  `packages/sdk/package.json` so the npm package page links back to
+  the canonical `PolderLabsVOF/BizarHarness` repo.
 - **Static four-alias dispatch (cutover from model-router/picker)**
   — Bizar dispatches through four native Claude Code aliases
   (`haiku`/`sonnet`/`opus`/`fable`); OmniRoute handles ordered
