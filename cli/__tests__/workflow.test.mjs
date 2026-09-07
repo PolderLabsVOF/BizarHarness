@@ -1,7 +1,7 @@
 /**
  * cli/__tests__/workflow.test.mjs
  *
- * Tests the ralplan-shaped CLI flag extensions added in Phase 5 of the OMX
+ * Tests the bizplan-shaped CLI flag extensions added in Phase 5 of the OMX
  * adoption plan (`docs/plans/2026-09-03-omx-features.md`). The new flags are
  * `--mode`, `--deliberate`, and `--advisory` on `bizar workflow start`.
  *
@@ -41,24 +41,32 @@ test('resolveStartRouting honours explicit --workflow alias', () => {
   assert.equal(routing.routing.mode, null);
 });
 
-test('resolveStartRouting maps --mode ralplan to plan-build-qa profile', () => {
-  const flags = { _: [], mode: 'ralplan' };
+test('resolveStartRouting maps --mode bizplan to plan-build-qa profile', () => {
+  const flags = { _: [], mode: 'bizplan' };
   const routing = resolveStartRouting(flags);
   assert.equal(routing.profile, 'plan-build-qa');
-  assert.equal(routing.routing.mode, 'ralplan');
+  assert.equal(routing.routing.mode, 'bizplan');
   assert.equal(routing.deliberate, false);
   assert.equal(routing.advisory, false);
 });
 
-test('resolveStartRouting propagates --deliberate and --advisory booleans', () => {
-  const flags = { _: [], mode: 'ralplan', deliberate: true, advisory: true };
+test('resolveStartRouting accepts --mode ralplan as deprecated alias for bizplan', () => {
+  const flags = { _: [], mode: 'ralplan' };
   const routing = resolveStartRouting(flags);
   assert.equal(routing.profile, 'plan-build-qa');
-  assert.equal(routing.routing.mode, 'ralplan');
+  // `ralplan` is normalised to the canonical `bizplan` mode.
+  assert.equal(routing.routing.mode, 'bizplan');
+});
+
+test('resolveStartRouting propagates --deliberate and --advisory booleans', () => {
+  const flags = { _: [], mode: 'bizplan', deliberate: true, advisory: true };
+  const routing = resolveStartRouting(flags);
+  assert.equal(routing.profile, 'plan-build-qa');
+  assert.equal(routing.routing.mode, 'bizplan');
   assert.equal(routing.deliberate, true);
   assert.equal(routing.advisory, true);
   assert.deepEqual(routing.routing, {
-    mode: 'ralplan',
+    mode: 'bizplan',
     deliberate: true,
     advisory: true,
   });

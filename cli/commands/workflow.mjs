@@ -126,12 +126,13 @@ function printState(state, flags) {
  * flags. Pure: takes a flags object and returns a routing decision without
  * mutating any external state.
  *
- * The ralplan-shaped 8-step protocol is engaged when the user passes
- * `--mode ralplan`. The workflow state still uses an underlying
- * WORKFLOW_PROFILES entry; we map `ralplan` to `plan-build-qa` because
- * that profile is the closest existing plan-led shape. The deliberate
- * and advisory flags are pure hints that downstream skill / agent
- * consumers read from the returned routing object.
+ * The bizplan-shaped 8-step protocol is engaged when the user passes
+ * `--mode bizplan` (or its legacy alias `ralplan`). The workflow state
+ * still uses an underlying WORKFLOW_PROFILES entry; we map `bizplan` to
+ * `plan-build-qa` because that profile is the closest existing plan-led
+ * shape. The deliberate and advisory flags are pure hints that
+ * downstream skill / agent consumers read from the returned routing
+ * object.
  *
  * @param {Record<string, unknown>} flags — parsed flags from parseFlags()
  * @returns {{ profile: string, deliberate: boolean, advisory: boolean,
@@ -139,18 +140,21 @@ function printState(state, flags) {
  *                        advisory: boolean } }}
  */
 export function resolveStartRouting(flags) {
-  const mode = typeof flags.mode === 'string' && flags.mode !== '' ? flags.mode : null;
-  if (mode !== null && mode !== 'ralplan') {
+  const rawMode = typeof flags.mode === 'string' && flags.mode !== '' ? flags.mode : null;
+  // Legacy `ralplan` is accepted as a deprecated alias for `bizplan` so
+  // existing operators do not break; the canonical name is `bizplan`.
+  const mode = rawMode === 'ralplan' ? 'bizplan' : rawMode;
+  if (mode !== null && mode !== 'bizplan') {
     throw new WorkflowStateError(
       'USAGE',
-      `unknown --mode value: ${mode} (expected: ralplan)`,
+      `unknown --mode value: ${rawMode} (expected: bizplan)`,
     );
   }
   const deliberate = flags.deliberate === true;
   const advisory = flags.advisory === true;
 
-  if (mode === 'ralplan') {
-    // ralplan routes through the existing plan-build-qa profile — the
+  if (mode === 'bizplan') {
+    // bizplan routes through the existing plan-build-qa profile — the
     // closest WORKFLOW_PROFILES entry to the 8-step shape — without
     // modifying workflow-state.mjs's frozen profile table.
     return {
