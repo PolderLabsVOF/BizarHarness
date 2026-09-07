@@ -17,6 +17,41 @@
   `config/claude/hooks/__tests__/alias-hooks.test.mjs`,
   `config/workflows/__tests__/alias-dispatch.test.mjs`.
 
+
+## [10.27.0] - 2026-09-07
+
+### Changed
+- **Bizplan-openkan — full OpenKan integration (no Bizar-internal planning CLIs)**
+  — All task/goal/planning flows now route through the integrated OpenKan
+  `ok prd | plan | task` CLI. Removed the `bizar goal` and `bizar workflow`
+  command surfaces (`cli/commands/goal{,/}*.mjs`, `cli/commands/workflow.mjs`,
+  `cli/commands/workflow-gc.mjs`, `cli/core/{workflow,ultragoal}-state.mjs`,
+  plus their test files); updated 10 skills (`autopilot`, `bizplan`,
+  `bizplan/references`, `cancel`, `deep-interview`, `ralph`, `ultragoal`,
+  `ultraqa`, `ultrawork`, `verify`) plus their mirrors to reference `ok`
+  directly. Migrated the bizplan-overhaul run's canonical state from
+  `docs/specs/ultragoal/` (charter at `ultragoal-bizplan-overhaul.md`,
+  ledger at `ultragoal/ultragoal-bizplan-overhaul.jsonl`) into the
+  OpenKan workspace at `.ok/` (`prd-bizplan-overhaul.json`,
+  `pln-bizplan-overhaul.json`, 11 task files). The legacy ledger and
+  charter are preserved as historical artifacts but are no longer the
+  live source of truth. Removed the `/plan` and `/ralplan` alias surface
+  from `config/claude/agents/office-manager.md` and the routing tables
+  in `config/claude/hooks/keyword-router.mjs`; renamed `RALPLAN-Critic`
+  → `BIZPLAN-Critic` in `config/claude/agents/qa-reviewer.md`; fixed a
+  `/tmp/`-leak deterministic-state flake in
+  `scripts/git-hooks/__tests__/commit-msg.test.mjs`; rewrote
+  `config/claude/hooks/persistent-mode.mjs` to read state through
+  `ok plan list --status active --json` + `ok task list --plan <id> --json`.
+  The phase machine, four-lane completion fence, weighted-subtask / per-story
+  modes are preserved as operator-side contracts documented in the
+  ultragoal and bizplan skills, with lane evidence stored in `ok task ...
+  --evidence` and plan status advancing to `complete` only after every
+  lane is captured. Phase states map: `pending → research`,
+  `in_progress → execute`, `review → qa`, `done → validate`; weighted
+  subtasks map to `ok task ... --acceptance "weight=<N>"` and per-story
+  mode to `"story=true,story-id=<sid>"`.
+
 ## [10.24.0] - 2026-09-03
 
 ### Added
