@@ -39,24 +39,51 @@ the project you happen to be working on.
 | Fewer surprises | Explicit safety checks for releases, publication, deployment, pushes, and destructive operations |
 | Confidence at the end | Tests, architecture checks, E2E checks, and evidence-aware handoff |
 
-## Start here
+## Before you install
+
+<table>
+  <tr>
+    <td width="50%"><strong>Claude Code</strong><br />Bizar adds its integration to your user-level Claude Code configuration. Install Claude Code with Anthropic's installer first.</td>
+    <td width="50%"><strong>Node.js 22+</strong><br />OpenKan requires Node.js 22 or newer. Bizar and OpenKan install from npm.</td>
+  </tr>
+  <tr>
+    <td width="50%"><strong>OmniRoute</strong><br />Configure a gateway endpoint, API key, and model ID. OmniRoute resolves the full model IDs behind Bizar's four aliases and handles ordered failover.</td>
+    <td width="50%"><strong>Git</strong><br />Needed for isolated worktrees and normal project history. Bizar does not require a persistent daemon.</td>
+  </tr>
+</table>
+
+```mermaid
+flowchart LR
+    CC[Claude Code] --> B[Bizar]
+    B --> OR[OmniRoute gateway]
+    OR --> M[Configured model IDs]
+    B --> OK[OpenKan]
+    OK --> S[.ok workspace]
+```
+
+Configure OmniRoute once before installing Bizar. The command writes provider
+settings to Claude Code and preserves existing hooks, permissions, and MCP
+servers.
+
+```sh
+bizar setup-provider --gateway https://your-gateway.example/v1 --key "$YOUR_API_KEY" --model your/model-id
+```
+
+## Install Bizar
 
 Install Bizar globally and its Claude Code integration. Bizar dispatches
-through four static native aliases — `haiku`, `sonnet`, `opus`, `fable` —
-and OmniRoute handles ordered failover between configured full IDs for the
-chosen alias, so there is no model picker step.
+through four static aliases: `haiku`, `sonnet`, `opus`, and `fable`. OmniRoute
+maps each alias to configured full model IDs and applies ordered failover.
 
 ```sh
 npm install -g @polderlabs/bizar
 bizar install
 ```
 
-Restart Claude Code after installation. The installer adds Bizar's agents, skills, commands, hooks, settings, and the
-default OpenKan planning runtime to your user-level Claude configuration.
-Claude Code itself is installed with Anthropic's native installer; npm is used
-for Bizar and OpenKan, not for the Claude Code CLI.
-It preserves your configured gateway endpoint and credential values during a
-clean reinstall.
+Restart Claude Code after installation. The installer adds Bizar's agents,
+skills, commands, hooks, settings, and the default OpenKan planning runtime to
+your user-level Claude configuration. It preserves your configured gateway
+endpoint and credentials during a clean reinstall.
 
 On a new interactive install, Bizar also asks whether Claude Code agent teams
 should be enabled, the OpenKan install directory, and whether the current
@@ -73,7 +100,7 @@ bizar install --force
 ```
 
 Then open any repository in Claude Code and describe the outcome you want.
-Mike—the Bizar coordinator—handles the rest.
+Mike, the Bizar coordinator, handles the rest.
 
 > **Tip:** Run `bizar doctor` whenever you want to verify that the global
 > install, Claude settings, hooks, skills, agents, and provider connection are
@@ -103,9 +130,9 @@ obvious edits stay small; larger requests get only the structure they need.
 Writing agents work in Git worktrees, while read-only research stays light and
 foregrounded.
 
-## Your models, everywhere Bizar dispatches
+## OmniRoute model aliases
 
-Bizar dispatches through four static native aliases — `haiku`, `sonnet`,
+Bizar dispatches through four static native aliases: `haiku`, `sonnet`,
 `opus`, `fable`. Claude Code's native per-call `model` field accepts one of
 these aliases. OmniRoute handles ordered failover between the configured full
 gateway IDs for the chosen alias, so the operator never picks a picker-style
@@ -114,10 +141,12 @@ gateway ID per agent at this layer. There is no `bizar models` picker, no
 
 The four aliases are the entire dispatch surface:
 
-- `haiku` — trivial / cheap micro-edits
-- `sonnet` — ordinary implementation, research, planning lanes
-- `opus` — hard / architectural / adversarial / debug / high-risk review lanes
-- `fable` — explicit Anthropic OpenAI-compat surfaces
+| Alias | Use it for |
+| --- | --- |
+| `haiku` | Trivial, economical micro-edits |
+| `sonnet` | Ordinary implementation, research, and planning |
+| `opus` | Architecture, debugging, adversarial review, and high-risk work |
+| `fable` | Explicit Anthropic OpenAI-compatible surfaces |
 
 Workflow scripts (`config/workflows/*.js`) inline a tiny `dispatchAgent`
 wrapper that picks the alias from a static policy; agent definitions stay
@@ -138,6 +167,37 @@ Useful inspection commands:
 bizar doctor
 ```
 
+## OpenKan owns durable work state
+
+OpenKan is Bizar's default planning and progression system. Bizar orchestrates
+the work; OpenKan stores project-local tasks, plans, PRDs, goals, and evidence
+under `.ok/`. Bizar talks to OpenKan through the supported `ok` CLI boundary,
+so OpenKan can evolve independently.
+
+```mermaid
+flowchart LR
+    R[Repository] --> I[ok init]
+    I --> O[.ok workspace]
+    O --> T[ok task]
+    O --> P[ok plan]
+    O --> G[ok prd]
+    B[Bizar agents and hooks] --> T
+    B --> P
+    B --> G
+```
+
+The installer can create an `.ok/` workspace for the current project. In an
+existing repository, run `ok init`. Use `ok task`, `ok plan`, and `ok prd` as
+the canonical commands. On OpenKan v0.5.0 and later, `ok` replaces the legacy
+`openkan` command.
+
+| Need | Command |
+| --- | --- |
+| Install or refresh OpenKan | `bizar openkan install` |
+| Create project state | `ok init` |
+| Track scoped work | `ok task` |
+| Track plans and goals | `ok plan` and `ok prd` |
+
 ## A specialist bench, not a generic swarm
 
 Bizar ships 85 agent definitions and 85 skill packs for architecture,
@@ -148,14 +208,9 @@ practice.
 The coordinator selects specialists when their expertise reduces a concrete
 risk. It does not create parallel workers merely to look busy.
 
-```text
-Core coordination                 Specialist coverage
-─────────────────                 ──────────────────────────────────
-Mike · research · plan            Architecture · accessibility · security
-Implementation · review           Build repair · tests · documentation
-Verification · integration        Frameworks · performance · operations
-                                  Evaluation · product and domain analysis
-```
+| Coordination | Specialist coverage |
+| --- | --- |
+| Research, planning, implementation, review, verification | Architecture, accessibility, security, tests, documentation, performance, build repair, operations, and domain analysis |
 
 ## Guardrails that stay out of the way
 
@@ -177,25 +232,10 @@ point where an external or difficult-to-reverse decision belongs to you.
 
 ## What gets installed
 
-```text
-~/.claude/
-├── agents/          85 Bizar roles and specialist definitions
-├── skills/          85 skill packs
-├── commands/        37 slash-command surfaces
-├── hooks/           routing, lifecycle, safety, evidence, and quality hooks
-├── rules/           focused guidance for common development work
-├── workflows/       native workflow definitions
-├── settings.json    Bizar-managed Claude Code integration
-└── agents/          Bizar agent definitions (alias-agnostic)
-
-~/.config/bizar/
-├── installed.json   install record
-├── openkan/          managed @polderlabs/openkan npm runtime
-├── openkan-install.json  selected OpenKan home/package settings
-├── evidence/        local dispatch and verification evidence
-├── telemetry/       local routing and rejected-action feedback
-└── worktree-queue.json  completed worktree integration queue
-```
+| Location | Contents |
+| --- | --- |
+| `~/.claude/` | 85 agent definitions, 85 skills, 37 command surfaces, hooks, rules, workflows, and managed settings |
+| `~/.config/bizar/` | Install record, managed OpenKan runtime, evidence, telemetry, and completed-worktree queue |
 
 `bizar control` is a machine-readable command boundary for optional external
 interfaces. Bizar deliberately does not include an embedded browser control
