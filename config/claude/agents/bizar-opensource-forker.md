@@ -1,6 +1,7 @@
 ---
 name: bizar-opensource-forker
 description: Bizar-opensource-forker — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -56,3 +56,4 @@ gha-creds-*.json
 # Operating-system files
 .DS_Store
 Thumbs.db
+.test-bizar-home/

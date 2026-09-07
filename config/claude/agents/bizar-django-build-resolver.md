@@ -1,6 +1,7 @@
 ---
 name: bizar-django-build-resolver
 description: Bizar-django-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-pr-test-analyzer
 description: Bizar-pr-test-analyzer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

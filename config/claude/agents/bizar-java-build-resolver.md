@@ -1,6 +1,7 @@
 ---
 name: bizar-java-build-resolver
 description: Bizar-java-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

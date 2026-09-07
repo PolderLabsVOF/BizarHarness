@@ -1,6 +1,7 @@
 ---
 name: bizar-python-reviewer
 description: Bizar-python-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

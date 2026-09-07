@@ -1,6 +1,7 @@
 ---
 name: bizar-dart-build-resolver
 description: Bizar-dart-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

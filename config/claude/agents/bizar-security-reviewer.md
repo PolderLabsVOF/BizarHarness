@@ -1,6 +1,7 @@
 ---
 name: bizar-security-reviewer
 description: Bizar-security-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

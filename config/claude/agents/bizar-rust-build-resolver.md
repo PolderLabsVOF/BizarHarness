@@ -1,6 +1,7 @@
 ---
 name: bizar-rust-build-resolver
 description: Bizar-rust-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

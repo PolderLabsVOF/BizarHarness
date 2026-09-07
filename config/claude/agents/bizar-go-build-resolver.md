@@ -1,6 +1,7 @@
 ---
 name: bizar-go-build-resolver
 description: Bizar-go-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

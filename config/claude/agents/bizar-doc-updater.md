@@ -1,6 +1,7 @@
 ---
 name: bizar-doc-updater
 description: Bizar-doc-updater — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-mle-reviewer
 description: Bizar-mle-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

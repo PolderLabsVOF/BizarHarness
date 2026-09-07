@@ -1,6 +1,7 @@
 ---
 name: bizar-homelab-architect
 description: Bizar-homelab-architect — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-tdd-guide
 description: Bizar-tdd-guide — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

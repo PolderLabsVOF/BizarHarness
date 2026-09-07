@@ -1,6 +1,7 @@
 ---
 name: bizar-code-explorer
 description: Bizar-code-explorer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

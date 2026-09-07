@@ -1,6 +1,7 @@
 ---
 name: bizar-performance-optimizer
 description: Bizar-performance-optimizer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

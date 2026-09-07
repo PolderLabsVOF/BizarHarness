@@ -1,6 +1,7 @@
 ---
 name: bizar-silent-failure-hunter
 description: Bizar-silent-failure-hunter — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-accessibility-architect
 description: Bizar-accessibility-architect — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

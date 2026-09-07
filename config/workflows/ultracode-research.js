@@ -36,13 +36,12 @@ const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
   if (opts.disallowedTools) agentOptions.disallowedTools = opts.disallowedTools
   return agentFn(`${prefix}\n${prompt}`, agentOptions)
 }
-const barrierRef = ({ phase, label, summary, payload }) => {
-  let evidence = ''
-  try { evidence = JSON.stringify(payload ?? '').slice(0, 12000) } catch { evidence = '<unserializable>' }
-  return { promptBlock: `Prior phase: ${phase}; label: ${label}; summary: ${summary || ''}\nBounded evidence: ${evidence}` }
+const barrierRef = ({ phase, label, summary }) => {
+  const s = typeof summary === 'string' ? summary.slice(0, 1200) : ''
+  return { promptBlock: `Prior phase: ${phase}; label: ${label}; summary: ${s}` }
 }
 
-const QUESTION = typeof args === 'string' ? args : args?.question || JSON.stringify(args || {})
+const QUESTION = typeof args === 'string' ? args : args?.question || String(args || '')
 
 const RUN_ID = 'ultracode-research'
 const EVIDENCE = {

@@ -1,6 +1,7 @@
 ---
 name: bizar-network-troubleshooter
 description: Bizar-network-troubleshooter — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

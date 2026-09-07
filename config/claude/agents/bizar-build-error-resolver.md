@@ -1,6 +1,7 @@
 ---
 name: bizar-build-error-resolver
 description: Bizar-build-error-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

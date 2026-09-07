@@ -1,6 +1,7 @@
 ---
 name: bizar-rag-pipeline-reviewer
 description: Bizar-rag-pipeline-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

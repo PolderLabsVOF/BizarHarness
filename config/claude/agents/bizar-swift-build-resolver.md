@@ -1,6 +1,7 @@
 ---
 name: bizar-swift-build-resolver
 description: Bizar-swift-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-code-reviewer
 description: Bizar-code-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

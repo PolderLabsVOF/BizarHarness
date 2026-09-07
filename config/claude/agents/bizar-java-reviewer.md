@@ -1,6 +1,7 @@
 ---
 name: bizar-java-reviewer
 description: Bizar-java-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

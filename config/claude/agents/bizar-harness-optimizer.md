@@ -1,6 +1,7 @@
 ---
 name: bizar-harness-optimizer
 description: Bizar-harness-optimizer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 color: teal
 ---

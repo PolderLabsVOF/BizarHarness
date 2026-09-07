@@ -1,6 +1,7 @@
 ---
 name: bizar-gan-planner
 description: Bizar-gan-planner — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 color: purple
 ---

@@ -1,6 +1,7 @@
 ---
 name: bizar-swift-reviewer
 description: Bizar-swift-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

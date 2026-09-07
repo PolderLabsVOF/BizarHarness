@@ -1,6 +1,7 @@
 ---
 name: bizar-fsharp-reviewer
 description: Bizar-fsharp-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-spec-miner
 description: Bizar-spec-miner — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

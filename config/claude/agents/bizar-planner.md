@@ -1,6 +1,7 @@
 ---
 name: bizar-planner
 description: Bizar-planner — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

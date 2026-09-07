@@ -1,6 +1,7 @@
 ---
 name: bizar-csharp-reviewer
 description: Bizar-csharp-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

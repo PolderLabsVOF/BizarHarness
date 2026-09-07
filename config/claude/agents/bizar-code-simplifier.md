@@ -1,6 +1,7 @@
 ---
 name: bizar-code-simplifier
 description: Bizar-code-simplifier — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

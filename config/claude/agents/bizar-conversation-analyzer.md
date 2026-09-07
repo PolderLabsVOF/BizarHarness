@@ -1,6 +1,7 @@
 ---
 name: bizar-conversation-analyzer
 description: Bizar-conversation-analyzer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

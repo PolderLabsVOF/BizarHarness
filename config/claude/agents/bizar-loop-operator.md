@@ -1,6 +1,7 @@
 ---
 name: bizar-loop-operator
 description: Bizar-loop-operator — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 color: orange
 ---

@@ -1,6 +1,7 @@
 ---
 name: bizar-php-reviewer
 description: Bizar-php-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

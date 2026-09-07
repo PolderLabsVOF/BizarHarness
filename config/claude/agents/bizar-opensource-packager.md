@@ -1,6 +1,7 @@
 ---
 name: bizar-opensource-packager
 description: Bizar-opensource-packager — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-seo-specialist
 description: Bizar-seo-specialist — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-marketing-agent
 description: Bizar-marketing-agent — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

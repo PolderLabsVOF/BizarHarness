@@ -1,6 +1,7 @@
 ---
 name: bizar-vue-reviewer
 description: Bizar-vue-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

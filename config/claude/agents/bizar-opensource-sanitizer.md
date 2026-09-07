@@ -1,6 +1,7 @@
 ---
 name: bizar-opensource-sanitizer
 description: Bizar-opensource-sanitizer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

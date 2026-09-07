@@ -1,6 +1,7 @@
 ---
 name: bizar-cpp-build-resolver
 description: Bizar-cpp-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

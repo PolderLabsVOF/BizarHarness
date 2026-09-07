@@ -1,6 +1,7 @@
 ---
 name: bizar-chief-of-staff
 description: Bizar-chief-of-staff — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

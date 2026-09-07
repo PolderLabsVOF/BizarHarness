@@ -1,6 +1,7 @@
 ---
 name: bizar-go-reviewer
 description: Bizar-go-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

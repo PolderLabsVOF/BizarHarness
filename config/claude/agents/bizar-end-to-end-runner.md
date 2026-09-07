@@ -1,6 +1,7 @@
 ---
 name: bizar-end-to-end-runner
 description: Bizar-end-to-end-runner — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

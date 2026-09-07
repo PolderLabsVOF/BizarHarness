@@ -1,6 +1,7 @@
 ---
 name: bizar-rust-reviewer
 description: Bizar-rust-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

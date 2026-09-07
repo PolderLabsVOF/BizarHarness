@@ -1,6 +1,7 @@
 ---
 name: bizar-gan-generator
 description: Bizar-gan-generator — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 color: green
 ---

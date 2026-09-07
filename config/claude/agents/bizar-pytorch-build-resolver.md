@@ -1,6 +1,7 @@
 ---
 name: bizar-pytorch-build-resolver
 description: Bizar-pytorch-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

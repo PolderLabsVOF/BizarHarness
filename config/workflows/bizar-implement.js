@@ -37,17 +37,16 @@ const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
   if (opts.disallowedTools) agentOptions.disallowedTools = opts.disallowedTools
   return agentFn(`${prefix}\n${prompt}`, agentOptions)
 }
-const barrierRef = ({ phase, label, summary, payload }) => {
-  let evidence = ''
-  try { evidence = JSON.stringify(payload ?? '').slice(0, 12000) } catch { evidence = '<unserializable>' }
-  return { promptBlock: `Prior phase: ${phase}; label: ${label}; summary: ${summary || ''}\nBounded evidence: ${evidence}` }
+const barrierRef = ({ phase, label, summary }) => {
+  const s = typeof summary === 'string' ? summary.slice(0, 1200) : ''
+  return { promptBlock: `Prior phase: ${phase}; label: ${label}; summary: ${s}` }
 }
 
 const TOPIC = typeof args === 'string'
   ? args
   : (args && typeof args.topic === 'string')
     ? args.topic
-    : JSON.stringify(args || {})
+    : String(args || '')
 const SCOPE = (args && Array.isArray(args.scope)) ? args.scope : []
 const suppliedLanes = (args && Array.isArray(args.lanes)) ? args.lanes : []
 const fallbackLanes = [{ name: 'bounded-change', scope: SCOPE, task: TOPIC }]
@@ -57,7 +56,7 @@ const scopeEvidence = await parallel([
   () => dispatchAgent(agent, 'scope-researcher', `Confirm the smallest repository-local implementation boundary for "${TOPIC}". Identify existing code, tests, configuration, and reusable utilities. Do not edit.`, { role: 'research-analyst', risk: 'medium', capabilities: ['structured-output', 'reasoning'], label: 'scope-repository', phase: 'Scope' }),
   () => dispatchAgent(agent, 'scope-critic', `Independently challenge the assumed scope for "${TOPIC}". Identify hidden integration points, ownership conflicts, and the minimum regression evidence needed. Do not edit.`, { role: 'adversarial', risk: 'high', capabilities: ['structured-output', 'reasoning'], label: 'scope-risk', phase: 'Scope' }),
 ])
-const scopeSummary = scopeEvidence.map((entry) => JSON.stringify(entry ?? '')).join('\n').slice(0, 4000)
+const scopeSummary = scopeEvidence.map((entry) => (entry && typeof entry === 'object') ? Object.entries(entry).map(([k, v]) => `${k}: ${typeof v === 'string' ? v.slice(0, 200) : v}`).join(' | ') : String(entry ?? '')).join('\n').slice(0, 4000)
 
 phase('Plan')
 const plan = await dispatchAgent(agent, 'bounded-planner', `Produce a minimal reversible plan for "${TOPIC}". Return disjoint edit lanes with a single owner for shared files, plus the smallest proving tests. Do not edit.\n${barrierRef({ phase: 'Scope', label: 'scope-evidence', summary: scopeSummary, payload: scopeEvidence }).promptBlock}`, { role: 'architect', risk: 'medium', model: 'opus', capabilities: ['structured-output', 'reasoning', 'architecture'], label: 'plan', phase: 'Plan' })

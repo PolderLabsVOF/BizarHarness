@@ -1,6 +1,7 @@
 ---
 name: bizar-react-build-resolver
 description: Bizar-react-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

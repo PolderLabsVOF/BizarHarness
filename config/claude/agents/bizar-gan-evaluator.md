@@ -1,6 +1,7 @@
 ---
 name: bizar-gan-evaluator
 description: Bizar-gan-evaluator — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 color: red
 ---

@@ -1,6 +1,7 @@
 ---
 name: bizar-kotlin-build-resolver
 description: Bizar-kotlin-build-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

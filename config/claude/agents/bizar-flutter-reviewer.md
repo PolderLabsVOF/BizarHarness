@@ -1,6 +1,7 @@
 ---
 name: bizar-flutter-reviewer
 description: Bizar-flutter-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: bizar-harmonyos-app-resolver
 description: Bizar-harmonyos-app-resolver — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

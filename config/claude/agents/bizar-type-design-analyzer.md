@@ -1,6 +1,7 @@
 ---
 name: bizar-type-design-analyzer
 description: Bizar-type-design-analyzer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

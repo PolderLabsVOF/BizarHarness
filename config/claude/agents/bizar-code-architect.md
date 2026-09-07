@@ -1,6 +1,7 @@
 ---
 name: bizar-code-architect
 description: Bizar-code-architect — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 

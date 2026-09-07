@@ -1,6 +1,7 @@
 ---
 name: bizar-kotlin-reviewer
 description: Bizar-kotlin-reviewer — Bizar specialist.
+isolation: worktree
 tools: Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch
 ---
 
