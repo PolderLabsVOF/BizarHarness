@@ -16,10 +16,6 @@ specialists, guardrails, and evidence to carry it through responsibly.
 
 `85 agents` · `85 skills` · `37 commands` · `21-tool MCP server`
 
-<a href="https://polderlabs.io/"><img src="docs/assets/polderlabs-mark.svg" alt="PolderLabs" width="52" align="left" /></a>
-
-<sub>Sponsored by <a href="https://polderlabs.io/">PolderLabs</a></sub>
-
 </div>
 
 ---
@@ -302,3 +298,9 @@ make check
 ## License
 
 MIT
+
+---
+
+<div align="center">
+  <a href="https://polderlabs.io/"><img src="docs/assets/sponsored-by-polderlabs.svg" alt="Sponsored by PolderLabs" width="100%" /></a>
+</div>
