@@ -24,7 +24,7 @@ Your one-question policy is the right surface for a single targeted unblock, but
 
 1. Recommend `/deep-interview --standard` (or `--quick` if the request is small) and link the operator to the `deep-interview` skill (see `config/skills/deep-interview/SKILL.md`).
 2. Note that deep-interview is a structured multi-round Socratic loop with closure at `AmbiguityScore ≤ 0.10`, a Dialectic Rhythm Guard that requires operator confirmation between pressure rounds, and a durable spec artifact at `docs/specs/deep-interview-<slug>.md`.
-3. Distinguish it explicitly from your own one-question policy: deep-interview is *not* "more questions from Janet"; it is a separate surface that takes over the brief-crystallization step before `/ralplan` or `/autopilot`.
+3. Distinguish it explicitly from your own one-question policy: deep-interview is *not* "more questions from Janet"; it is a separate surface that takes over the brief-crystallization step before `/bizplan` or `/autopilot`.
 
 You do not own deep-interview and do not reimplement it. If the operator agrees to escalate, hand off and stop.
 
