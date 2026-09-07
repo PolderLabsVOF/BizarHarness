@@ -71,15 +71,18 @@ let tmp;
 let savedHome;
 let savedBizarHome;
 let savedBizarEvidenceDir;
+let savedXdgConfigHome;
 
 test.beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), 'bizar-evidence-bundles-'));
   savedHome = process.env.HOME;
   savedBizarHome = process.env.BIZAR_HOME;
   savedBizarEvidenceDir = process.env.BIZAR_EVIDENCE_DIR;
+  savedXdgConfigHome = process.env.XDG_CONFIG_HOME;
   process.env.HOME = tmp;
   delete process.env.BIZAR_HOME;
   delete process.env.BIZAR_EVIDENCE_DIR;
+  delete process.env.XDG_CONFIG_HOME;
 });
 
 test.afterEach(() => {
@@ -90,6 +93,8 @@ test.afterEach(() => {
   else process.env.BIZAR_HOME = savedBizarHome;
   if (savedBizarEvidenceDir === undefined) delete process.env.BIZAR_EVIDENCE_DIR;
   else process.env.BIZAR_EVIDENCE_DIR = savedBizarEvidenceDir;
+  if (savedXdgConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+  else process.env.XDG_CONFIG_HOME = savedXdgConfigHome;
 });
 
 test('EVIDENCE_DIR_MODE is 0o700', () => {
