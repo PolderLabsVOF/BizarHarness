@@ -43,7 +43,13 @@ import {
   type AmbiguityInput,
   type AmbiguityKind,
 } from "../ambiguity/score.js";
-import { validateRalplanHandoff, type RalplanHandoff } from "../handoff/ralplan.js";
+import {
+  validateBizplanHandoff,
+  type BizplanHandoff,
+  type BizplanPlan,
+  persistBizplanPlan,
+  spawnExecutorTask,
+} from "../handoff/bizplan.js";
 import { DEEP_INTERVIEW_SCHEMA_VERSION } from "../specs/deep-interview.js";
 
 // We don't import from @anthropic-ai/claude-agent-sdk as a hard dep —
@@ -505,7 +511,7 @@ const bizarAuditTool = defineTool<Record<string, string>>(
 // F-202 Phase 1 — OMX adoption scaffolding tools.
 //
 // These tools expose the new SDK primitives (ambiguity math, deep-
-// interview spec status, ultragoal state, and the ralplan handoff
+// interview spec status, ultragoal state, and the bizplan handoff
 // contract) over MCP so downstream phases (2–5) can plug into a
 // stable surface. They are read-only / forward-only and never
 // mutate user-visible state on their own; persistence is delegated
@@ -591,18 +597,44 @@ const ultragoalSteerTool = defineTool<{ id: string; action: string; payload: str
   },
 );
 
-const ralplanHandoffValidateTool = defineTool<{ input: string }>(
-  "ralplan_handoff_validate",
-  "Validate a Ralplan handoff payload. Pass `input` as a JSON object literal matching `RalplanHandoff`. Returns `{ ok: true }` or `{ ok: false, missing: [...] }` so callers can fix all required fields at once.",
+const bizplanValidateTool = defineTool<{ input: string }>(
+  "bizplan_validate",
+  "Validate a Bizplan handoff payload. Pass `input` as a JSON object literal matching `BizplanHandoff`. Returns `{ ok: true }` or `{ ok: false, missing: [...] }` so callers can fix all required fields at once.",
   { input: "string" },
   async ({ input }) => {
     try {
-      const parsed = JSON.parse(input) as RalplanHandoff;
-      const result = validateRalplanHandoff(parsed);
+      const parsed = JSON.parse(input) as BizplanHandoff;
+      const result = validateBizplanHandoff(parsed);
       return ok(JSON.stringify(result));
-    } catch (e) { return err(`ralplan_handoff_validate: ${e instanceof Error ? e.message : String(e)}`); }
+    } catch (e) { return err(`bizplan_validate: ${e instanceof Error ? e.message : String(e)}`); }
   },
   { readOnlyHint: true },
+);
+
+const bizplanPersistTool = defineTool<{ plan: string }>(
+  "bizplan_persist",
+  "Persist a bizplan plan to `.ok/plans/pln-<id>.json` with PRD cross-reference. Pass `plan` as a JSON object literal matching `BizplanPlan`. Returns `{ ok: true, planId, path }` on success or `{ ok: false, error }` so callers can fix the plan shape or PRD link before persisting.",
+  { plan: "string" },
+  async ({ plan }) => {
+    try {
+      const parsed = JSON.parse(plan) as BizplanPlan;
+      const result = persistBizplanPlan(parsed);
+      return ok(JSON.stringify(result));
+    } catch (e) { return err(`bizplan_persist: ${e instanceof Error ? e.message : String(e)}`); }
+  },
+);
+
+const bizplanSpawnTaskTool = defineTool<{ plan: string; assignee?: string }>(
+  "bizplan_spawn_task",
+  "Spawn an executor task for an accepted bizplan plan to `.ok/tasks/tsk-<id>.json` with `status: 'claimed'` and `links.planId`. Pass `plan` as a JSON object literal matching `BizplanPlan`; `assignee` is an optional worker identifier. Returns `{ ok: true, taskId, path }` on success.",
+  { plan: "string", assignee: "string" },
+  async ({ plan, assignee }) => {
+    try {
+      const parsed = JSON.parse(plan) as BizplanPlan;
+      const result = spawnExecutorTask(parsed, assignee);
+      return ok(JSON.stringify(result));
+    } catch (e) { return err(`bizplan_spawn_task: ${e instanceof Error ? e.message : String(e)}`); }
+  },
 );
 
 // ---------------------------------------------------------------------------
@@ -629,7 +661,13 @@ export const BIZAR_TOOLS: SdkMcpToolDef[] = [
   deepInterviewStatusTool,
   ultragoalStatusTool,
   ultragoalSteerTool,
-  ralplanHandoffValidateTool,
+  // F-202 Phase 1 — bizplan-overhaul: the only planning surface in
+  // Bizar. bizplan_validate wraps validateBizplanHandoff; bizplan_persist
+  // wraps persistBizplanPlan (writes .ok/plans/pln-*.json);
+  // bizplan_spawn_task wraps spawnExecutorTask (writes .ok/tasks/tsk-*.json).
+  bizplanValidateTool,
+  bizplanPersistTool,
+  bizplanSpawnTaskTool,
 ];
 
 /**

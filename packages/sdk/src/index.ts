@@ -164,10 +164,19 @@ export * from "./release/index.js";
 export * from "./bench/index.js";
 
 // F-202 Phase 1 — OMX adoption scaffolding: ambiguity math, deep-
-// interview spec, and the ralplan handoff contract. These are
-// additive re-exports; existing consumers are unaffected.
+// interview spec, and the bizplan handoff contract (replacing the
+// retired `ralplan` surface). These are additive re-exports; existing
+// consumers are unaffected. `bizplan` owns both the contract types
+// and the persistence / task-spawn functions used by the MCP tools.
 export * from "./ambiguity/index.js";
-export * from "./handoff/ralplan.js";
+export * from "./handoff/bizplan.js";
 export * from "./specs/deep-interview.js";
+
+// F-202 Phase 1 — bizplan MCP additions: named entry points for
+// the bizplan MCP surface so external consumers do not have to
+// import the raw `mcp/server` module. `bizplan_mcp` is the server
+// factory; `bizplan_tools` is the tool list. Coexists with the
+// existing `createBizarMcpServer` and `BIZAR_TOOLS` re-exports.
+export { bizplan_mcp, bizplan_tools } from "./mcp/bizplan.js";
 
 export { SDK_VERSION } from "./version.js";
