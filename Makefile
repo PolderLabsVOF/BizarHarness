@@ -88,12 +88,6 @@ mirror-claude-md-check:  ## CI check: config/claude/CLAUDE.md is in sync with AG
 
 cleanup: verify-repo-structure  ## Verify the repository and package contain no stale paths
 
-workflow-gc:  ## Garbage-collect .bizar/runs/ older than 14 days (Phase B.3)
-	@node cli/commands/workflow-gc.mjs
-
-workflow-gc-dry:  ## List GC candidates without deleting (Phase B.3)
-	@node cli/commands/workflow-gc.mjs --dry-run
-
 mcp-serve:  ## Run the Bizar MCP server (stdio) for Claude Code
 	@node packages/sdk/dist/mcp/bin.js
 
@@ -101,4 +95,4 @@ worktree-init:  ## Bootstrap a new worktree with shared node_modules / dist syml
 	@./scripts/worktree-setup.sh "$(WORKTREE)"
 
 # ── Convenience ─────────────────────────────────────────────────────────────
-.PHONY: help setup dev check test e2e check-arch clean-check verify-removed-surfaces verify-repo-structure verify-no-9router audit session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup workflow-gc workflow-gc-dry sync-skills-mirror verify-thinking-skills
+.PHONY: help setup dev check test e2e check-arch clean-check verify-removed-surfaces verify-repo-structure verify-no-9router audit session-start session-end init mirror-claude-md mirror-claude-md-check mcp-serve worktree-init cleanup sync-skills-mirror verify-thinking-skills

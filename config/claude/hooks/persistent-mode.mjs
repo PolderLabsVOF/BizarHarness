@@ -1,10 +1,17 @@
 #!/usr/bin/env node
 /**
- * SessionStart / PreCompact / Stop bridge for durable Bizar workflows.
+ * SessionStart / PreCompact / Stop bridge for durable Bizar plans.
  *
- * This hook is deliberately read-only. It reports the revision-bound stage
- * stored by `bizar workflow`; it never advances, completes, fails, or repairs
- * workflow state based on transcript text.
+ * This hook is deliberately read-only. It reports the active OpenKan
+ * plan + task state; it never advances, completes, fails, or repairs
+ * state based on transcript text.
+ *
+ * Migrated from `bizar workflow status` (now retired) to OpenKan's
+ * `ok plan list --status active --json` + `ok task list --json`. The
+ * legacy `{ ok, workflow: { runId, stage, revision, ... } }` shape
+ * is preserved for downstream consumers that still match on those
+ * keys (keyword-router, slash commands) — the OpenKan fields are
+ * mapped onto the legacy keys below.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -19,53 +26,96 @@ const STAGE_INSTRUCTIONS = Object.freeze({
   validate: 'Continue multi-perspective validation. Completion requires fresh functional, policy, quality, and test evidence plus an explicit guarded transition.',
 });
 
-function contextArgs(input) {
-  const args = ['workflow', 'status'];
-  if (input.session_id) args.push('--session', String(input.session_id));
-  if (input.cwd) args.push('--project', String(input.cwd));
-  args.push('--json');
-  return args;
+const TASK_STATUS_TO_STAGE = Object.freeze({
+  pending: 'research',
+  in_progress: 'execute',
+  review: 'qa',
+  done: 'validate',
+});
+
+/**
+ * Spawn the OpenKan CLI. Defaults to `ok` from `~/.local/bin/ok`;
+ * callers may override via options.executable for testability.
+ */
+function runOk(args, cwd, env, executable) {
+  return spawnSync(executable || 'ok', args, {
+    cwd: cwd || process.cwd(),
+    env: env || process.env,
+    encoding: 'utf8',
+    timeout: 5_000,
+    maxBuffer: 1024 * 1024,
+  });
 }
 
+/**
+ * Read the active OpenKan plan + its in-flight tasks and translate
+ * them into the legacy `{ ok, workflow }` JSON shape.
+ */
 export function readActiveWorkflow(input, options = {}) {
   if (!input || typeof input !== 'object') return null;
   if (typeof input.session_id !== 'string' || !input.session_id.trim()) return null;
-  const executable = options.executable || process.env.BIZAR_EXECUTABLE || 'bizar';
-  let result;
+
+  let planResult;
   try {
-    result = spawnSync(executable, contextArgs(input), {
-      cwd: input.cwd || process.cwd(),
-      env: options.env || process.env,
-      encoding: 'utf8',
-      timeout: options.timeout || 5_000,
-      maxBuffer: 1024 * 1024,
-    });
+    planResult = runOk(['plan', 'list', '--status', 'active', '--json'],
+      input.cwd, options.env, options.executable);
   } catch {
     return null;
   }
-  // Missing state, unavailable command, auth/context exhaustion, malformed
-  // output, and timeouts are all fail-open conditions for lifecycle hooks.
-  if (result.status !== 0 || result.error) return null;
-  let payload;
-  try { payload = JSON.parse(String(result.stdout || '').trim()); } catch { return null; }
-  const workflow = payload?.ok === true ? payload.workflow : null;
-  if (!workflow || workflow.status !== 'active') return null;
-  if (!workflow.runId || !workflow.stage || !Number.isSafeInteger(workflow.revision)) return null;
-  return workflow;
+  if (planResult.status !== 0 || planResult.error) return null;
+  let plans;
+  try { plans = JSON.parse(String(planResult.stdout || '').trim()); } catch { return null; }
+  if (!Array.isArray(plans) || plans.length === 0) return null;
+  const plan = plans.find((entry) => entry && entry.status === 'active') || plans[0];
+  if (!plan || !plan.id) return null;
+
+  let taskResult;
+  try {
+    taskResult = runOk(['task', 'list', '--plan', plan.id, '--json'],
+      input.cwd, options.env, options.executable);
+  } catch {
+    return null;
+  }
+  if (taskResult.status !== 0 || taskResult.error) return null;
+  let tasks;
+  try { tasks = JSON.parse(String(taskResult.stdout || '').trim()); } catch { tasks = []; }
+
+  // Pick the in-flight task (in_progress > review > pending). If
+  // nothing is in-flight but a plan exists, surface the plan's
+  // overall status as the "stage".
+  const inflight = (Array.isArray(tasks) ? tasks : [])
+    .find((task) => task && task.status === 'in_progress')
+    || (Array.isArray(tasks) ? tasks : [])
+      .find((task) => task && task.status === 'review')
+    || (Array.isArray(tasks) ? tasks : [])
+      .find((task) => task && task.status === 'pending');
+  const stage = inflight ? (TASK_STATUS_TO_STAGE[inflight.status] || 'execute') : 'execute';
+  const revision = Number.isSafeInteger(plan.updatedAt) ? plan.updatedAt : 1;
+
+  return {
+    runId: plan.id,
+    stage,
+    revision,
+    mode: plan.summary && plan.summary.toLowerCase().includes('autopilot') ? 'autopilot' : 'plan-build',
+    profile: 'default',
+    status: plan.status,
+    activeTask: inflight ? inflight.id : null,
+  };
 }
 
 function workflowSummary(workflow) {
   const instruction = STAGE_INSTRUCTIONS[workflow.stage]
     || 'Continue only the recorded current stage and require fresh evidence before any guarded transition.';
   return [
-    `Active Bizar ${workflow.mode || 'autopilot'} workflow checkpoint:`,
+    `Active Bizar ${workflow.mode || 'autopilot'} plan checkpoint:`,
     `- stage: ${workflow.stage}`,
-    `- run: ${workflow.runId}`,
+    `- plan: ${workflow.runId}`,
     `- revision: ${workflow.revision}`,
     `- profile: ${workflow.profile || 'default'}`,
+    workflow.activeTask ? `- task: ${workflow.activeTask}` : null,
     `- instruction: ${instruction}`,
-    '- Do not infer success or advance state from this context. Use revision-bound `bizar workflow` transitions only after fresh evidence.',
-  ].join('\n');
+    '- Do not infer success or advance state from this context. Use revision-bound `ok task update`/`ok plan update` transitions only after fresh evidence.',
+  ].filter(Boolean).join('\n');
 }
 
 export function persistentModeOutput(input, options = {}) {
