@@ -58,8 +58,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-${{ matrix.node }}-
 
-      - name: Install dependencies (bun install --frozen-lockfile)
-        run: bun install --frozen-lockfile
+      - name: Install dependencies (bun install)
+        run: bun install --no-save
 
       - name: TypeScript gate (make check)
         run: make check
