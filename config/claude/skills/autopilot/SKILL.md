@@ -85,17 +85,17 @@ applies on top of every primitive.
   brief, broad, or missing acceptance criteria, decision boundaries, or
   non-goals; emit a durable spec at `docs/specs/deep-interview-<slug>.md`
   with the ambiguity score at or below `0.10` before advancing.
-- **`ralplan`** — Separate planner and adversarial reviewer passes that
+- **`bizplan`** — Separate planner and adversarial reviewer passes that
   produce a research-grounded implementation plan. Use when the operator
   asks only for a plan / architecture decision; do not let execution leak
-  past the `plan` stage advance.
+  past the `bizplan` stage advance.
 - **`ultragoal`** — Long-horizon multi-objective run with weighted
   sub-stories and a four-lane completion fence. Use when the operator
   wants durable steer across multiple objectives that only complete when
   every lane passes a fresh quality gate.
 - **`brainstorming`** — Greenfield ideation. Use when the request is a new
   product / feature / tool with no spec yet, before any `deep-interview`
-  or `ralplan` escalation.
+  or `bizplan` escalation.
 
 ## Provenance
 

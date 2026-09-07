@@ -23,7 +23,7 @@ Use this skill when ANY of the following are true and the operator has not alrea
 
 Do **not** use this skill when:
 
-- The request is already crisp — proceed to `/ralplan` or `/autopilot` directly.
+- The request is already crisp — proceed to `/bizplan` or `/autopilot` directly.
 - A single targeted unblock suffices — `/janet` (one-question policy) is faster.
 - The work is greenfield design ideation with no brief to crystallize — `brainstorming` is the right surface.
 
@@ -32,12 +32,11 @@ Do **not** use this skill when:
 | Surface | When to use | Output | State |
 |---|---|---|---|
 | `/deep-interview` | Request is broad / ambiguous / missing acceptance criteria. Operator wants to crispen the brief before planning. | `docs/specs/deep-interview-<slug>.md` (spec artifact + ambiguity history) | Socratic loop with stage priority + depth profile cap |
-| `/plan` | One-shot planning once intent/outcome/scope are already known. Operator wants a 6-phase plan fast. | Plan-only output (no spec artifact) | Stateless |
-| `/ralplan` (Phase 5) | Multiple reviewers need to converge (architect + critic). Plan is consumed by `/autopilot` or `/team`. | PRD + test-spec + handoff JSON (`ralplan_consensus_gate.complete` gated) | Planner → Architect → Critic with 5-iteration cap |
+| `/bizplan` (Phase 5) | Multiple reviewers need to converge (architect + critic). Plan is consumed by `/autopilot` or `/team`. | PRD + test-spec + handoff JSON (`bizplan_consensus_gate.complete` gated) | Planner → Architect → Critic with 5-iteration cap |
 | `/autopilot` | End-to-end execution when intent is settled and consensus is not required. | Implementation + verification + completion evidence | Durable phased run |
 | `/janet` | One targeted clarifying question to unblock ambiguous work. | Single recommendation or 2–4 option question | Stateless |
 
-A natural operator ladder is `/deep-interview` → `/ralplan` → `/autopilot`; a fast lane is `/plan` → `/autopilot`; a single-reviewer lane is `/plan` straight to execution.
+A natural operator ladder is `/deep-interview` → `/bizplan` → `/autopilot`; when intent is already crisp, skip straight to `/bizplan` (or `/bizplan-light` for a single-reviewer lane) or `/autopilot`.
 
 ## Stage 1–3 coverage
 
@@ -64,7 +63,7 @@ Reject early closure if Stage 1 is missing or asserted without evidence.
 - Ordered acceptance criteria (testable; each criterion independently verifiable).
 - Non-goals list.
 - Decision boundaries (operator-bound vs. agent-bound).
-- Open questions deferred to the next surface (ralplan / autopilot).
+- Open questions deferred to the next surface (bizplan / autopilot).
 
 Stages execute in priority order. Stage 2 does not begin until Stage 1 is closed; Stage 3 does not begin until Stage 2 is closed.
 
@@ -148,7 +147,7 @@ The artifact is written atomically (precedent: `cli/commands/spec-list.mjs` and 
 
 - `bizar` — top-level harness contract (autonomy, approval boundaries, change policy) governs this skill.
 - `brainstorming` — greenfield design conversation. Use before `/deep-interview` when the operator has no brief at all; use `/deep-interview` once any concrete brief exists.
-- `ralplan` (Phase 5, strengthened) — consensus-planning surface. `/deep-interview` output is the input to `/ralplan`, not its replacement.
+- `bizplan` (Phase 5, strengthened) — consensus-planning surface. `/deep-interview` output is the input to `/bizplan`, not its replacement.
 - `autopilot` — end-to-end execution. Consumes the crystallized spec; never starts from a vague brief.
 - `thinking-socratic` — vocabulary source for the pressure-ladder categories. Embedded inline here so the skill never recurses.
 
