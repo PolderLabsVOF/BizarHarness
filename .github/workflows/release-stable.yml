@@ -58,6 +58,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: npm-latest   # optional — npm Trusted Publisher can pin to this env for extra safety
+    # Skip when triggered by a push to master whose HEAD commit is NOT a
+    # `chore(release): X.Y.Z` release commit. The push trigger exists so
+    # that merging a real release commit auto-publishes; CI and other
+    # pushes (e.g. docs, fixes, hot-pushes) must not run a release.
+    # workflow_dispatch always runs (operator-issued override).
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'chore(release):') }}
     steps:
       - uses: actions/checkout@v4
         with:
