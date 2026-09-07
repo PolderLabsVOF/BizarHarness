@@ -5,7 +5,7 @@
  * under id `omx-canonical-location`. The rule is invoked by
  * `scripts/check-arch.sh` and must:
  *
- *   - Pass (exit 0) when every deep-interview / ultragoal / ralplan
+ *   - Pass (exit 0) when every deep-interview / ultragoal / bizplan
  *     artifact lives under `docs/specs/`.
  *   - Fail (exit non-zero) and emit a DEC-022 violation message when
  *     any such artifact is written outside `docs/specs/`.
@@ -101,9 +101,9 @@ describe('check-arch rule: omx-canonical-location (DEC-022)', () => {
     assert.equal(r.status, 0, `expected exit 0; stdout=${r.stdout}; stderr=${r.stderr}`);
   });
 
-  test('allows docs/specs/ralplan-feature-x.md (canonical ralplan spec)', (t) => {
+  test('allows docs/specs/bizplan-feature-x.md (canonical bizplan spec)', (t) => {
     const root = fixture(t, [
-      { dir: 'docs/specs', name: 'ralplan-feature-x.md' },
+      { dir: 'docs/specs', name: 'bizplan-feature-x.md' },
     ]);
     const r = runCheck(check, root);
     assert.equal(r.status, 0, `expected exit 0; stdout=${r.stdout}; stderr=${r.stderr}`);
@@ -113,7 +113,7 @@ describe('check-arch rule: omx-canonical-location (DEC-022)', () => {
     const root = fixture(t, [
       { dir: 'docs/specs/sub', name: 'deep-interview-foo.md' },
       { dir: 'docs/specs/ultragoal', name: 'F-176.jsonl' },
-      { dir: 'docs/specs/ralplan', name: 'feature-x.handoff.json' },
+      { dir: 'docs/specs/bizplan', name: 'feature-x.handoff.json' },
     ]);
     const r = runCheck(check, root);
     assert.equal(r.status, 0, `expected exit 0; stdout=${r.stdout}; stderr=${r.stderr}`);
@@ -142,6 +142,16 @@ describe('check-arch rule: omx-canonical-location (DEC-022)', () => {
     assert.match(r.stdout, /ultragoal-F-176\.md/);
   });
 
+  test('rejects cli/ralplan-feature-x.md (bizplan spec outside docs/specs)', (t) => {
+    const root = fixture(t, [
+      { dir: 'cli', name: 'bizplan-feature-x.md' },
+    ]);
+    const r = runCheck(check, root);
+    assert.notEqual(r.status, 0, 'expected non-zero exit');
+    assert.match(r.stdout, /DEC-022/);
+    assert.match(r.stdout, /bizplan-feature-x\.md/);
+  });
+
   test('rejects .bizar/ultragoal-F-176.jsonl (ultragoal ledger outside docs/specs)', (t) => {
     const root = fixture(t, [
       { dir: '.bizar', name: 'ultragoal-F-176.jsonl' },
@@ -152,19 +162,19 @@ describe('check-arch rule: omx-canonical-location (DEC-022)', () => {
     assert.match(r.stdout, /ultragoal-F-176\.jsonl/);
   });
 
-  test('rejects config/workflows/ralplan-feature-x.handoff.json (ralplan handoff outside docs/specs)', (t) => {
+  test('rejects config/workflows/bizplan-feature-x.handoff.json (bizplan handoff outside docs/specs)', (t) => {
     const root = fixture(t, [
-      { dir: 'config/workflows', name: 'ralplan-feature-x.handoff.json' },
+      { dir: 'config/workflows', name: 'bizplan-feature-x.handoff.json' },
     ]);
     const r = runCheck(check, root);
     assert.notEqual(r.status, 0, 'expected non-zero exit');
     assert.match(r.stdout, /DEC-022/);
-    assert.match(r.stdout, /ralplan-feature-x\.handoff\.json/);
+    assert.match(r.stdout, /bizplan-feature-x\.handoff\.json/);
   });
 
-  test('rejects cli/ralplan-feature-x.md (ralplan spec outside docs/specs)', (t) => {
+  test('rejects cli/bizplan-feature-x.md (bizplan spec outside docs/specs)', (t) => {
     const root = fixture(t, [
-      { dir: 'cli', name: 'ralplan-feature-x.md' },
+      { dir: 'cli', name: 'bizplan-feature-x.md' },
     ]);
     const r = runCheck(check, root);
     assert.notEqual(r.status, 0, 'expected non-zero exit');
@@ -175,7 +185,7 @@ describe('check-arch rule: omx-canonical-location (DEC-022)', () => {
     const root = fixture(t, [
       { dir: 'cli/specs', name: 'deep-interview-foo.md' },
       { dir: 'packages/omx', name: 'ultragoal-F-176.md' },
-      { dir: 'config/workflows', name: 'ralplan-feature-x.handoff.json' },
+      { dir: 'config/workflows', name: 'bizplan-feature-x.handoff.json' },
       { dir: '.bizar', name: 'ultragoal-F-176.jsonl' },
     ]);
     const r = runCheck(check, root);
@@ -183,7 +193,7 @@ describe('check-arch rule: omx-canonical-location (DEC-022)', () => {
     assert.match(r.stdout, /DEC-022/);
     assert.match(r.stdout, /deep-interview-foo\.md/);
     assert.match(r.stdout, /ultragoal-F-176\.md/);
-    assert.match(r.stdout, /ralplan-feature-x\.handoff\.json/);
+    assert.match(r.stdout, /bizplan-feature-x\.handoff\.json/);
     assert.match(r.stdout, /ultragoal-F-176\.jsonl/);
   });
 });
