@@ -25,10 +25,14 @@ check() {
     echo "  FAIL"
     # Surface the test failure context. TAP puts individual `not ok`
     # lines mid-stream and only `tail` shows the truncated summary,
-    # which is exactly the part GitHub compresses to "...". Print the
-    # LAST 200 lines of grep-filtered test results plus the summary
-    # footer so the actual failed test names reach the CI log.
-    grep -E "^(not ok|# (fail|pass|tests|suites))" "$output_file" | tail -n 60 | sed 's/^/  /'
+    # which is exactly the part GitHub compresses to "...". Dump
+    # every `not ok` line first (no truncation) so inner describe
+    # failures surface; then dump the summary footer so the operator
+    # sees both the specific test names and the totals in one block.
+    echo "  ── failures ──"
+    grep -E "^\s*not ok " "$output_file" | sed 's/^/  /'
+    echo "  ── summary ──"
+    grep -E "^# (fail|pass|tests|suites)" "$output_file" | sed 's/^/  /'
     FAIL=$((FAIL + 1))
   fi
   rm -f -- "$output_file"
