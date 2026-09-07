@@ -92,7 +92,7 @@ function appendEvent({ ledgerPath, runId, event, revision, payload, phaseAfter }
 function runAddSubgoal(flags, ctx) {
   const runId = requireRunId(flags);
   const revision = requireRevision(flags);
-  if (typeof flags['subgoal-id'] !== 'string' || !flags['subgoal-id'].trim()) {
+  if (typeof flags.subgoalId !== 'string' || !flags.subgoalId.trim()) {
     throw new GoalCommandError('USAGE', '--subgoal-id is required for steer add_subgoal');
   }
   if (flags.weight === undefined) {
@@ -116,7 +116,7 @@ function runAddSubgoal(flags, ctx) {
     revision,
     phaseAfter: currentPhase ?? 'planning',
     payload: {
-      subgoalId: flags['subgoal-id'].trim(),
+      subgoalId: flags.subgoalId.trim(),
       weight,
       summary: flags.summary,
     },
@@ -221,13 +221,13 @@ function runCancelSteer(flags, ctx) {
 function runCompleteSteer(flags, ctx) {
   const runId = requireRunId(flags);
   const revision = requireRevision(flags);
-  if (typeof flags['quality-gate-json'] !== 'string' || !flags['quality-gate-json'].trim()) {
+  if (typeof flags.qualityGateJson !== 'string' || !flags.qualityGateJson.trim()) {
     throw new GoalCommandError(
       'USAGE',
       '--quality-gate-json <path> is required for steer complete',
     );
   }
-  const qgPath = flags['quality-gate-json'].trim();
+  const qgPath = flags.qualityGateJson.trim();
   if (!existsSync(qgPath)) {
     throw new GoalCommandError('NOT_FOUND', `quality-gate-json not found: ${qgPath}`);
   }
@@ -271,7 +271,12 @@ function runCompleteSteer(flags, ctx) {
 }
 
 export async function runSteer(flags, ctx) {
-  const action = flags._[0];
+  // The top-level dispatcher at cli/commands/goal.mjs prepends the
+  // literal subcommand token (e.g. 'steer') to the parseFlags argv,
+  // so for `bizar goal steer add_subgoal ...` the positional array
+  // is ['steer', 'add_subgoal', ...] — the action sits at index 1
+  // and the handler's own args start at index 2.
+  const action = flags._[1];
   if (!action) {
     throw new GoalCommandError('USAGE', 'steer requires an action: add_subgoal | checkpoint | update | fail | cancel | complete');
   }
@@ -282,7 +287,8 @@ export async function runSteer(flags, ctx) {
       `unknown steer action: "${action}". Allowed: ${Array.from(STEER_ACTIONS.keys()).join(', ')}`,
     );
   }
-  // flags._.shift() so subcommand handlers see only their own args
-  const subFlags = { ...flags, _: flags._.slice(1) };
+  // Strip both the prepended subcommand and the action so the inner
+  // handler only sees its own positional args.
+  const subFlags = { ...flags, _: flags._.slice(2) };
   return await handler(subFlags, ctx);
 }

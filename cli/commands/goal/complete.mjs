@@ -37,13 +37,13 @@ function requireRevision(flags) {
 export async function runComplete(flags, ctx) {
   const runId = requireRunId(flags);
   const revision = requireRevision(flags);
-  if (typeof flags['quality-gate-json'] !== 'string' || !flags['quality-gate-json'].trim()) {
+  if (typeof flags.qualityGateJson !== 'string' || !flags.qualityGateJson.trim()) {
     throw new GoalCommandError(
       'USAGE',
       '--quality-gate-json <path> is required for complete',
     );
   }
-  const qgPath = flags['quality-gate-json'].trim();
+  const qgPath = flags.qualityGateJson.trim();
   if (!existsSync(qgPath)) {
     throw new GoalCommandError('NOT_FOUND', `quality-gate-json not found: ${qgPath}`);
   }

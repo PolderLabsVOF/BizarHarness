@@ -89,18 +89,19 @@ function parseFlags(args) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (booleans.has(arg)) {
-      flags[arg.slice(2).replaceAll('-', '')] = true;
+      // Kebab-case flags become camelCase keys: --subgoal-id -> 'subgoalId'.
+      flags[arg.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = true;
     } else if (values.has(arg)) {
       if (i + 1 >= args.length) {
         throw new GoalCommandError('USAGE', `${arg} requires a value`);
       }
-      flags[arg.slice(2).replaceAll('-', '')] = args[++i];
+      flags[arg.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = args[++i];
     } else if (arg.startsWith('--') && arg.includes('=')) {
       const [name, ...rest] = arg.split('=');
       if (!values.has(name)) {
         throw new GoalCommandError('USAGE', `unknown option: ${name}`);
       }
-      flags[name.slice(2).replaceAll('-', '')] = rest.join('=');
+      flags[name.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = rest.join('=');
     } else if (arg.startsWith('-')) {
       throw new GoalCommandError('USAGE', `unknown option: ${arg}`);
     } else {

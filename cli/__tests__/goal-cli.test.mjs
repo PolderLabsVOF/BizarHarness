@@ -99,14 +99,14 @@ test('steer add_subgoal: revision bumps monotonically', async () => {
     const runId = start.runId;
 
     const a = await runSteer(
-      { _: ['add_subgoal'], run: runId, revision: 1, 'subgoal-id': 'a', weight: 0.5, summary: 'one' },
+      { _: ['steer', 'add_subgoal'], run: runId, revision: 1, subgoalId: 'a', weight: 0.5, summary: 'one' },
       { repoRoot },
     );
     assert.equal(a.ok, true);
     assert.equal(a.revision, 1);
 
     const b = await runSteer(
-      { _: ['add_subgoal'], run: runId, revision: 2, 'subgoal-id': 'b', weight: 0.5, summary: 'two' },
+      { _: ['steer', 'add_subgoal'], run: runId, revision: 2, subgoalId: 'b', weight: 0.5, summary: 'two' },
       { repoRoot },
     );
     assert.equal(b.ok, true);
@@ -136,7 +136,7 @@ test('steer checkpoint: allowed from executing/verifying/reviewing/checkpointing
     // planning -> checkpoint must reject
     await assert.rejects(
       runSteer(
-        { _: ['checkpoint'], run: runId, revision: 1, evidence: 'too early' },
+        { _: ['steer', 'checkpoint'], run: runId, revision: 1, evidence: 'too early' },
         { repoRoot },
       ),
       (err) => {
@@ -160,7 +160,7 @@ test('complete: rejected from planning; rejected from executing; accepted from c
     // 1) planning -> complete must reject
     await assert.rejects(
       runComplete(
-        { run: runId, revision: 1, 'quality-gate-json': 'nope' },
+        { run: runId, revision: 1, qualityGateJson: 'nope' },
         { repoRoot },
       ),
       (err) => err.code === 'PHASE_REJECTED' || err.code === 'NOT_FOUND',
@@ -184,7 +184,7 @@ test('complete: rejected from planning; rejected from executing; accepted from c
     writeFileSync(ledgerPath, events.map((e) => JSON.stringify(e)).join('\n') + '\n');
 
     const result = await runComplete(
-      { run: runId, revision: 2, 'quality-gate-json': qgPath },
+      { run: runId, revision: 2, qualityGateJson: qgPath },
       { repoRoot },
     );
     assert.equal(result.ok, true);
@@ -217,7 +217,7 @@ test('complete: missing four-lane evidence rejected', async () => {
 
     await assert.rejects(
       runComplete(
-        { run: runId, revision: 1, 'quality-gate-json': qgPath },
+        { run: runId, revision: 1, qualityGateJson: qgPath },
         { repoRoot },
       ),
       (err) => {
@@ -273,11 +273,11 @@ test('status: returns current phase + revision + eventCount', async () => {
     );
     const runId = start.runId;
     await runSteer(
-      { _: ['add_subgoal'], run: runId, revision: 1, 'subgoal-id': 'a', weight: 0.3, summary: 'a' },
+      { _: ['steer', 'add_subgoal'], run: runId, revision: 1, subgoalId: 'a', weight: 0.3, summary: 'a' },
       { repoRoot },
     );
     await runSteer(
-      { _: ['add_subgoal'], run: runId, revision: 2, 'subgoal-id': 'b', weight: 0.3, summary: 'b' },
+      { _: ['steer', 'add_subgoal'], run: runId, revision: 2, subgoalId: 'b', weight: 0.3, summary: 'b' },
       { repoRoot },
     );
     const status = await runStatus({ run: runId }, { repoRoot });
