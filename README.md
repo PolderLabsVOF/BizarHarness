@@ -1,20 +1,18 @@
 <div align="center">
 
-```text
-██████╗ ██╗███████╗ █████╗ ██████╗
-██╔══██╗██║╚══███╔╝██╔══██╗██╔══██╗
-██████╔╝██║  ███╔╝ ███████║██████╔╝
-██╔══██╗██║ ███╔╝  ██╔══██║██╔══██╗
-██████╔╝██║███████╗██║  ██║██║  ██║
-╚═════╝ ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
-```
+<img src="docs/assets/bizar-banner.svg" alt="Bizar: guarded autonomy for Claude Code" width="100%" />
+
+[![npm](https://img.shields.io/npm/v/%40polderlabs%2Fbizar?color=0f766e&label=npm)](https://www.npmjs.com/package/@polderlabs/bizar)
+[![license](https://img.shields.io/badge/license-MIT-0f172a)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/works%20with-Claude%20Code-d97757)](https://docs.anthropic.com/en/docs/claude-code)
+[![release](https://img.shields.io/github/v/release/PolderLabsVOF/BizarHarness?color=2563eb&label=release)](https://github.com/PolderLabsVOF/BizarHarness/releases)
 
 ### Guarded autonomy for Claude Code
 
 Choose your models once. Give Claude Code real work. Bizar supplies the routing,
 specialists, guardrails, and evidence to carry it through responsibly.
 
-`84 agents` · `80 skills` · `33 commands` · `14-tool MCP server`
+`85 agents` · `85 skills` · `37 commands` · `21-tool MCP server`
 
 </div>
 
@@ -142,11 +140,10 @@ bizar doctor
 
 ## A specialist bench, not a generic swarm
 
-Bizar ships its core coordination roles alongside 68 focused specialists for
-architecture, accessibility, security, testing, documentation, performance,
-language and framework review, build repair, operations, and evaluation. It
-also ships 80 skills for planning, debugging, verification, review,
-worktrees, and implementation practice.
+Bizar ships 85 agent definitions and 85 skill packs for architecture,
+accessibility, security, testing, documentation, performance, build repair,
+operations, planning, debugging, review, worktrees, and implementation
+practice.
 
 The coordinator selects specialists when their expertise reduces a concrete
 risk. It does not create parallel workers merely to look busy.
@@ -182,9 +179,9 @@ point where an external or difficult-to-reverse decision belongs to you.
 
 ```text
 ~/.claude/
-├── agents/          84 Bizar roles and specialist definitions
-├── skills/          80 skill packs
-├── commands/        39 slash-command surfaces
+├── agents/          85 Bizar roles and specialist definitions
+├── skills/          85 skill packs
+├── commands/        37 slash-command surfaces
 ├── hooks/           routing, lifecycle, safety, evidence, and quality hooks
 ├── rules/           focused guidance for common development work
 ├── workflows/       native workflow definitions

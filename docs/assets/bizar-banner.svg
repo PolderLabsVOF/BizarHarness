@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">Bizar</title><desc id="desc">Guarded autonomy for Claude Code</desc>
+  <defs><linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#0b1220"/><stop offset=".52" stop-color="#172554"/><stop offset="1" stop-color="#0f766e"/></linearGradient><linearGradient id="mark" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#38bdf8"/><stop offset="1" stop-color="#5eead4"/></linearGradient></defs>
+  <rect width="1200" height="320" fill="url(#bg)" rx="24"/><path d="M0 270C175 210 294 349 473 264S799 165 1200 250V320H0Z" fill="#020617" opacity=".42"/>
+  <g transform="translate(78 72)"><rect width="126" height="126" rx="28" fill="url(#mark)"/><path d="M35 31h35c24 0 38 11 38 29 0 12-7 21-18 25 14 3 23 13 23 28 0 20-16 32-42 32H35Zm28 23v20h10c7 0 11-4 11-10s-4-10-11-10Zm0 41v21h13c8 0 13-4 13-11s-5-10-13-10Z" fill="#082f49"/></g>
+  <text x="240" y="127" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="700" letter-spacing="-2">BIZAR</text><text x="244" y="174" fill="#bae6fd" font-family="Arial, Helvetica, sans-serif" font-size="28">GUARDED AUTONOMY FOR CLAUDE CODE</text><text x="244" y="220" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="21">Model routing · specialist teams · isolated worktrees · verification evidence</text>
+  <circle cx="1080" cy="88" r="8" fill="#5eead4"/><circle cx="1112" cy="116" r="5" fill="#38bdf8" opacity=".8"/><circle cx="1044" cy="126" r="4" fill="#f8fafc" opacity=".7"/>
+</svg>
