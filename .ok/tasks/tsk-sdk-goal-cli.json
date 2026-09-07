@@ -1,0 +1,32 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-sdk-goal-cli",
+  "title": "sdk-goal-cli",
+  "description": "Implement bizar goal start|steer|checkpoint|complete|status|fail|cancel|resume per ultragoal skill surface. Atomic ledger writes under docs/specs/ultragoal/<id>.jsonl per DEC-022. Tests for atomic write, revision-bump, phase transitions. NOTE: This subtask is now being reverted by the bizplan-overhaul-postscript ultragoal; all task/goal/planning is moving to OpenKan. Status retained as done for historical ledger fidelity — the runtime CLI is being removed and replaced by the native `ok` OpenKan CLI.",
+  "status": "done",
+  "priority": "p1",
+  "owner": "karen",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.10,
+  "scopes": [
+    "cli/bizar/goal.mjs",
+    "cli/__tests__/goal.test.mjs"
+  ],
+  "deps": [
+    "tsk-sdk-bizplan-persistence"
+  ],
+  "evidence": [
+    "8e2bb8de feat(cli): ship bizar goal start|steer|checkpoint|complete|status|fail|cancel|resume (shipped + then reverted in bizplan-overhaul-postscript ultragoal)",
+    "bizplan-overhaul-postscript ultragoal: replaces bizar goal CLI with native `ok` OpenKan CLI; this task's evidence kept for ledger fidelity only"
+  ],
+  "acceptance": [
+    "[historical, now reverted] bizar goal start|steer|checkpoint|complete|status|fail|cancel|resume shipped",
+    "[historical, now reverted] Atomic ledger writes under docs/specs/ultragoal/<id>.jsonl per DEC-022",
+    "Replacement: native `ok` OpenKan CLI (this OpenKan rehydration at .ok/ is the canonical replacement)"
+  ],
+  "createdAt": "2026-09-07T06:36:00.000Z",
+  "updatedAt": "2026-09-07T08:56:00.000Z",
+  "startedAt": "2026-09-07T08:54:00.000Z",
+  "completedAt": "2026-09-07T08:56:00.000Z"
+}

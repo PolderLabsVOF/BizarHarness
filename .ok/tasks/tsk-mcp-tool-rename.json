@@ -1,0 +1,32 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-mcp-tool-rename",
+  "title": "mcp-tool-rename",
+  "description": "packages/sdk/src/mcp/server.ts registers bizplan_persist, bizplan_spawn_task, bizplan_validate (replacing any ralplan_* tool). Update packages/sdk/src/index.ts re-exports and packages/sdk/tests/sdk.test.mjs.",
+  "status": "done",
+  "priority": "p1",
+  "owner": "karen",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.10,
+  "scopes": [
+    "packages/sdk/src/mcp/server.ts",
+    "packages/sdk/src/index.ts"
+  ],
+  "deps": [
+    "tsk-sdk-bizplan-contract",
+    "tsk-office-manager-routing"
+  ],
+  "evidence": [
+    "a257e8810c35019c3ce35f2cdce5cbabc4a8386a: feat(sdk,mcp): register bizplan_persist / bizplan_spawn_task / bizplan_validate tools"
+  ],
+  "acceptance": [
+    "packages/sdk/src/mcp/server.ts registers bizplan_persist / bizplan_spawn_task / bizplan_validate",
+    "packages/sdk/src/index.ts re-exports only bizplan surface (no ralplan)",
+    "packages/sdk/tests/sdk.test.mjs allow-list updated"
+  ],
+  "createdAt": "2026-09-07T06:33:50.000Z",
+  "updatedAt": "2026-09-07T08:54:00.000Z",
+  "startedAt": "2026-09-07T08:52:00.000Z",
+  "completedAt": "2026-09-07T08:54:00.000Z"
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-e2e-loop-evidence",
+  "title": "e2e-loop-evidence",
+  "description": "Run one real bizplan-standard workflow against a stub PRD + 2-file change. Capture .harness/evals/bizplan-e2e-<ts>.json: plan, spawned task, status transitions, four-lane evidence bundles, tier-selection transcript. Also drives the goal CLI end-to-end (start/steer/complete) for this same run so the surface gap is closed by the e2e lane.",
+  "status": "done",
+  "priority": "p1",
+  "owner": "todd",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.15,
+  "scopes": [
+    ".harness/evals/bizplan-e2e-2026-09-07T09-54-26Z.json"
+  ],
+  "deps": [
+    "tsk-arch-tests-cleanup",
+    "tsk-sdk-goal-cli"
+  ],
+  "evidence": [
+    "4f3c023178129a9114c87cf2efef248aab9cc888: test(e2e): record bizplan-standard e2e loop + goal CLI sub-run",
+    "84e272080925ba4a974d25b579b8c2ba4659ad4b: merge: wt/todd-bizplan-e2e into master (Stream C e2e evidence)",
+    ".harness/evals/bizplan-e2e-2026-09-07T09-54-26Z.json captures plan JSON + spawned task id + status transitions (claimed → in_progress → done) + four-lane evidence bundles + tier-selection transcript"
+  ],
+  "acceptance": [
+    "bizplan-standard e2e loop captured at .harness/evals/bizplan-e2e-<ts>.json with full plan → task → evidence → close loop",
+    "PRD cross-ref exercised against a stub PRD created in .ok/prds/",
+    "Sub-run ultragoal-cf161648.jsonl completed via goal CLI start → steer add_subgoal → steer checkpoint → steer complete"
+  ],
+  "createdAt": "2026-09-07T08:58:01.000Z",
+  "updatedAt": "2026-09-07T10:51:58.133Z",
+  "startedAt": "2026-09-07T09:16:00.000Z",
+  "completedAt": "2026-09-07T10:51:58.133Z"
+}

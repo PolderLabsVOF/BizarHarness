@@ -1,0 +1,31 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-sdk-bizplan-persistence",
+  "title": "sdk-bizplan-persistence",
+  "description": "persistBizplanPlan(handoff) writes .ok/plans/pln-<id>.json with PRD cross-ref (read from ok prd list); spawnExecutorTask(plan) writes .ok/tasks/tsk-<id>.json (status claimed, links planId).",
+  "status": "done",
+  "priority": "p1",
+  "owner": "todd",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.15,
+  "scopes": [
+    "packages/sdk/src/handoff/bizplan.ts",
+    "packages/sdk/src/storage/ok.ts"
+  ],
+  "deps": [
+    "tsk-sdk-bizplan-contract"
+  ],
+  "evidence": [
+    "e70e47ee11de5f25acf7a4a7a4d8d8843b662925: fix(sdk,commands): make okDir optional in persistBizplanPlan / spawnExecutorTask; rewrite bizplan command files as thin pointers"
+  ],
+  "acceptance": [
+    "persistBizplanPlan atomically writes .ok/plans/pln-<id>.json with PRD cross-ref",
+    "spawnExecutorTask writes .ok/tasks/tsk-<id>.json with status=claimed and links.planId",
+    "okDir is optional (defaults to project root .ok/)"
+  ],
+  "createdAt": "2026-09-07T06:33:50.000Z",
+  "updatedAt": "2026-09-07T08:33:00.000Z",
+  "startedAt": "2026-09-07T08:32:31.000Z",
+  "completedAt": "2026-09-07T08:33:00.000Z"
+}

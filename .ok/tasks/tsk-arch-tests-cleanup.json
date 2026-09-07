@@ -1,0 +1,35 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-arch-tests-cleanup",
+  "title": "arch-tests-cleanup",
+  "description": "make verify-removed-surfaces and make check-arch must pass: no references to ralplan (except historical), /plan deleted, packages/sdk/src/handoff/ralplan.ts deleted, RalplanHandoff type deleted. Update cli/__tests__/check-arch.test.mjs, cli/__tests__/claude-cmd.test.mjs, cli/__tests__/hook-portability.test.mjs.",
+  "status": "done",
+  "priority": "p1",
+  "owner": "karen",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.15,
+  "scopes": [
+    "cli/__tests__/check-arch.test.mjs",
+    "cli/__tests__/claude-cmd.test.mjs",
+    "cli/__tests__/hook-portability.test.mjs"
+  ],
+  "deps": [
+    "tsk-skill-bizplan-tiering",
+    "tsk-office-manager-routing",
+    "tsk-mcp-tool-rename"
+  ],
+  "evidence": [
+    "16d13fa2a346eebdd3ff772955e37ebec1fead79: test(arch): assert bizplan-only surface, remove ralplan references"
+  ],
+  "acceptance": [
+    "make verify-removed-surfaces exits 0 (no ralplan / RalplanHandoff / /ralplan / /plan references outside docs/historical/)",
+    "make check-arch exits 0",
+    "make verify-repo-structure exits 0",
+    "cli/__tests__/check-arch.test.mjs, claude-cmd.test.mjs, hook-portability.test.mjs updated"
+  ],
+  "createdAt": "2026-09-07T06:33:50.000Z",
+  "updatedAt": "2026-09-07T08:58:00.000Z",
+  "startedAt": "2026-09-07T08:56:00.000Z",
+  "completedAt": "2026-09-07T08:58:00.000Z"
+}

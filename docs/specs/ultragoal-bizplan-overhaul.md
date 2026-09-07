@@ -1,5 +1,7 @@
 # Ultragoal charter — bizplan-overhaul
 
+> **Migration note (postscript)**: as of 2026-09-07, this run's tracking state has been migrated to OpenKan at `.ok/prds/prd-bizplan-overhaul.json` + `.ok/plans/pln-bizplan-overhaul.json` + `.ok/tasks/tsk-*.json`. The legacy ledger at `docs/specs/ultragoal/ultragoal-bizplan-overhaul.jsonl` is preserved as a historical artifact but is no longer the canonical state. All subsequent task/goal/planning work flows through the native `ok` CLI.
+
 - **Run id**: `ultragoal-bizplan-overhaul`
 - **Run uuid**: `eaebafbb-586d-45e2-938a-5725ffaf2d5c`
 - **Started**: 2026-09-07T06:33:50Z
