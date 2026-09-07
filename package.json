@@ -40,6 +40,7 @@
     "test:node": "node scripts/run-node-tests.mjs",
     "test": "node scripts/with-sdk-dist-lock.mjs node scripts/run-test-with-sdk-build.mjs",
     "build": "npm run build:sdk",
+    "release:bump": "node scripts/bump-version.mjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build"
   },
@@ -85,12 +86,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/DrB0rk/BizarHarness.git"
+    "url": "git+ssh://git@github.com/PolderLabsVOF/BizarHarness.git"
   },
   "bugs": {
-    "url": "https://github.com/DrB0rk/BizarHarness/issues"
+    "url": "https://github.com/PolderLabsVOF/BizarHarness/issues"
   },
-  "homepage": "https://github.com/DrB0rk/BizarHarness#readme",
+  "homepage": "https://github.com/PolderLabsVOF/BizarHarness#readme",
   "optionalDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0"
   }

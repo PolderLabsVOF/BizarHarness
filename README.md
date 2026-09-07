@@ -248,6 +248,10 @@ make check
 
 - [Documentation index](docs/INDEX.md)
 - [Architecture](docs/architecture.md)
+- [Branching model](docs/branches.md) — `master` (stable) · `beta` · `dev` (nightly)
+- [Versioning rules](docs/versioning.md) — per-branch semver + conventional commits
+- [Development workflow](docs/development.md) — local dev + promotion + manual builds
+- [npm Trusted Publishing setup](docs/trusted-publishing.md) — one-time operator config
 - [Model routing decisions](docs/decisions/)
 - [Durable project progress, plans, and goals](.ok/)
 - [MIT license](LICENSE)

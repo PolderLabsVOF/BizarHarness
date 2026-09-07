@@ -7,6 +7,11 @@
   "bin": {
     "bizar-mcp": "dist/mcp/bin.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/PolderLabsVOF/BizarHarness.git",
+    "directory": "packages/sdk"
+  },
   "exports": {
     ".": "./dist/index.js",
     "./mcp": "./dist/mcp/server.js",

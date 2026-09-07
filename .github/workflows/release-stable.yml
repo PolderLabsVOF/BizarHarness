@@ -1,0 +1,144 @@
+# .github/workflows/release-stable.yml
+#
+# Stable release — publishes to the @latest npm dist-tag.
+#
+# Trigger sources (in priority order):
+#   1. Push to master where the merged HEAD commit is `chore(release): <X.Y.Z>`
+#      — i.e. the operator merged a release commit. The version already lives
+#      in package.json, packages/sdk/package.json, and packages/sdk/src/version.ts.
+#   2. workflow_dispatch with an explicit version input — useful for re-publishing
+#      an existing tag without mutating version files, or for force-cutting a
+#      release from a hot-pushed master.
+#
+# Trusted publishing (OIDC):
+#   This workflow expects `permissions: id-token: write` so it can obtain a
+#   short-lived npm token from npmjs.com via the GitHub Actions OIDC token
+#   exchange. The repo must be configured as a trusted publisher on the
+#   @polderlabs/bizar and @polderlabs/bizar-sdk packages:
+#     npmjs.com → package → Settings → Trusted publishers → GitHub Actions
+#     → repository: PolderLabsVOF/BizarHarness
+#     → workflow: .github/workflows/release-stable.yml
+#
+# What it does:
+#   1. Reads the version from packages/sdk/src/version.ts (the single source).
+#   2. Builds the SDK (npm run build:sdk).
+#   3. Publishes @polderlabs/bizar-sdk → @latest (provenance ON).
+#   4. Publishes @polderlabs/bizar     → @latest (provenance ON, deps include SDK dist).
+#   5. Creates a git tag v<version> on the merged commit (idempotent).
+#   6. Creates a GitHub Release with a generated changelog.
+name: Release — stable (@latest)
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional explicit version override (e.g. 10.28.0). Leave empty to read from version.ts.'
+        required: false
+      dry_run:
+        description: 'Dry run — build everything but skip npm publish + git tag + GitHub release.'
+        required: false
+        default: 'false'
+
+# Allow concurrent stable releases on different SHAs (rare, but possible during
+# emergency hotfixes); the npm tag write is atomic per-version so races surface
+# as a non-fatal 409. Use the explicit tag to serialise.
+concurrency:
+  group: release-stable
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # for tag push
+  id-token: write   # for npm OIDC trusted publishing
+
+jobs:
+  release:
+    name: Publish @polderlabs/bizar + @polderlabs/bizar-sdk @ ${{ inputs.version || 'auto' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-latest   # optional — npm Trusted Publisher can pin to this env for extra safety
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Detect version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            VER=$(node -p "require('./packages/sdk/src/version.ts'.replace(/\\.ts$/, '.js')).SDK_VERSION" 2>/dev/null || true)
+            if [ -z "$VER" ]; then
+              # Fallback — parse from version.ts without compilation
+              VER=$(grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' packages/sdk/src/version.ts | head -1 | tr -d '"')
+            fi
+            echo "value=$VER" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Detected version: $VER"
+
+      - name: Validate version (X.Y.Z)
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          if ! echo "$VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid stable version: $VER (must be X.Y.Z)"
+            exit 1
+          fi
+
+      - name: Check tag does not already exist
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          if git rev-parse -q --verify "refs/tags/v$VER" >/dev/null; then
+            if [ "${{ github.event_name }}" = "push" ]; then
+              echo "::notice::Tag v$VER already exists — this is likely a re-push. Skipping tag creation but continuing publish."
+            fi
+          fi
+
+      - name: Build SDK + root
+        run: npm run build
+
+      - name: Run gates (sanity check before publishing)
+        run: |
+          make verify-removed-surfaces verify-repo-structure check-arch clean-check check test
+
+      - name: Publish @polderlabs/bizar-sdk @ @latest (OIDC, provenance ON)
+        if: ${{ inputs.dry_run != 'true' }}
+        working-directory: packages/sdk
+        run: npm publish --access public --provenance --tag latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}  # supplied by setup-node registry-url + OIDC exchange
+
+      - name: Publish @polderlabs/bizar @ @latest (OIDC, provenance ON)
+        if: ${{ inputs.dry_run != 'true' }}
+        run: npm publish --access public --provenance --tag latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create git tag v${{ steps.version.outputs.value }}
+        if: ${{ inputs.dry_run != 'true' && github.event_name == 'push' }}
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VER" -m "v$VER — stable" HEAD
+          git push origin "v$VER"
+
+      - name: Create GitHub Release
+        if: ${{ inputs.dry_run != 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: "v${{ steps.version.outputs.value }} — stable"
+          generate_release_notes: true
+          prerelease: false

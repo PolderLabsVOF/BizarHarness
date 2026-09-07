@@ -1,0 +1,131 @@
+# .github/workflows/release-beta.yml
+#
+# Beta release — publishes to the @beta npm dist-tag (prerelease=true).
+#
+# Two trigger modes:
+#   1. Push to beta: auto-bumps the beta counter and publishes a new prerelease.
+#      The base version (next-stable MAJOR.MINOR.PATCH) is read from the most
+#      recent chore(release): commit on master and the counter starts at .1.
+#      Override either by editing scripts/bump-version.mjs inputs.
+#   2. workflow_dispatch: explicit version (e.g. 10.28.0-beta.2) — useful when
+#      the operator wants to reuse the same version that was already published
+#      from a previous push.
+#
+# Trusted publishing (OIDC) — same as release-stable.yml. See that file for
+# the npm Trusted Publisher registration steps.
+name: Release — beta (@beta, prerelease)
+
+on:
+  push:
+    branches: [beta]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional explicit version override (e.g. 10.28.0-beta.2). Leave empty to auto-bump.'
+        required: false
+      base:
+        description: 'Optional base version override (e.g. 10.28.0). Leave empty to read from CHANGELOG.md / last master release.'
+        required: false
+      dry_run:
+        description: 'Dry run — build everything but skip npm publish.'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: release-beta
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Publish @beta @ ${{ inputs.version || 'auto' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-beta
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Compute next beta version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VER="${{ inputs.version }}"
+          elif [ -n "${{ inputs.base }}" ]; then
+            VER=$(node scripts/bump-version.mjs --mode beta --base "${{ inputs.base }}")
+          else
+            VER=$(node scripts/bump-version.mjs --mode beta)
+          fi
+          echo "value=$VER" >> "$GITHUB_OUTPUT"
+          echo "Computed beta version: $VER"
+
+      - name: Validate version (X.Y.Z-beta.N)
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          if ! echo "$VER" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$'; then
+            echo "::error::Invalid beta version: $VER (must be X.Y.Z-beta.N)"
+            exit 1
+          fi
+
+      - name: Bump versions in tree + commit
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          node scripts/bump-version.mjs --mode beta --write --target "$VER"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json packages/sdk/package.json packages/sdk/src/version.ts
+          git commit -m "chore(release): $VER — beta prerelease" || echo "No version changes to commit"
+          git push origin beta
+
+      - name: Build SDK + root
+        run: npm run build
+
+      - name: Run gates
+        run: |
+          make verify-removed-surfaces verify-repo-structure check-arch clean-check check test
+
+      - name: Publish @polderlabs/bizar-sdk @ @beta (OIDC, provenance ON)
+        if: ${{ inputs.dry_run != 'true' }}
+        working-directory: packages/sdk
+        run: npm publish --access public --provenance --tag beta
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @polderlabs/bizar @ @beta (OIDC, provenance ON)
+        if: ${{ inputs.dry_run != 'true' }}
+        run: npm publish --access public --provenance --tag beta
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create git tag v${{ steps.version.outputs.value }}
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          VER="${{ steps.version.outputs.value }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VER" -m "v$VER — beta prerelease" HEAD
+          git push origin "v$VER"
+
+      - name: Create GitHub prerelease
+        if: ${{ inputs.dry_run != 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: "v${{ steps.version.outputs.value }} — beta"
+          generate_release_notes: true
+          prerelease: true
