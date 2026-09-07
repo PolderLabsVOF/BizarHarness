@@ -2,7 +2,7 @@
 
 Bizar Harness is a Claude Code-native, guarded-autonomy harness. It ships project and user-level agents, skills, slash commands, hooks, an MCP server, CLI utilities, and verification scripts. OpenKan is bundled as Bizar’s default durable planning, progression, task, and PRD-goal system; Bizar integrates with it only through the `.ok/` workspace and its supported CLI boundary.
 
-If you are an agent: read this file, inspect `.ok/` with `bizar task list` and `bizar goals list`, then run `make check` before changing code.
+If you are an agent: read this file, inspect `.ok/` with `ok task list` and `ok prd list`, then run `make check` before changing code.
 
 ## Commands
 
@@ -15,9 +15,9 @@ make check-arch               # architectural and removed-surface checks
 make verify-removed-surfaces  # prove deleted subsystems are absent
 make verify-repo-structure    # prove tracked/package paths are clean
 make clean-check              # debug-artifact/static hygiene gate
-bizar task list               # OpenKan task progression
-bizar plan list               # OpenKan plans
-bizar goals list              # OpenKan PRD goals
+ok task list               # OpenKan task progression
+ok plan list               # OpenKan plans
+ok prd list              # OpenKan PRD goals
 make session-start            # lifecycle compatibility target
 make session-end              # lifecycle compatibility target
 ```
