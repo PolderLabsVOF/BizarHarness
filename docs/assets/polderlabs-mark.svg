@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="230" viewBox="0 0 200 230" role="img" aria-labelledby="title">
+  <title id="title">PolderLabs symbol</title>
+  <defs>
+    <linearGradient id="mark-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1BC8F4"/><stop offset="1" stop-color="#15A9DD"/></linearGradient>
+    <linearGradient id="mark-yellow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFD64D"/><stop offset="1" stop-color="#FFC52C"/></linearGradient>
+    <clipPath id="mark-top-clip"><path d="M20 75 C37 36 65 18 100 18 H135 C174 18 198 47 198 83 C198 121 173 149 127 157 V98 C127 84 120 75 106 75 H20 Z"/></clipPath>
+  </defs>
+  <g transform="translate(0 0) scale(1)">
+    <path d="M20 75 C37 36 65 18 100 18 H135 C174 18 198 47 198 83 C198 121 173 149 127 157 V98 C127 84 120 75 106 75 H20 Z" fill="url(#mark-cyan)"/>
+    <path d="M106 75 C120 75 127 84 127 98 V157 C153 152 174 140 187 122 C164 121 145 108 127 90 C122 82 115 77 106 75 Z" fill="#087FAF" opacity="0.10" clip-path="url(#mark-top-clip)"/>
+    <path d="M64 104 C37 104 18 127 18 155 V219 H45 C77 219 99 198 99 166 V104 Z" fill="#082A42"/>
+    <circle cx="132" cy="190" r="26" fill="url(#mark-yellow)"/>
+  </g>
+</svg>

@@ -6,6 +6,8 @@
 [![license](https://img.shields.io/badge/license-MIT-0f172a)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/works%20with-Claude%20Code-d97757)](https://docs.anthropic.com/en/docs/claude-code)
 [![release](https://img.shields.io/github/v/release/PolderLabsVOF/BizarHarness?color=2563eb&label=release)](https://github.com/PolderLabsVOF/BizarHarness/releases)
+![OmniRoute routing](https://img.shields.io/badge/routing-OmniRoute-0ea5e9)
+[![Planning](https://img.shields.io/badge/planning-OpenKan-f59e0b)](https://www.npmjs.com/package/@polderlabs/openkan)
 
 ### Guarded autonomy for Claude Code
 
@@ -13,6 +15,10 @@ Choose your models once. Give Claude Code real work. Bizar supplies the routing,
 specialists, guardrails, and evidence to carry it through responsibly.
 
 `85 agents` · `85 skills` · `37 commands` · `21-tool MCP server`
+
+<a href="https://polderlabs.io/"><img src="docs/assets/polderlabs-mark.svg" alt="PolderLabs" width="52" align="left" /></a>
+
+<sub>Sponsored by <a href="https://polderlabs.io/">PolderLabs</a></sub>
 
 </div>
 
