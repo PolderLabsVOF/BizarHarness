@@ -36,16 +36,16 @@ test('workflow skills have exact project mirrors and durable state commands', ()
     assert.equal(mirror, canonical, `${name} mirror must be byte-identical`);
     assert.match(canonical, new RegExp(`^---\\nname: ${name}\\n`, 'm'));
     assert.doesNotMatch(canonical, /disable-model-invocation:\s*true/);
-    assert.match(canonical, /bizar workflow status/);
+    assert.match(canonical, /ok task list/);
     assert.match(canonical, /Never auto-commit|never auto-commit|Do not auto-commit/);
     assert.doesNotMatch(canonical, /claude daemon|tmux new-session|git push|npm publish/);
   }
 
   const autopilot = read('config/skills/autopilot/SKILL.md');
   assert.match(autopilot, /argument-hint: "\[--workflow <default\|plan-build-qa>\] <task or outcome>"/);
-  assert.match(autopilot, /--workflow "\$WORKFLOW_PROFILE" --goal "\$TASK_GOAL"/);
+  assert.match(autopilot, /ok plan add/);
   assert.match(autopilot, /If the selector is omitted, use `default`/);
-  assert.match(autopilot, /--evidence "\$BOUNDED_EVIDENCE"/);
+  assert.match(autopilot, /ok task complete/);
   assert.match(autopilot, /41a4c0f77144c5beb5f5f000a89cff379c680606/);
 
   const autopilotCommand = read('config/claude/commands/autopilot.md');

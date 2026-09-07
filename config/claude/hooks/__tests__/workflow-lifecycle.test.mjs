@@ -103,12 +103,25 @@ process.stdout.write(JSON.stringify({ ok: true, workflow: { status: 'active', st
 
 test('persistent Stop hook blocks once for active state and honors recursion guard', () => {
   const dir = mkdtempSync(join(tmpdir(), 'bizar-persistent-mode-'));
-  const fake = join(dir, 'bizar-fake.mjs');
+  const fake = join(dir, 'ok-fake.mjs');
   writeFileSync(fake, `#!/usr/bin/env node
-process.stdout.write(JSON.stringify({ ok: true, workflow: {
-  mode: 'autopilot', status: 'active', stage: 'qa', profile: 'default',
-  runId: '00000000-0000-0000-0000-000000000001', revision: 7
-} }));
+const args = process.argv.slice(2);
+if (args[0] === 'plan') {
+  // ok plan list --status active --json
+  process.stdout.write(JSON.stringify([
+    {
+      id: '00000000-0000-0000-0000-000000000001',
+      status: 'active',
+      summary: 'autopilot run',
+      updatedAt: 7,
+    },
+  ]));
+} else {
+  // ok task list --plan <id> --json — review status maps to qa stage
+  process.stdout.write(JSON.stringify([
+    { id: 'tsk-qa-1', status: 'review', plan: '00000000-0000-0000-0000-000000000001' },
+  ]));
+}
 `);
   chmodSync(fake, 0o755);
   try {

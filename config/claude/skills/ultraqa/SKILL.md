@@ -1,6 +1,6 @@
 ---
 name: ultraqa
-description: Run a bounded reproduce-test-fix QA cycle and attach fresh evidence to the active Bizar workflow.
+description: Run a bounded reproduce-test-fix QA cycle and attach fresh evidence to the active OpenKan plan/task.
 argument-hint: "[acceptance path or test scope]"
 ---
 
@@ -8,19 +8,26 @@ argument-hint: "[acceptance path or test scope]"
 
 UltraQA proves behavior; it does not declare success from code inspection alone.
 
+> **No `bizar workflow` CLI exists.** All durable state lives in the
+> OpenKan `.ok/` workspace. UltraQA advances a single QA task under the
+> active plan; the evidence field carries the bounded command/result
+> record.
+
 ## Enter QA
 
-Read workflow state first:
+Read plan/task state first:
 
 ```sh
-bizar workflow status --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+ok task list --json
+ok plan list --json
 ```
 
-Resume an existing run when present. If no run exists, start `plan-build-qa` with the requested acceptance path, then establish the research/spec, test plan, and baseline evidence before advancing sequentially into QA.
+Resume an existing plan when present. If no plan exists, create a `plan-build-qa` plan with the requested acceptance path, then establish the research/spec, test plan, and baseline evidence before advancing sequentially into QA.
 
 ```sh
-bizar workflow resume --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
-bizar workflow start --profile plan-build-qa --goal "$ARGUMENTS" --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+ok plan show "$ACTIVE_PLAN_ID" --json
+ok plan add "$ARGUMENTS" --summary "UltraQA plan-build-qa run" --json
+ok task add "qa" --plan "$PLAN_ID" --priority p1 --json
 ```
 
 ## Bounded cycle
@@ -36,7 +43,9 @@ For at most five cycles:
 When QA is green, re-read state and advance:
 
 ```sh
-bizar workflow advance --run "$RUN_ID" --revision "$REVISION" --stage qa --evidence "$BOUNDED_EVIDENCE" --json
+ok task update "$TASK_ID" --status review --json
+ok task complete "$TASK_ID" --evidence "$BOUNDED_EVIDENCE" --json
+ok task add "validate" --plan "$PLAN_ID" --priority p1 --json
 ```
 
-If the cycle limit is reached, run `bizar workflow fail --run "$RUN_ID" --revision "$REVISION" --stage qa --reason "$REASON" --json`. Never hide skipped checks or flaky results. After QA, functional, security/policy, and code-quality validation remain required. UltraQA never auto-commits, pushes, publishes, releases, deploys, changes credentials/access, or uses daemon/tmux or a general memory/wiki service.
+If the cycle limit is reached, run `ok task cancel "$TASK_ID" --reason "$REASON" --json` and mark the owning plan `abandoned`. Never hide skipped checks or flaky results. After QA, functional, security/policy, and code-quality validation remain required. UltraQA never auto-commits, pushes, publishes, releases, deploys, changes credentials/access, or uses daemon/tmux or a general memory/wiki service.

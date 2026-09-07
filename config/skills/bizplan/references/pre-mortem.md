@@ -6,8 +6,12 @@ plan has already failed, reason backward through why).
 
 ## When the bizplan skill pre-pends a pre-mortem
 
-BIZPLAN deliberate mode (`bizar workflow start --mode bizplan
---deliberate`) prepends a pre-mortem round to the Architect pass:
+BIZPLAN deliberate mode (signalled to the bizplan skill via the planner's
+deliberate-mode flag) prepends a pre-mortem round to the Architect pass.
+The bizplan CLI surface was retired; deliberate-mode is recorded as
+`mode: "deliberate"` in the OpenKan plan metadata written by
+`ok plan add --summary "bizplan deliberate ..."` and read by downstream
+consumers (`@plan-architect`, `@linda` BIZPLAN-Critic) from there:
 
 1. The Planner's draft is finalized at `docs/specs/bizplan/<slug>.md`.
 2. The pre-mortem skill is loaded against that draft and produces a

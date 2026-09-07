@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Independently validate functional behavior, security and approval policy, and code quality before a Bizar workflow may complete.
+description: Independently validate functional behavior, security and approval policy, and code quality before an OpenKan plan may complete.
 argument-hint: "[change or acceptance criteria]"
 ---
 
@@ -8,16 +8,23 @@ argument-hint: "[change or acceptance criteria]"
 
 Verification proves the integrated result against explicit acceptance criteria.
 
+> **No `bizar workflow` CLI exists.** Verification binds to the active
+> OpenKan plan/task; the final advance is `ok task complete
+> <validate-task-id> --evidence "..."` and the plan closes when every
+> remaining task reports `done`.
+
 ## Bind to state
 
 ```sh
-bizar workflow status --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+ok task list --json
+ok plan list --json
 ```
 
-Resume an active run before validating. When no run exists, perform a standalone verification report; do not fabricate phase history solely to obtain a completed state.
+Resume an active plan before validating. When no plan exists, perform a standalone verification report; do not fabricate phase history solely to obtain a completed state.
 
 ```sh
-bizar workflow resume --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+ok plan show "$ACTIVE_PLAN_ID" --json
+ok task list --plan "$ACTIVE_PLAN_ID" --json
 ```
 
 ## Independent validation lanes
@@ -30,10 +37,11 @@ Run these in parallel when they do not share mutable files:
 
 Reconcile all findings in the integrated workspace. A claim is not proven by an agent summary: read the actual command output and artifacts. Run the repository's required final gates in their mandated order. Evidence must be fresh, bounded, and name the command/result or artifact; record gaps explicitly.
 
-For an active workflow at `validate`, re-read status and complete via the final advance:
+For an active plan at the `validate` stage, re-read state and complete via the final advance:
 
 ```sh
-bizar workflow advance --run "$RUN_ID" --revision "$REVISION" --stage validate --evidence "$BOUNDED_EVIDENCE" --json
+ok task update "$TASK_ID" --status review --json
+ok task complete "$TASK_ID" --evidence "$BOUNDED_EVIDENCE" --json
 ```
 
-If required evidence fails and cannot be repaired within the agreed bound, use `bizar workflow fail --run "$RUN_ID" --revision "$REVISION" --stage validate --reason "$REASON" --json`. Never auto-commit, push, publish, release, deploy, change credentials/access, or use daemon/tmux or a general memory/wiki subsystem.
+If required evidence fails and cannot be repaired within the agreed bound, use `ok task cancel <task-id> --reason "<bounded reason>"` and mark the owning plan `abandoned`. Never auto-commit, push, publish, release, deploy, change credentials/access, or use daemon/tmux or a general memory/wiki subsystem.

@@ -4,7 +4,7 @@ description: Multi-round Socratic pre-build clarification that crystallizes a br
 argument-hint: "[--quick|--standard|--deep] <broad or ambiguous request>"
 ---
 
-> **Bizar compatibility:** This procedure is fully integrated into Bizar. Bizar system, repository, model-routing, autonomy, and approval policy control whenever they differ. Do not add a separate mandatory approval gate, recurse into dispatch, or override the active Bizar workflow. Deep-interview is **not** a workflow run (no `bizar workflow` ledger), it does **not** auto-commit, push, publish, release, deploy, change credentials, or destroy state, and it does **not** launch a daemon, tmux controller, or general memory / note-vault subsystem. The skill follows `using-superpowers` precedent: every cross-reference below is an instruction to consult the named skill, not to recurse into it.
+> **Bizar compatibility:** This procedure is fully integrated into Bizar. Bizar system, repository, model-routing, autonomy, and approval policy control whenever they differ. Do not add a separate mandatory approval gate, recurse into dispatch, or override the active Bizar plan. Deep-interview is **not** a workflow run (no `bizar workflow`/`bizar goal` ledger — those CLIs are retired), it does **not** auto-commit, push, publish, release, deploy, change credentials, or destroy state, and it does **not** launch a daemon, tmux controller, or general memory / note-vault subsystem. The skill follows `using-superpowers` precedent: every cross-reference below is an instruction to consult the named skill, not to recurse into it.
 
 
 # Deep Interview
@@ -142,7 +142,7 @@ The artifact MUST contain (in this order):
 11. **Ambiguity breakdown** — final `ClarityBreakdown` per `packages/sdk/src/ambiguity/score.ts`.
 12. **Terminology ledger** — term × canonical × round × category × definition.
 
-The artifact is written atomically (precedent: `cli/core/workflow-state.mjs:72–85`); partial writes MUST never appear on disk. A second invocation with the same slug MUST read existing state and continue the transcript without destructive overwrite.
+The artifact is written atomically (precedent: `cli/commands/spec-list.mjs` and OpenKan's own atomic-write helpers); partial writes MUST never appear on disk. A second invocation with the same slug MUST read existing state and continue the transcript without destructive overwrite.
 
 ## Cross-references
 
@@ -152,7 +152,7 @@ The artifact is written atomically (precedent: `cli/core/workflow-state.mjs:72�
 - `autopilot` — end-to-end execution. Consumes the crystallized spec; never starts from a vague brief.
 - `thinking-socratic` — vocabulary source for the pressure-ladder categories. Embedded inline here so the skill never recurses.
 
-Never call `bizar workflow start` from inside this skill; deep-interview is not a workflow run and does not own a `~/.config/bizar/workflow/<session>/` ledger entry.
+Never call `bizar workflow start` (the CLI is retired) from inside this skill; deep-interview is not a workflow run and does not own a `~/.config/bizar/workflow/<session>/` ledger entry. If a durable plan must be created, route through OpenKan: `ok plan add <title>` plus `ok task add` per interview gate.
 
 ## Hard constraints
 

@@ -8,9 +8,11 @@
  * After implementation:
  *   - `bizar models`, `bizar model`, `bizar tier` MUST NOT be
  *     registered in `cli/bin.mjs` (the picker surface is removed).
- *   - `bizar doctor`, `bizar workflow`, `bizar worker` MUST retain
+ *   - `bizar doctor`, `bizar worker` MUST retain
  *     their non-picker behavior — the command file exists and does
  *     not import `cli/commands/models.mjs` or the SDK router modules.
+ *   - `bizar workflow`, `bizar goal` MUST be removed (the bizplan-overhaul
+ *     ultragoal retired these CLIs in favour of OpenKan `ok`).
  *
  * The pre-implementation tree currently violates the picker-removal
  * assertion and passes the non-picker-behavior assertion.
@@ -130,18 +132,50 @@ test('alias-cli-commands: `bizar doctor` retains its non-picker behavior', () =>
   );
 });
 
-test('alias-cli-commands: `bizar workflow` retains its non-picker behavior', () => {
+test('alias-cli-commands: `bizar workflow` CLI surface is removed (OpenKan ok is the only planning CLI)', () => {
   const workflowPath = join(repoRoot, 'cli', 'commands', 'workflow.mjs');
-  assert.ok(existsSync(workflowPath), 'cli/commands/workflow.mjs must exist (hosts bizar workflow)');
-  const src = readFileSync(workflowPath, 'utf8');
-  assert.ok(
-    !/from\s+['"][^'"]*commands\/models\.mjs['"]/.test(src),
-    'cli/commands/workflow.mjs imports cli/commands/models.mjs; static alias contract forbids picker import',
+  const workflowGcPath = join(repoRoot, 'cli', 'commands', 'workflow-gc.mjs');
+  const workflowStatePath = join(repoRoot, 'cli', 'core', 'workflow-state.mjs');
+  assert.equal(
+    existsSync(workflowPath),
+    false,
+    'cli/commands/workflow.mjs must be deleted; the bizplan-overhaul ultragoal retired this CLI in favour of OpenKan `ok`',
   );
-  assert.ok(
-    !/from\s+['"][^'"]*router\/model-router\.js['"]/.test(src),
-    'cli/commands/workflow.mjs imports SDK router module; static alias contract forbids router import',
+  assert.equal(
+    existsSync(workflowGcPath),
+    false,
+    'cli/commands/workflow-gc.mjs must be deleted alongside the workflow CLI',
   );
+  assert.equal(
+    existsSync(workflowStatePath),
+    false,
+    'cli/core/workflow-state.mjs must be deleted alongside the workflow CLI',
+  );
+  const bin = readFileSync(BIN_PATH, 'utf8');
+  assert.doesNotMatch(bin, /case\s+['"]workflow['"]\s*:/);
+});
+
+test('alias-cli-commands: `bizar goal` CLI surface is removed (OpenKan ok is the only planning CLI)', () => {
+  const goalPath = join(repoRoot, 'cli', 'commands', 'goal.mjs');
+  const goalDirPath = join(repoRoot, 'cli', 'commands', 'goal');
+  const ultragoalStatePath = join(repoRoot, 'cli', 'core', 'ultragoal-state.mjs');
+  assert.equal(
+    existsSync(goalPath),
+    false,
+    'cli/commands/goal.mjs must be deleted; the bizplan-overhaul ultragoal retired this CLI in favour of OpenKan `ok`',
+  );
+  assert.equal(
+    existsSync(goalDirPath),
+    false,
+    'cli/commands/goal/ directory must be deleted alongside the goal CLI',
+  );
+  assert.equal(
+    existsSync(ultragoalStatePath),
+    false,
+    'cli/core/ultragoal-state.mjs must be deleted alongside the goal CLI (no remaining consumers)',
+  );
+  const bin = readFileSync(BIN_PATH, 'utf8');
+  assert.doesNotMatch(bin, /case\s+['"]goal['"]\s*:/);
 });
 
 test('alias-cli-commands: `bizar worker` retains its non-picker behavior', () => {
