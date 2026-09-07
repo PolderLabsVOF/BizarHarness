@@ -15,13 +15,13 @@ test('portable hook dispatcher resolves package assets from an unrelated cwd', (
   try {
     const input = JSON.stringify({
       hook_event_name: 'UserPromptSubmit',
-      prompt: '/ralplan review this',
+      prompt: '/bizplan review this',
       cwd,
     });
     const result = executeHook('keyword-router', input, { cwd });
     assert.equal(result.status, 0, result.stderr);
     const output = JSON.parse(result.stdout);
-    assert.match(output.hookSpecificOutput.additionalContext, /skill "ralplan"/);
+    assert.match(output.hookSpecificOutput.additionalContext, /skill "bizplan"/);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

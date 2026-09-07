@@ -66,10 +66,12 @@ describe("SDK module surface", () => {
     expect(Array.isArray(mod.BIZAR_TOOLS)).toBe(true);
     // 13 retained tools + 5 OMX Phase 1 scaffolding tools (F-202):
     //   ambiguity_score, deep_interview_status, ultragoal_status,
-    //   ultragoal_steer, ralplan_handoff_validate.
+    //   ultragoal_steer, plus the bizplan-overhaul trio
+    //   (bizplan_validate, bizplan_persist, bizplan_spawn_task) replacing
+    //   the retired `ralplan_handoff_validate`.
     // The gateway inventory tool was removed with the model-selection
     // SDK surface in Phase 2 of the OmniRoute alias routing overhaul.
-    expect(mod.BIZAR_TOOLS.length).toBe(18);
+    expect(mod.BIZAR_TOOLS.length).toBe(20);
     expect(typeof mod.createBizarMcpServer).toBe("function");
     expect(typeof mod.createBizarMcpServerConfig).toBe("function");
     expect(typeof mod.defineTool).toBe("function");
@@ -89,12 +91,18 @@ describe("SDK module surface", () => {
       "deep_interview_status",
       "ultragoal_status",
       "ultragoal_steer",
-      "bizplan_handoff_validate",
+      // bizplan-overhaul — the only planning surface in Bizar.
+      "bizplan_validate",
+      "bizplan_persist",
+      "bizplan_spawn_task",
     ]);
     const have = new Set(mod.BIZAR_TOOLS.map((t) => t.name));
     for (const n of expectedNames) {
       expect(have.has(n)).toBe(true);
     }
+    // The retired `ralplan_handoff_validate` must NOT appear in the
+    // retained surface; this is the canonical bizplan-overhaul gate.
+    expect(have.has("ralplan_handoff_validate")).toBe(false);
   });
 });
 

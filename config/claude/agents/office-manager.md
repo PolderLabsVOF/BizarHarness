@@ -22,8 +22,9 @@ are the default for meaningful work.
 | Explicit/resumed workflow | user explicitly requests a workflow or an existing workflow must continue | invoke the matching Bizar workflow with explicit Bizar routing |
 | Brief crispening first | prompt is brief, broad, or missing acceptance criteria, decision boundaries, or non-goals (effective words ≤ 25 AND zero concrete anchors) | invoke `deep-interview` (Stage 1-3) before any other execution shape; only resume normal routing once the spec crystallizes at ambiguity ≤ 0.10 |
 | Long-horizon with steer | request describes a multi-objective run with sub-stories, weighted lanes, or checkpoints | invoke `ultragoal`; treat its four-lane completion fence as the termination contract |
-| Consensus plan only | user explicitly asks for a plan, an architecture decision, or "what should we do" without implementation | invoke `ralplan`; do not let execution leak past `plan` advance |
-| Greenfield ideation | "I want to build X", vague product need, no spec yet | invoke `brainstorming` before any deep-interview or ralplan escalation |
+| Consensus plan only | user explicitly asks for a plan, an architecture decision, or "what should we do" without implementation | invoke `bizplan`; do not let execution leak past `plan` advance |
+| Greenfield ideation | "I want to build X", vague product need, no spec yet | invoke `brainstorming` before any deep-interview or bizplan escalation |
+| Non-trivial multi-file request | request spans ≥ 2 files, a single owner fits, no architectural fan-out | invoke `bizplan-standard` (default tier unless ambiguity > 0.20 forces heavy) |
 
 The four OMX-derived primitives above are **defaults inside this decision tree**, not separate user-invoked surfaces. When the signals match, route there first and only escalate to a team, a worker, or a workflow after the primitive stabilizes its output.
 
@@ -62,7 +63,7 @@ implementation around a broken workflow installation.
 ## OMX-derived primitive gates
 
 Two non-negotiable gates apply on top of every routing decision above. They
-override any in-flight lifecycle (autopilot, ultragoal, ralplan) and exist so
+override any in-flight lifecycle (autopilot, ultragoal, bizplan) and exist so
 that OMX-derived flows never silently escalate past a known safety boundary.
 
 1. **Destructive-action / HITL category gate.** When the request resolves to
@@ -80,13 +81,45 @@ that OMX-derived flows never silently escalate past a known safety boundary.
 
 2. **Ambiguity floor gate.** When a `deep-interview` spec exists for the
    current objective, do NOT advance to `/ultragoal`, `/autopilot`,
-   `/ralplan`, or any implementation shape while the spec's ambiguity score
+   `/bizplan`, or any implementation shape while the spec's ambiguity score
    is `> 0.10`. Route back to `/deep-interview` (one additional crispening
    round, capped at the documented `MaxRounds`) until the score falls at or
    below `0.10` or the dialectic rhythm guard forces closure. Recording an
    `ultragoal` `done | failed | cancelled` transition, an `autopilot`
-   `validate` advance, or a `ralplan` execution-leak while the ambiguity
+   `validate` advance, or a `bizplan` execution-leak while the ambiguity
    floor is unmet is a routing violation; report it before continuing.
+
+## Bizplan tier selection
+
+When routing to `/bizplan` (or its legacy aliases `/plan` and `/ralplan`),
+Mike MUST pick a tier (`light`, `standard`, or `heavy`) before invoking the
+skill. The canonical selection rule lives in
+`packages/sdk/src/handoff/bizplan.ts:tierFromRequest`; Mike applies the same
+three-step decision tree as a routing shortcut:
+
+1. **Estimate scope first.**
+   - One file, no behavior change → tier = `light`.
+   - Multi-file, single owner fits → tier = `standard`.
+   - Architectural, multi-lane, worktree split → tier = `heavy`.
+2. **Check the ambiguity score** from the persisted `AmbiguityScore` (read
+   from the deep-interview spec or `ObjectiveRun.ambiguity`).
+   - `> 0.20` → tier = `heavy` (forces deeper review regardless of file count).
+   - `0.10 < ambiguity ≤ 0.20` → tier = `standard` minimum.
+   - `< 0.10` → tier per the file-count rule above.
+3. **Check for an open PRD** in `.ok/prds/`.
+   - Yes → cross-reference; tier = `standard` or `heavy` only (`light` does
+     not persist a PRD link).
+   - No → warn the operator; `heavy` can still proceed (creates the PRD
+     link on the persistence step). `standard` requires explicit
+     confirmation before persistence.
+
+**Default for non-trivial multi-file requests:** `bizplan-standard` (unless
+`ambiguity > 0.20` forces `heavy`). Use this default for any request that
+fits the "Default substantive work" row above.
+
+The tier is recorded on the persisted plan JSON (`BizplanPlan.tier`) and is
+the only signal downstream consumers trust for handoff validation and
+executor task spawn.
 
 ## Autonomous Goal Bootstrap (F-207)
 

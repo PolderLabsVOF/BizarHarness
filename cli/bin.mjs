@@ -132,6 +132,7 @@ function showHelp() {
     claim <subcommand>     OpenKan task lease shortcut
     control <subcommand>   Machine-readable agents/tasks/plans/goals/sessions/messages API
     workflow <subcommand>  Session-bound autopilot workflow state
+    goal <subcommand>      Ultragoal progress tracker (start | steer | checkpoint | complete | status | fail | cancel | resume)
     hook <name>            Run a portable Claude Code hook
     worktree-merge <branch>  Merge a feature branch with archive tag (no work lost)
     worker <subcommand>      Run an exact-model Claude process worker in a worktree
@@ -606,6 +607,23 @@ async function main() {
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (found === false) {
         console.error(chalk.red(`  ✗ Usage: bizar workflow <subcommand> — run 'bizar workflow --help'`));
+        process.exit(EXIT_USAGE);
+      }
+      break;
+    }
+
+    case 'goal': {
+      // bizplan-overhaul — the ultragoal progress tracker.
+      const mod = await importCommand('goal');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load goal command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'goal');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (found === false) {
+        console.error(chalk.red(`  ✗ Usage: bizar goal <subcommand> — run 'bizar goal --help'`));
         process.exit(EXIT_USAGE);
       }
       break;

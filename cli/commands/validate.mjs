@@ -44,12 +44,12 @@ export const REQUIRED_AGENTS = [
 
 export const REQUIRED_COMMANDS = [
   'artifact.md', 'audit.md', 'autopilot.md', 'backup.md', 'bizar.md',
-  'browser.md', 'cancel.md', 'cron.md', 'deep-interview.md', 'doctor.md',
-  'explain.md', 'init.md', 'learn.md', 'plan.md', 'plow-through.md',
-  'pr-review.md', 'quick.md', 'ralph.md', 'ralplan.md', 'rca.md',
-  'repair.md', 'restore.md', 'setup-provider.md', 'spec.md', 'sprint.md',
-  'team.md', 'test.md', 'tools.md', 'ultracode.md', 'ultraqa.md',
-  'ultrawork.md', 'update.md', 'validate.md', 'verify.md',
+  'bizplan.md', 'bizplan-heavy.md', 'bizplan-light.md', 'browser.md',
+  'cancel.md', 'cron.md', 'deep-interview.md', 'doctor.md', 'explain.md',
+  'init.md', 'learn.md', 'plow-through.md', 'pr-review.md', 'quick.md',
+  'ralph.md', 'rca.md', 'repair.md', 'restore.md', 'setup-provider.md',
+  'spec.md', 'sprint.md', 'team.md', 'test.md', 'tools.md', 'ultracode.md',
+  'ultraqa.md', 'ultrawork.md', 'update.md', 'validate.md', 'verify.md',
 ];
 
 // v6.3.0 — Claude Code hook adapter scripts (executable, .mjs extension).

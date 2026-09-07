@@ -20,13 +20,13 @@ test('subagent aliases resolve by frontmatter name, not only filename', () => {
 });
 
 test('deep-interview is registered in the slash-command namespace and shipped on disk', () => {
-  // Mirror the ralph / ralplan / autopilot registration: REQUIRED_COMMANDS
+  // Mirror the ralph / bizplan / autopilot registration: REQUIRED_COMMANDS
   // is the canonical slash-command namespace allowlist that validate.mjs
   // checks on every install. Both project (/deep-interview) and shared
   // (/bizar-harness:deep-interview) namespace entries must be present.
   assert.ok(
     REQUIRED_COMMANDS.includes('deep-interview.md'),
-    'validate.mjs REQUIRED_COMMANDS must include deep-interview.md (mirror of ralph / ralplan registration)',
+    'validate.mjs REQUIRED_COMMANDS must include deep-interview.md (mirror of ralph / bizplan registration)',
   );
 
   const commandPath = join(repoRoot, 'config', 'claude', 'commands', 'deep-interview.md');
@@ -63,4 +63,30 @@ test('deep-interview is registered in the slash-command namespace and shipped on
   assert.match(skillText, /AmbiguityScore/);
   assert.match(skillText, /Dialectic rhythm guard|Dialectic Rhythm Guard/);
   assert.match(skillText, /docs\/specs\/deep-interview-<slug>\.md/);
+});
+
+test('bizplan replaces /ralplan and /plan in the slash-command namespace', () => {
+  // Per bizplan-overhaul charter subtask 8 (arch-tests-cleanup):
+  // REQUIRED_COMMANDS must contain bizplan (and its tier variants) and
+  // must NOT contain the legacy ralplan.md or plan.md entries.
+  assert.ok(
+    REQUIRED_COMMANDS.includes('bizplan.md'),
+    'validate.mjs REQUIRED_COMMANDS must include bizplan.md',
+  );
+  assert.ok(
+    REQUIRED_COMMANDS.includes('bizplan-light.md'),
+    'validate.mjs REQUIRED_COMMANDS must include bizplan-light.md (tier-specific slash command)',
+  );
+  assert.ok(
+    REQUIRED_COMMANDS.includes('bizplan-heavy.md'),
+    'validate.mjs REQUIRED_COMMANDS must include bizplan-heavy.md (tier-specific slash command)',
+  );
+  assert.ok(
+    !REQUIRED_COMMANDS.includes('ralplan.md'),
+    'REQUIRED_COMMANDS must not include legacy ralplan.md (replaced by bizplan)',
+  );
+  assert.ok(
+    !REQUIRED_COMMANDS.includes('plan.md'),
+    'REQUIRED_COMMANDS must not include legacy plan.md (replaced by bizplan)',
+  );
 });

@@ -19,8 +19,21 @@ export const EXPLICIT_COMMANDS = Object.freeze(new Map([
   ['ultrawork', 'ultrawork'],
   ['ultraqa', 'ultraqa'],
   ['ultragoal', 'ultragoal'],
-  ['ralplan', 'ralplan'],
+  ['bizplan', 'bizplan'],
+  // Legacy aliases — both `/plan` and `/ralplan` route to bizplan.
+  ['plan', 'bizplan'],
+  ['ralplan', 'bizplan'],
 ]));
+
+/**
+ * Prose-level alias detector: when a prompt contains the substring
+ * "ralplan" outside an explicit slash command, surface a routing
+ * context that directs the operator toward the bizplan skill. The
+ * bizplan literal match (via `/bizplan`) takes priority over this
+ * detector because explicit commands are the only durable mutation
+ * surface.
+ */
+export const BIZPLAN_PROSE_ALIAS_RE = /\bralplan\b/i;
 
 const MAX_PROMPT = 16_384;
 const MAX_ARGUMENTS = 4_096;
@@ -37,7 +50,7 @@ export function parseExplicitCommand(prompt) {
   if (/^(?:```|~~~|`|>|["']|@@|\+\+\+|---|<)/.test(leadingTrimmed)) return null;
 
   const firstLine = leadingTrimmed.split('\n', 1)[0];
-  const match = /^\/(autopilot|cancel|deep-interview|ralph|ultrawork|ultraqa|ultragoal|ralplan)(?=\s|$)([^\n]*)$/i.exec(firstLine);
+  const match = /^\/(autopilot|cancel|deep-interview|ralph|ultrawork|ultraqa|ultragoal|bizplan|plan|ralplan)(?=\s|$)([^\n]*)$/i.exec(firstLine);
   if (!match) return null;
 
   const command = match[1].toLowerCase();
@@ -125,7 +138,26 @@ export function applyExplicitWorkflowCommand(parsed, input, options = {}) {
 }
 
 export function routePrompt(input, options = {}) {
-  const parsed = parseExplicitCommand(input.prompt ?? input.user_prompt ?? '');
+  const prompt = input.prompt ?? input.user_prompt ?? '';
+  const parsed = parseExplicitCommand(prompt);
+
+  // Prose-level legacy alias: when a prompt mentions "ralplan" outside an
+  // explicit slash command (e.g., "/ralplan was renamed to bizplan" or
+  // "the ralplan workflow"), surface a routing context that directs the
+  // operator to the bizplan skill. This is intentionally lower priority
+  // than an explicit `/bizplan` (or `/plan`, `/ralplan`) match, which
+  // the explicit-command parser above handles first.
+  if (!parsed && typeof prompt === 'string' && BIZPLAN_PROSE_ALIAS_RE.test(prompt)) {
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit',
+        additionalContext:
+          'Legacy "ralplan" reference detected. Bizplan is the only planning surface in Bizar; ' +
+          'invoke the Skill tool with skill "bizplan" now and follow the tier decision tree.',
+      },
+    };
+  }
+
   if (!parsed) return {};
 
   const state = applyExplicitWorkflowCommand(parsed, input, options);

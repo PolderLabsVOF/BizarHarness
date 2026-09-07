@@ -16,9 +16,9 @@ import test from 'node:test';
 const root = resolve(import.meta.dirname, '..');
 const workflowNames = [
   'autopilot',
+  'bizplan',
   'cancel',
   'ralph',
-  'ralplan',
   'ultraqa',
   'ultrawork',
   'verify',
