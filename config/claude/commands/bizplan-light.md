@@ -1,10 +1,8 @@
 ---
 description: Bizplan tier light — single-file, no behavior change.
 argument-hint: "<goal>"
+disable-model-invocation: true
+allowed-tools: Skill
 ---
 
-# `/bizplan-light` — tier: light
-
-One file, no behavior change → interview only → plan persisted under `.ok/plans/pln-*.json`.
-
-Only spawns an executor task if scope > 1 file. Cross-reference to an open PRD is skipped at this tier.
+Invoke the Skill tool exactly once. For `/bizar-harness:bizplan-light`, select the installed `bizar-harness:bizplan-light` skill; for project `/bizplan-light`, select the installed `bizplan-light` skill. Pass `$ARGUMENTS` unchanged. Do not invoke this command again or reimplement the skill.

@@ -266,8 +266,8 @@ export interface SpawnedTask {
 }
 
 export interface PersistOptions {
-  /** Absolute path to the `.ok/` workspace root. */
-  readonly okDir: string;
+  /** Absolute path to the `.ok/` workspace root. Defaults to `BIZAR_OK_DIR` env var or `<cwd>/.ok`. */
+  readonly okDir?: string;
   /** Optional override for the prd-scanner (testing). */
   readonly prdReader?: (okDir: string) => ReadonlyArray<{ id: string; status: string }>;
 }
@@ -303,6 +303,18 @@ function defaultPrdReader(okDir: string): ReadonlyArray<{ id: string; status: st
 }
 
 /**
+ * Resolve the default `.ok/` workspace. Resolution order:
+ *   1. `BIZAR_OK_DIR` env var (set by Claude Code or operator)
+ *   2. `<cwd>/.ok` (interactive CLI default)
+ *   3. `<process.argv[1] dir>/../.ok` (binary-relative fallback)
+ */
+function resolveDefaultOkDir(): string {
+  const fromEnv = process.env.BIZAR_OK_DIR;
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  return join(process.cwd(), ".ok");
+}
+
+/**
  * Persist a BizplanPlan to `.ok/plans/pln-<id>.json` and cross-reference
  * an open PRD from `.ok/prds/` if one matches the plan scope. Returns
  * the persisted record with `persistedAt` + `schemaVersion` populated.
@@ -312,7 +324,7 @@ function defaultPrdReader(okDir: string): ReadonlyArray<{ id: string; status: st
  * created on demand. If multiple open PRDs match, `prdId` is left
  * unset and a warning is logged via `console.warn` — non-fatal.
  */
-export function persistBizplanPlan(plan: BizplanPlan, opts: PersistOptions): PersistedPlan {
+export function persistBizplanPlan(plan: BizplanPlan, opts: PersistOptions = {}): PersistedPlan {
   if (!plan.title || typeof plan.title !== "string") {
     throw new Error("persistBizplanPlan: plan.title is required");
   }
@@ -320,9 +332,10 @@ export function persistBizplanPlan(plan: BizplanPlan, opts: PersistOptions): Per
     throw new Error("persistBizplanPlan: plan.phases must be a non-empty array");
   }
 
+  const okDir = opts.okDir ?? resolveDefaultOkDir();
   const id = plan.id && plan.id.length > 0 ? plan.id : generateId("pln");
   const reader = opts.prdReader ?? defaultPrdReader;
-  const openPrds = reader(opts.okDir).filter((p) => p.status === "open");
+  const openPrds = reader(okDir).filter((p) => p.status === "open");
   let prdId = plan.prdId;
   if (!prdId) {
     if (openPrds.length === 1) {
@@ -344,7 +357,7 @@ export function persistBizplanPlan(plan: BizplanPlan, opts: PersistOptions): Per
     schemaVersion: BIZPLAN_HANDOFF_SCHEMA_VERSION,
   });
 
-  const plansDir = join(opts.okDir, "plans");
+  const plansDir = join(okDir, "plans");
   mkdirSync(plansDir, { recursive: true });
   atomicWrite(join(plansDir, `${id}.json`), JSON.stringify(persisted, null, 2) + "\n");
 
@@ -357,10 +370,11 @@ export function persistBizplanPlan(plan: BizplanPlan, opts: PersistOptions): Per
  * / ultragoal surfaces pick it up on the next turn without manual
  * routing.
  */
-export function spawnExecutorTask(plan: BizplanPlan, opts: SpawnOptions): SpawnedTask {
+export function spawnExecutorTask(plan: BizplanPlan, opts: SpawnOptions = {}): SpawnedTask {
   if (!plan.id) {
     throw new Error("spawnExecutorTask: plan.id is required (call persistBizplanPlan first)");
   }
+  const okDir = opts.okDir ?? resolveDefaultOkDir();
   const id = generateId("tsk");
   const assignedAt = new Date().toISOString();
   const task: SpawnedTask = Object.freeze({
@@ -372,7 +386,7 @@ export function spawnExecutorTask(plan: BizplanPlan, opts: SpawnOptions): Spawne
     links: Object.freeze({ planId: plan.id }),
   });
 
-  const tasksDir = join(opts.okDir, "tasks");
+  const tasksDir = join(okDir, "tasks");
   mkdirSync(tasksDir, { recursive: true });
   atomicWrite(join(tasksDir, `${id}.json`), JSON.stringify(task, null, 2) + "\n");
 

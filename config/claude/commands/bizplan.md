@@ -1,12 +1,8 @@
 ---
 description: Run the bizplan planning workflow (default tier: standard).
 argument-hint: "<goal>"
+disable-model-invocation: true
+allowed-tools: Skill
 ---
 
-# `/bizplan` — default tier: standard
-
-Multi-file request → planner + architect + critic → plan persisted to `.ok/plans/pln-*.json` with PRD cross-ref → executor task spawned in `.ok/tasks/`.
-
-Use `/bizplan-light` for one-file no-behavior-change requests.
-Use `/bizplan-heavy` for architectural or multi-lane work.
-See `config/claude/skills/bizplan/SKILL.md` for the tier decision tree and playbook.
+Invoke the Skill tool exactly once. For `/bizar-harness:bizplan`, select the installed `bizar-harness:bizplan` skill; for project `/bizplan`, select the installed `bizplan` skill. Pass `$ARGUMENTS` unchanged. Do not invoke this command again or reimplement the skill.

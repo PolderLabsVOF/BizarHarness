@@ -1,10 +1,8 @@
 ---
 description: Bizplan tier heavy — architectural, multi-lane, worktree split.
 argument-hint: "<goal>"
+disable-model-invocation: true
+allowed-tools: Skill
 ---
 
-# `/bizplan-heavy` — tier: heavy
-
-Architectural change / multi-lane / worktree split → pre-mortem → architect → critic → lane-split → plan-final → one executor task per lane persisted under `.ok/tasks/`.
-
-Auto-forced when deep-interview ambiguity > 0.20. Plan carries `lanes[]` and `worktreeStrategy: "split"`.
+Invoke the Skill tool exactly once. For `/bizar-harness:bizplan-heavy`, select the installed `bizar-harness:bizplan-heavy` skill; for project `/bizplan-heavy`, select the installed `bizplan-heavy` skill. Pass `$ARGUMENTS` unchanged. Do not invoke this command again or reimplement the skill.

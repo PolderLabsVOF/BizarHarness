@@ -173,11 +173,4 @@ export * from "./handoff/bizplan.js";
 export { bizplan_mcp, bizplan_tools } from "./mcp/bizplan.js";
 export * from "./specs/deep-interview.js";
 
-// F-202 Phase 1 — bizplan MCP additions: named entry points for
-// the bizplan MCP surface so external consumers do not have to
-// import the raw `mcp/server` module. `bizplan_mcp` is the server
-// factory; `bizplan_tools` is the tool list. Coexists with the
-// existing `createBizarMcpServer` and `BIZAR_TOOLS` re-exports.
-export { bizplan_mcp, bizplan_tools } from "./mcp/bizplan.js";
-
 export { SDK_VERSION } from "./version.js";

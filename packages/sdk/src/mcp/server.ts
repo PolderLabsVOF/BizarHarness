@@ -631,7 +631,7 @@ const bizplanSpawnTaskTool = defineTool<{ plan: string; assignee?: string }>(
   async ({ plan, assignee }) => {
     try {
       const parsed = JSON.parse(plan) as BizplanPlan;
-      const result = spawnExecutorTask(parsed, assignee);
+      const result = spawnExecutorTask(parsed, assignee ? { assignee } : {});
       return ok(JSON.stringify(result));
     } catch (e) { return err(`bizplan_spawn_task: ${e instanceof Error ? e.message : String(e)}`); }
   },
