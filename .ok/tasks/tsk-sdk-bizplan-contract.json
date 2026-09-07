@@ -1,0 +1,29 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-sdk-bizplan-contract",
+  "title": "sdk-bizplan-contract",
+  "description": "Replace packages/sdk/src/handoff/ralplan.ts with bizplan.ts (BizplanHandoff, Tier, Plan, PlanLane, tierFromRequest, validateBizplanHandoff). Delete ralplan.ts + ralplan.test.ts. Mirror tests in bizplan.test.ts.",
+  "status": "done",
+  "priority": "p1",
+  "owner": "todd",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.10,
+  "scopes": [
+    "packages/sdk/src/handoff/bizplan.ts",
+    "packages/sdk/tests/handoff/bizplan.test.ts"
+  ],
+  "deps": [],
+  "evidence": [
+    "ca98e5f28f375f1f800a10ce83969e049a708336: feat(sdk): replace RalplanHandoff with BizplanHandoff contract"
+  ],
+  "acceptance": [
+    "BizplanHandoff + Tier + Plan + PlanLane + tierFromRequest + validateBizplanHandoff exported from bizplan.ts",
+    "packages/sdk/tests/handoff/bizplan.test.ts covers tier selection + handoff validation",
+    "ralplan.ts + ralplan.test.ts deleted; packages/sdk/src/index.ts re-exports only bizplan"
+  ],
+  "createdAt": "2026-09-07T06:33:50.000Z",
+  "updatedAt": "2026-09-07T08:32:31.000Z",
+  "startedAt": "2026-09-07T06:48:00.000Z",
+  "completedAt": "2026-09-07T08:32:31.000Z"
+}

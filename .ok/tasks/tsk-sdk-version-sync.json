@@ -1,0 +1,30 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-sdk-version-sync",
+  "title": "sdk-version-sync",
+  "description": "Postscript fix by orchestrator: sync SDK_VERSION constant to 10.26.0 after the alias-routing-overhaul release so the SDK reports the shipped release version rather than a stale one.",
+  "status": "done",
+  "priority": "p2",
+  "owner": "mike",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.05,
+  "scopes": [
+    "packages/sdk/src/version.ts"
+  ],
+  "deps": [
+    "tsk-e2e-loop-evidence"
+  ],
+  "evidence": [
+    "ab252403 fix(sdk): sync SDK_VERSION to 10.26.0"
+  ],
+  "acceptance": [
+    "SDK_VERSION exports the literal 10.26.0",
+    "npm run build:sdk green; npm run test:sdk green",
+    "Version string matches the shipped release alias-routing-overhaul (10.26.0)"
+  ],
+  "createdAt": "2026-09-07T11:00:00.000Z",
+  "updatedAt": "2026-09-07T12:40:00.000Z",
+  "startedAt": "2026-09-07T11:00:00.000Z",
+  "completedAt": "2026-09-07T12:40:00.000Z"
+}

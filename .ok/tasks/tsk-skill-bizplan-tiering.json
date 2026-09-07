@@ -1,0 +1,32 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-skill-bizplan-tiering",
+  "title": "skill-bizplan-tiering",
+  "description": "Rewrite config/skills/ralplan/SKILL.md to config/skills/bizplan/SKILL.md with three tier playbooks + tier-selection decision tree. Mirror to config/claude/skills/bizplan/. Update keyword-router.mjs if it routes 'plan' to bizplan.",
+  "status": "done",
+  "priority": "p1",
+  "owner": "karen",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.15,
+  "scopes": [
+    "config/skills/bizplan/SKILL.md",
+    "config/claude/skills/bizplan/SKILL.md"
+  ],
+  "deps": [
+    "tsk-slash-bizplan-commands"
+  ],
+  "evidence": [
+    "8729adeba8dd86b44505ad7c73bfed71a799318d: feat(skills): replace /ralplan skill with bizplan tiered playbook"
+  ],
+  "acceptance": [
+    "config/skills/bizplan/SKILL.md ships with light / standard / heavy tier playbooks",
+    "Tier-selection decision tree references ambiguity score + lane count + behaviorChange",
+    "Mirror file at config/claude/skills/bizplan/SKILL.md present",
+    "keyword-router.mjs routes 'plan' keyword to bizplan"
+  ],
+  "createdAt": "2026-09-07T06:33:50.000Z",
+  "updatedAt": "2026-09-07T08:50:00.000Z",
+  "startedAt": "2026-09-07T08:45:00.000Z",
+  "completedAt": "2026-09-07T08:50:00.000Z"
+}

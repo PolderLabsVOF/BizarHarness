@@ -1,0 +1,31 @@
+{
+  "schema": "ok.plan.v1",
+  "id": "pln-bizplan-overhaul",
+  "title": "bizplan-overhaul run plan",
+  "summary": "Weighted-subtask plan covering the bizplan-overhaul ultragoal: Stream A (sdk + slash + persistence), Stream B (skill + agents + mcp + arch-tests + goal-cli), Stream C (e2e evidence, serial after A+B), and Postscript fixes (cli flag handling + sdk version sync). Total weight 1.10, threshold 1.00. All 11 subtasks completed; e2e loop evidence captured at .harness/evals/bizplan-e2e-2026-09-07T09-54-26Z.json. Run tracking rehydrated into OpenKan at this plan + prd-bizplan-overhaul + tsk-* tasks.",
+  "status": "complete",
+  "phase": "checkpointing",
+  "prd": "prd-bizplan-overhaul",
+  "tasks": [
+    "tsk-sdk-bizplan-contract",
+    "tsk-sdk-bizplan-persistence",
+    "tsk-slash-bizplan-commands",
+    "tsk-skill-bizplan-tiering",
+    "tsk-office-manager-routing",
+    "tsk-mcp-tool-rename",
+    "tsk-sdk-goal-cli",
+    "tsk-arch-tests-cleanup",
+    "tsk-e2e-loop-evidence",
+    "tsk-cli-flag-handling-fix",
+    "tsk-sdk-version-sync"
+  ],
+  "acceptance": [
+    "All 11 weighted subtasks reached status: done (weightEarned >= 1.0)",
+    "e2e loop evidence captured at .harness/evals/bizplan-e2e-2026-09-07T09-54-26Z.json",
+    "Four-lane fence (cleaner, verification, review, architecture_invariant) all green",
+    "OpenKan rehydration complete: prd-bizplan-overhaul + pln-bizplan-overhaul + 11 tsk-*",
+    "Legacy ledger docs/specs/ultragoal/ultragoal-bizplan-overhaul.jsonl preserved as historical artifact"
+  ],
+  "createdAt": "2026-09-07T06:33:50.000Z",
+  "updatedAt": "2026-09-07T13:30:00.000Z"
+}

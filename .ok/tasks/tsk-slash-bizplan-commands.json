@@ -1,0 +1,33 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-slash-bizplan-commands",
+  "title": "slash-bizplan-commands",
+  "description": "Create config/claude/commands/bizplan.md, bizplan-light.md, bizplan-heavy.md. Delete config/claude/commands/ralplan.md and config/claude/commands/plan.md. Update mirror-claude-md (CLAUDE.md mirror) and any claude-cmd.test.mjs allow-list.",
+  "status": "done",
+  "priority": "p1",
+  "owner": "todd",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.10,
+  "scopes": [
+    "config/claude/commands/bizplan.md",
+    "config/claude/commands/bizplan-light.md",
+    "config/claude/commands/bizplan-heavy.md"
+  ],
+  "deps": [
+    "tsk-sdk-bizplan-contract"
+  ],
+  "evidence": [
+    "a2a30fabe6ad7dde791a4666ef716dab9c4b5ebd: feat(commands,server): replace /ralplan and /plan with /bizplan tiers",
+    "e70e47ee11de5f25acf7a4a7a4d8d8843b662925: fix(sdk,commands): make okDir optional in persistBizplanPlan / spawnExecutorTask; rewrite bizplan command files as thin pointers"
+  ],
+  "acceptance": [
+    "config/claude/commands/bizplan.md (default tier=standard), bizplan-light.md (one-file no-behavior-change), bizplan-heavy.md (architectural multi-lane) exist",
+    "config/claude/commands/ralplan.md + plan.md deleted",
+    "cli/commands/validate.mjs REQUIRED_COMMANDS allow-list updated to include the three bizplan variants"
+  ],
+  "createdAt": "2026-09-07T06:33:50.000Z",
+  "updatedAt": "2026-09-07T08:33:30.000Z",
+  "startedAt": "2026-09-07T08:33:01.000Z",
+  "completedAt": "2026-09-07T08:33:30.000Z"
+}

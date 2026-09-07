@@ -1,0 +1,30 @@
+{
+  "schema": "ok.task.v1",
+  "id": "tsk-cli-flag-handling-fix",
+  "title": "cli-flag-handling-fix",
+  "description": "Postscript fix by orchestrator: normalize goal CLI flag handling so steer dispatcher bug discovered during Stream C e2e is fixed and verified. Tracked under the bizplan-overhaul run ledger because it was surfaced by the e2e lane (sub-run ultragoal-6511bcfd).",
+  "status": "done",
+  "priority": "p2",
+  "owner": "mike",
+  "plan": "pln-bizplan-overhaul",
+  "prd": "prd-bizplan-overhaul",
+  "weight": 0.05,
+  "scopes": [
+    "cli/bizar/goal.mjs"
+  ],
+  "deps": [
+    "tsk-e2e-loop-evidence"
+  ],
+  "evidence": [
+    "f4662857 fix(cli): normalize goal CLI flag handling",
+    "Verified via literal-CLI smoke run ultragoal-6511bcfd at 2026-09-07T12:35:00Z (per bizplan-overhaul ledger revision 40 evidence)"
+  ],
+  "acceptance": [
+    "steer dispatcher correctly normalizes --flag=value / --flag value / mixed-position flag forms",
+    "Literal-CLI smoke run ultragoal-6511bcfd passes"
+  ],
+  "createdAt": "2026-09-07T11:00:00.000Z",
+  "updatedAt": "2026-09-07T12:35:00.000Z",
+  "startedAt": "2026-09-07T11:00:00.000Z",
+  "completedAt": "2026-09-07T12:35:00.000Z"
+}
