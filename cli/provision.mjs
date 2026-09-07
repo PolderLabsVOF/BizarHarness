@@ -1044,8 +1044,11 @@ export function setupMcpServer({ dryRun = false } = {}) {
   if (existing && existing.mcpServers && existing.mcpServers.bizar) {
     return { ok: true, message: `bizar MCP server already registered in ${settingsPath}` };
   }
-  if (!haveCmd('claude')) return { ok: false, message: 'claude CLI not on PATH' };
+  // Honour `dryRun` BEFORE checking for the `claude` CLI: a dry-run
+  // should never fail just because the host does not have Claude Code
+  // installed (CI runners, fresh dev containers, agent sandboxes).
   if (dryRun) return { ok: true, message: '[dry-run] would run: claude mcp add bizar -- npx -y @polderlabs/bizar-sdk mcp' };
+  if (!haveCmd('claude')) return { ok: false, message: 'claude CLI not on PATH' };
   const r = spawnSync('claude', ['mcp', 'add', '-f', '-s', 'user', 'bizar', '--', 'npx', '-y', '@polderlabs/bizar-sdk', 'mcp'], { stdio: 'inherit', timeout: 60_000 });
   if (r.status !== 0) return { ok: false, message: `claude mcp add exited with code ${r.status}` };
   return { ok: true, message: 'bizar MCP server registered' };
