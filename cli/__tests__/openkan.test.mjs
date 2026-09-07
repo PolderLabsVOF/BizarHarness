@@ -11,6 +11,7 @@ import {
   installOpenKanAgent,
   installOpenKanCommandShims,
   installOpenKanPromise,
+  installedOpenKanSupportsLegacyBin,
   readInstalledOpenKanVersion,
   readOpenKanJson,
   resolveOpenKanHome,
@@ -219,6 +220,56 @@ test('OpenKan native command shims expose ok and openkan to agent shells', () =>
   assert.equal(realpathSync(join(env.HOME, '.local', 'bin', 'openkan')), realpathSync(join(packageBin, 'openkan.mjs')));
 });
 
+test('OpenKan v0.5.0+ removes the legacy `openkan` shim and installs only `ok`', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bizar-openkan-v050-'));
+  roots.push(root);
+  const home = join(root, 'openkan');
+  mkdirSync(home, { recursive: true });
+  // Stage v0.5.0 with only `ok.mjs` shipped (the legacy `openkan.mjs` is gone).
+  stageFakeOpenKan(home, '0.5.0');
+  const env = { ...process.env, HOME: join(root, 'user-home') };
+  // Pre-stage a stale `openkan` shim from a previous < v0.5.0 install so we
+  // can prove the upgrader removes it.
+  mkdirSync(join(env.HOME, '.local', 'bin'), { recursive: true });
+  const stale = join(env.HOME, '.local', 'bin', 'openkan');
+  writeFileSync(stale, '#!/usr/bin/env node\necho stale\n');
+  chmodSync(stale, 0o755);
+  const result = installOpenKanCommandShims({ home, env });
+  assert.equal(result.ok, true);
+  // `ok` is installed; the legacy `openkan` shim is retired.
+  assert.equal(existsSync(join(env.HOME, '.local', 'bin', 'ok')), true);
+  assert.equal(existsSync(stale), false, 'stale openkan shim should be removed');
+  assert.equal(result.installed.length, 1);
+  assert.equal(result.installed[0].name, 'ok');
+  assert.equal(result.retired.length, 1);
+  assert.equal(result.retired[0].name, 'openkan');
+});
+
+test('OpenKan v0.5.0+ dashboard resolution falls back to the `ok` launcher', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bizar-openkan-dashboard-v050-'));
+  roots.push(root);
+  const home = join(root, 'openkan');
+  mkdirSync(home, { recursive: true });
+  const { launcher } = stageFakeOpenKan(home, '0.5.1');
+  const resolved = resolveOpenKanDashboard({ home });
+  assert.equal(resolved, launcher);
+  assert.match(resolved, /ok\.mjs$/);
+});
+
+test('OpenKan < v0.5.0 dashboard resolution still requires the legacy `openkan.mjs`', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bizar-openkan-dashboard-v040-'));
+  roots.push(root);
+  const home = join(root, 'openkan');
+  mkdirSync(home, { recursive: true });
+  // Stage v0.4.x with both `ok.mjs` and `openkan.mjs`; resolution must
+  // still return the legacy dashboard launcher.
+  stageFakeOpenKan(home, '0.4.9');
+  const packageBin = join(home, 'node_modules', '@polderlabs', 'openkan', 'bin');
+  const legacyDashboard = join(packageBin, 'openkan.mjs');
+  writeFileSync(legacyDashboard, '#!/usr/bin/env node\n');
+  assert.equal(resolveOpenKanDashboard({ home }), legacyDashboard);
+});
+
 test('resolveOpenKanOk falls back to bin/ok.mjs when the npm layout is missing', () => {
   const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
   roots.push(home);
@@ -249,6 +300,21 @@ test('readInstalledOpenKanVersion returns the trimmed version from the marker', 
   roots.push(home);
   stageFakeOpenKan(home, '0.4.2-fixture');
   assert.equal(readInstalledOpenKanVersion(home), '0.4.2-fixture');
+});
+
+test('installedOpenKanSupportsLegacyBin honours the v0.5.0 boundary', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bizar-openkan-npm-'));
+  roots.push(home);
+  // No marker: stay conservative and keep the legacy shim path.
+  assert.equal(installedOpenKanSupportsLegacyBin(home), true);
+  stageFakeOpenKan(home, '0.4.9');
+  assert.equal(installedOpenKanSupportsLegacyBin(home), true);
+  stageFakeOpenKan(home, '0.5.0');
+  assert.equal(installedOpenKanSupportsLegacyBin(home), false);
+  stageFakeOpenKan(home, '0.5.1');
+  assert.equal(installedOpenKanSupportsLegacyBin(home), false);
+  stageFakeOpenKan(home, '1.0.0-rc.1');
+  assert.equal(installedOpenKanSupportsLegacyBin(home), false);
 });
 
 test('installOpenKanPromise skips the network and returns the staged version when skipNpmInstall is set', async () => {

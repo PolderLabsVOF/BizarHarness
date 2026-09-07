@@ -19,6 +19,9 @@ Usage:
   ok prd <add|list|show|update>          Manage PRDs, goals, and milestones
   ok doctor                              Validate the .ok/ workspace
   bizar openkan dashboard [args...]     Forward to the OpenKan dashboard CLI
+                                        (legacy openkan.mjs on pre-v0.5.0
+                                         releases; ok serve on v0.5.0+ where
+                                         the legacy binary is retired)
 
 Canonical commands are \`ok task\`, \`ok plan\`, and \`ok prd\`; they use this
 same OpenKan workspace. The Bizar planning aliases remain compatibility-only.
@@ -29,11 +32,16 @@ feature/progress files for live planning.
 
 function runDashboard(args) {
   const launcher = resolveOpenKanDashboard();
+  // OpenKan v0.5.0 dropped the legacy `openkan` dashboard launcher. The
+  // dashboard now ships as `ok serve`; route to that subcommand when the
+  // resolved launcher is the `ok` binary instead of `openkan.mjs`.
+  const isOkLauncher = launcher.endsWith('ok.mjs') || launcher.endsWith('ok.ts');
+  const launcherArgs = isOkLauncher ? ['serve', ...args] : args;
   const command = launcher.endsWith('.ts')
-    ? [process.execPath, '--experimental-strip-types', launcher, ...args]
+    ? [process.execPath, '--experimental-strip-types', launcher, ...launcherArgs]
     : launcher.endsWith('.mjs')
-      ? [process.execPath, launcher, ...args]
-      : [launcher, ...args];
+      ? [process.execPath, launcher, ...launcherArgs]
+      : [launcher, ...launcherArgs];
   const result = spawnSync(command[0], command.slice(1), { cwd: process.cwd(), encoding: 'utf8', shell: false });
   if (result.error) throw result.error;
   print({ ok: result.status === 0, status: result.status ?? 1, stdout: result.stdout || '', stderr: result.stderr || '' });

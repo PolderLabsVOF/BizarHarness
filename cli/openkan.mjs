@@ -46,6 +46,32 @@ function nodeMajorVersion() {
   return match ? Number(match[1]) : 0;
 }
 
+/**
+ * Parse a semver-like string into [major, minor, patch] numeric parts.
+ * Pre-release / build metadata is stripped. Returns null when the input
+ * does not look like a version the caller can compare.
+ */
+function parseOpenKanVersion(version) {
+  if (typeof version !== 'string') return null;
+  const match = version.trim().match(/^v?(\d+)\.(\d+)(?:\.(\d+))?/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3] || 0)];
+}
+
+/**
+ * True when the installed OpenKan version ships the legacy `openkan` binary.
+ * v0.5.0 dropped the `openkan <cmd>` entry point; the `ok` CLI is the only
+ * supported surface from that release forward. Callers use this to decide
+ * whether to install the legacy `~/.local/bin/openkan` shim, clean up a
+ * stale one, or route dashboard launches through `ok serve`.
+ */
+export function installedOpenKanSupportsLegacyBin(home) {
+  const version = readInstalledOpenKanVersion(home);
+  const parsed = parseOpenKanVersion(version);
+  if (!parsed) return true; // unknown version: be conservative and keep legacy behaviour
+  return parsed[0] < 0 || (parsed[0] === 0 && parsed[1] < 5);
+}
+
 export class OpenKanError extends Error {
   constructor(code, message, details = {}) {
     super(message);
@@ -163,13 +189,19 @@ export function resolveOpenKanDashboard(options = {}) {
   const cwd = resolve(options.cwd || process.cwd());
   const explicitHome = options.home || process.env.BIZAR_OPENKAN_HOME;
   const home = explicitHome ? resolve(explicitHome) : resolveOpenKanHome({ cwd });
-  const managed = join(openKanPackageRoot(home), 'bin', 'openkan.mjs');
-  if (existsSync(managed)) return managed;
-  const legacy = join(home, 'bin', 'openkan.mjs');
-  if (existsSync(legacy)) return legacy;
-  const configuredBin = options.openkanBin || process.env.BIZAR_OPENKAN_BIN || executableOnPath('openkan');
-  if (configuredBin && existsSync(configuredBin)) return configuredBin;
-  throw new OpenKanError('OPENKAN_NOT_FOUND', 'OpenKan is required. Run `bizar openkan install`.');
+  const legacySupported = installedOpenKanSupportsLegacyBin(home);
+  if (legacySupported) {
+    const managed = join(openKanPackageRoot(home), 'bin', 'openkan.mjs');
+    if (existsSync(managed)) return managed;
+    const legacy = join(home, 'bin', 'openkan.mjs');
+    if (existsSync(legacy)) return legacy;
+    const configuredBin = options.openkanBin || process.env.BIZAR_OPENKAN_BIN || executableOnPath('openkan');
+    if (configuredBin && existsSync(configuredBin)) return configuredBin;
+    throw new OpenKanError('OPENKAN_NOT_FOUND', 'OpenKan is required. Run `bizar openkan install`.');
+  }
+  // OpenKan v0.5.0+ drops the legacy `openkan` binary; the dashboard is
+  // served via `ok serve`. Always route to the `ok` launcher.
+  return resolveOpenKanOk({ cwd, home });
 }
 
 function nodeArgs(launcher, args) {
@@ -327,7 +359,23 @@ export function installOpenKanCommandShims({ home, env = process.env } = {}) {
   try { mkdirSync(binDir, { recursive: true, mode: 0o755 }); } catch (error) {
     return { ok: false, installed: [], preserved: [], message: `OpenKan command directory unavailable: ${error.message}` };
   }
-  for (const name of ['ok', 'openkan']) {
+  const legacyBinSupported = installedOpenKanSupportsLegacyBin(home);
+  // OpenKan v0.5.0 dropped the legacy `openkan` binary. If the user
+  // upgraded from an earlier release, retire any existing shim so agent
+  // shells stop hitting a dangling or legacy symlink.
+  if (!legacyBinSupported) {
+    const staleShim = join(binDir, process.platform === 'win32' ? 'openkan.cmd' : 'openkan');
+    if (existsSync(staleShim)) {
+      try {
+        unlinkSync(staleShim);
+        commands.push({ name: 'openkan', path: staleShim, status: 'retired' });
+      } catch (error) {
+        commands.push({ name: 'openkan', path: staleShim, status: 'failed', error: error.message });
+      }
+    }
+  }
+  const shimNames = legacyBinSupported ? ['ok', 'openkan'] : ['ok'];
+  for (const name of shimNames) {
     const target = join(packageBin, `${name}.mjs`);
     const shim = join(binDir, process.platform === 'win32' ? `${name}.cmd` : name);
     if (!existsSync(target)) continue;
@@ -365,6 +413,7 @@ export function installOpenKanCommandShims({ home, env = process.env } = {}) {
     ok: failed.length === 0,
     installed: commands.filter((entry) => entry.status === 'installed'),
     preserved: commands.filter((entry) => entry.status === 'preserved'),
+    retired: commands.filter((entry) => entry.status === 'retired'),
     message: failed.length === 0
       ? `OpenKan native commands ready in ${binDir}`
       : `OpenKan command shims failed: ${failed.map((entry) => `${entry.name}: ${entry.error}`).join('; ')}`,
