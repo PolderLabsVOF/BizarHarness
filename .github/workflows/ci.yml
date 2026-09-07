@@ -61,6 +61,9 @@ jobs:
       - name: Install dependencies (bun install)
         run: bun install --no-save
 
+      - name: Build SDK (required by verify-repo-structure + downstream workflows)
+        run: npm run build:sdk
+
       - name: TypeScript gate (make check)
         run: make check
 
@@ -78,9 +81,6 @@ jobs:
 
       - name: Tests (make test)
         run: make test
-
-      - name: SDK build + dist lock
-        run: npm run build:sdk
 
       - name: Upload SDK build artifact (for downstream release workflows)
         if: github.event_name == 'push'
