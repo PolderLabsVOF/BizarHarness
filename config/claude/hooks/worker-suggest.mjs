@@ -82,8 +82,8 @@ const OMX_PRIMITIVE_HINTS = [
   'Bizar OMX-derived primitive pivots (Phase 6):',
   '- Prompt is brief, broad, or missing acceptance criteria, decision boundaries, or non-goals → consider `deep-interview` (Stage 1-3 spec crispening). Only resume normal routing after the spec crystallizes at ambiguity ≤ 0.10.',
   '- Request describes a multi-objective run with sub-stories, weighted lanes, or checkpoints → consider `ultragoal` (durable progress tracker with four-lane completion fence). Treat its terminal transitions as the completion contract.',
-  '- User asks for a research-grounded plan, architecture decision, or "what should we do" without immediate implementation → consider `ralplan` (separate planner + adversarial reviewer). Do not let execution leak past the `plan` stage.',
-  '- Greenfield ideation with no spec yet ("I want to build X") → consider `brainstorming` before any deep-interview or ralplan escalation.',
+  '- User asks for a research-grounded plan, architecture decision, or "what should we do" without immediate implementation → consider `bizplan` (separate planner + adversarial reviewer). Do not let execution leak past the `plan` stage.',
+  '- Greenfield ideation with no spec yet ("I want to build X") → consider `brainstorming` before any deep-interview or bizplan escalation.',
   '- Two non-negotiable gates always apply: (1) surface any HITL-floor category (push, PR mutation, release, publish, deploy, prod write, credential, public exposure, irreversible destruction) before continuing, even when `/autopilot` or `/ultragoal` is in flight; (2) refuse to advance past `/deep-interview` while the spec ambiguity score is > 0.10.',
 ].join('\n');
 
@@ -119,7 +119,7 @@ function shouldSuggestUltragoal(prompt) {
  * Returns true when the prompt explicitly asks for a plan / architecture
  * decision without immediate implementation.
  */
-function shouldSuggestRalplan(prompt) {
+function shouldSuggestBizplan(prompt) {
   const text = String(prompt ?? '').trim();
   if (text.length === 0) return false;
   if (/\b(?:implement|build|write|code|scaffold|ship|deploy)\b/i.test(text)) return false;
@@ -151,7 +151,7 @@ function buildOmxPrimitiveHints(prompt) {
   const pivots = [];
   if (shouldSuggestDeepInterview(prompt)) pivots.push('deep-interview (Stage 1-3 spec crispening — prompt is broad or anchor-free)');
   if (shouldSuggestUltragoal(prompt)) pivots.push('ultragoal (long-horizon multi-objective run with checkpoint steer)');
-  if (shouldSuggestRalplan(prompt)) pivots.push('ralplan (consensus plan only — planner + adversarial reviewer)');
+  if (shouldSuggestBizplan(prompt)) pivots.push('bizplan (consensus plan only — planner + adversarial reviewer)');
   if (shouldSuggestBrainstorming(prompt)) pivots.push('brainstorming (greenfield ideation, no spec yet)');
 
   if (pivots.length === 0) {

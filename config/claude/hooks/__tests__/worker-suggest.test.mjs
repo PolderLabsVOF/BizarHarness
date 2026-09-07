@@ -264,7 +264,7 @@ test('worker-suggest: emits the OMX-derived primitive pivot block on a substanti
   assert.match(ctx, /Bizar OMX-derived primitive pivots \(Phase 6\)/);
   assert.match(ctx, /`deep-interview`/);
   assert.match(ctx, /`ultragoal`/);
-  assert.match(ctx, /`ralplan`/);
+  assert.match(ctx, /`bizplan`/);
   assert.match(ctx, /`brainstorming`/);
   // Both Phase 6 gates are surfaced on every substantive prompt.
   assert.match(ctx, /HITL-floor category/);
@@ -283,7 +283,7 @@ test('worker-suggest: surfaces deep-interview pivot for broad/anchor-free prompt
   assert.match(ctx, /Matched pivots for this prompt:/);
   assert.match(ctx, /deep-interview \(Stage 1-3 spec crispening/);
   assert.doesNotMatch(ctx, /ultragoal \(long-horizon/);
-  assert.doesNotMatch(ctx, /ralplan \(consensus plan only/);
+  assert.doesNotMatch(ctx, /bizplan \(consensus plan only/);
   assert.doesNotMatch(ctx, /brainstorming \(greenfield ideation/);
 });
 
@@ -300,9 +300,9 @@ test('worker-suggest: surfaces ultragoal pivot for multi-objective / checkpoint 
   assert.match(ctx, /ultragoal \(long-horizon/);
 });
 
-test('worker-suggest: surfaces ralplan pivot when prompt asks only for a plan', () => {
+test('worker-suggest: surfaces bizplan pivot when prompt asks only for a plan', () => {
   const { status, stdout } = runHook({
-    session_id: 'omx-pivot-ralplan',
+    session_id: 'omx-pivot-bizplan',
     cwd: '/tmp',
     hook_event_name: 'UserPromptSubmit',
     prompt: 'draft an architecture plan and consensus approach for the new module',
@@ -310,7 +310,7 @@ test('worker-suggest: surfaces ralplan pivot when prompt asks only for a plan', 
   assert.equal(status, 0);
   const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
   assert.match(ctx, /Matched pivots for this prompt:/);
-  assert.match(ctx, /ralplan \(consensus plan only/);
+  assert.match(ctx, /bizplan \(consensus plan only/);
 });
 
 test('worker-suggest: surfaces brainstorming pivot for greenfield ideation', () => {
@@ -403,7 +403,7 @@ test('worker-suggest: emits the OMX-derived primitive pivot block on a substanti
   assert.match(ctx, /Bizar OMX-derived primitive pivots \(Phase 6\)/);
   assert.match(ctx, /`deep-interview`/);
   assert.match(ctx, /`ultragoal`/);
-  assert.match(ctx, /`ralplan`/);
+  assert.match(ctx, /`bizplan`/);
   assert.match(ctx, /`brainstorming`/);
   // Both Phase 6 gates are surfaced on every substantive prompt.
   assert.match(ctx, /HITL-floor category/);
@@ -422,7 +422,7 @@ test('worker-suggest: surfaces deep-interview pivot for broad/anchor-free prompt
   assert.match(ctx, /Matched pivots for this prompt:/);
   assert.match(ctx, /deep-interview \(Stage 1-3 spec crispening/);
   assert.doesNotMatch(ctx, /ultragoal \(long-horizon/);
-  assert.doesNotMatch(ctx, /ralplan \(consensus plan only/);
+  assert.doesNotMatch(ctx, /bizplan \(consensus plan only/);
   assert.doesNotMatch(ctx, /brainstorming \(greenfield ideation/);
 });
 
@@ -439,9 +439,9 @@ test('worker-suggest: surfaces ultragoal pivot for multi-objective / checkpoint 
   assert.match(ctx, /ultragoal \(long-horizon/);
 });
 
-test('worker-suggest: surfaces ralplan pivot when prompt asks only for a plan', () => {
+test('worker-suggest: surfaces bizplan pivot when prompt asks only for a plan', () => {
   const { status, stdout } = runHook({
-    session_id: 'omx-pivot-ralplan',
+    session_id: 'omx-pivot-bizplan',
     cwd: '/tmp',
     hook_event_name: 'UserPromptSubmit',
     prompt: 'draft an architecture plan and consensus approach for the new module',
@@ -449,7 +449,7 @@ test('worker-suggest: surfaces ralplan pivot when prompt asks only for a plan', 
   assert.equal(status, 0);
   const ctx = parseStdout(stdout).hookSpecificOutput.additionalContext;
   assert.match(ctx, /Matched pivots for this prompt:/);
-  assert.match(ctx, /ralplan \(consensus plan only/);
+  assert.match(ctx, /bizplan \(consensus plan only/);
 });
 
 test('worker-suggest: surfaces brainstorming pivot for greenfield ideation', () => {
