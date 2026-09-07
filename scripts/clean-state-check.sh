@@ -23,7 +23,7 @@ check() {
     PASS=$((PASS + 1))
   else
     echo "  FAIL"
-    tail -12 "$output_file" | sed 's/^/  /'
+    tail -40 "$output_file" | sed 's/^/  /'
     FAIL=$((FAIL + 1))
   fi
   rm -f -- "$output_file"
