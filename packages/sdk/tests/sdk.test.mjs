@@ -89,7 +89,7 @@ describe("SDK module surface", () => {
       "deep_interview_status",
       "ultragoal_status",
       "ultragoal_steer",
-      "ralplan_handoff_validate",
+      "bizplan_handoff_validate",
     ]);
     const have = new Set(mod.BIZAR_TOOLS.map((t) => t.name));
     for (const n of expectedNames) {
