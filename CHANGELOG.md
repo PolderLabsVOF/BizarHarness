@@ -18,6 +18,31 @@
   `config/workflows/__tests__/alias-dispatch.test.mjs`.
 
 
+## [10.27.1] - 2026-09-07
+
+### Fixed
+- **Residual `ralplan` references cleaned up** — `config/claude/agents/plan-architect.md`,
+  `config/claude/hooks/worker-suggest.mjs`, and the `worker-suggest` tests
+  were renamed to `bizplan` (`shouldSuggestRalplan` → `shouldSuggestBizplan`,
+  BIZPLAN-Critic sub-mode in the architect pass, session-id literals in
+  tests). Extended the sweep across `config/skills/{autopilot,deep-interview}/SKILL.md`
+  and the mirror copies under `config/claude/skills/`; the `/plan` row was
+  removed from the deep-interview operator-facing split since the legacy
+  surface is gone.
+- **OpenKan v0.5.0+ legacy-binary retirement handled** — v0.5.0 drops the
+  legacy `openkan` binary; `ok` is the only supported entry point. v0.5.1
+  fixes `ok serve --mode=background` keep-alive. Bizar now: (1) reads the
+  installed version marker via `installedOpenKanSupportsLegacyBin(home)`,
+  (2) `installOpenKanCommandShims` retires the legacy `~/.local/bin/openkan`
+  shim on v0.5.0+ before installing fresh shims (status `retired`), (3)
+  `resolveOpenKanDashboard` short-circuits to the `ok` launcher on v0.5.0+
+  instead of searching for the no-longer-shipped `openkan.mjs`, and (4)
+  `bizar openkan dashboard` dispatches to `ok serve` on v0.5.0+ via
+  `runDashboard`. The pre-v0.5.0 codepath is preserved for older installs.
+  Four new tests in `cli/__tests__/openkan.test.mjs` fence the boundary
+  (semver: unknown / 0.4.9 / 0.5.0 / 0.5.1 / 1.0.0-rc.1; shim retirement;
+  dashboard fallback in both directions).
+
 ## [10.27.0] - 2026-09-07
 
 ### Changed
