@@ -77,10 +77,12 @@ else tier = 'heavy'
 ## State and research
 
 ```sh
-bizar workflow status --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
-bizar workflow resume --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
-# When no run exists:
-bizar workflow start --profile default --goal "$ARGUMENTS" --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+ok task list --json
+ok plan list --json
+ok prd list --json
+# When no plan exists:
+ok plan add "$ARGUMENTS" --summary "bizplan plan-build" --json
+ok task add "research/spec" --plan "$PLAN_ID" --priority p1 --json
 ```
 
 Ground the specification in repository evidence. For external APIs, frameworks,
@@ -225,10 +227,11 @@ returns `APPROVED` on the unified plan.
 2. A separate QA reviewer challenges assumptions, race/interference risks, failure recovery, approval boundaries, and test adequacy.
 3. Resolve every material finding. Shared root files have one owner; independent scopes are explicitly parallel; dependent work is serialized.
 4. Persist the accepted plan in the repository's normal planning/state files, not in a note vault or wiki.
-5. Re-read workflow status, then mark planning complete:
+5. Re-read plan/task state, then mark the planning task complete:
 
    ```sh
-   bizar workflow advance --run "$RUN_ID" --revision "$REVISION" --stage plan --evidence "$BOUNDED_EVIDENCE" --json
+   ok task update "$PLAN_TASK_ID" --status review --json
+   ok task complete "$PLAN_TASK_ID" --evidence "$BOUNDED_EVIDENCE" --json
    ```
 
 The resulting workflow is ready at execution. If the user requested plan-only

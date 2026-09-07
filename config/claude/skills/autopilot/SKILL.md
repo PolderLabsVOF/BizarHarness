@@ -8,54 +8,68 @@ argument-hint: "[--workflow <default|plan-build-qa>] <task or outcome>"
 
 Use Autopilot for a clear, non-trivial outcome that should be delivered locally without routine permission handoffs. The office manager remains the single orchestrator; worker agents receive bounded, disjoint assignments.
 
+> **Phase discipline is preserved** — research/spec → consensus plan →
+> implementation waves → bounded QA/fix → parallel validation. The
+> durable artifact for each phase is an OpenKan task; phase advances are
+> `ok task update <id> --status <new-status> --evidence "..."`. There is
+> no `bizar workflow` CLI; everything routes through `ok` (the
+> OpenKan-native CLI at `~/.local/bin/ok`).
+
 ## Start or resume
 
 1. Read repository instructions and authoritative OpenKan `.ok/` state with `ok task list`, `ok plan list`, and `ok prd list`.
 2. Query durable state first:
 
    ```sh
-   bizar workflow status --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+   ok task list --json
+   ok plan list --json
+   ok prd list --json
    ```
 
-3. If that session owns an unfinished run, resume it with the returned identity:
+3. If an active plan already owns the session's intent, resume by reading its current state:
 
    ```sh
-   bizar workflow resume --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+   ok plan show "$ACTIVE_PLAN_ID" --json
+   ok task list --plan "$ACTIVE_PLAN_ID" --json
    ```
 
-4. Otherwise parse the optional leading `--workflow <default|plan-build-qa>` selector and remove it from the task text used as the goal. If the selector is omitted, use `default`: bounded task-wave execution with at most three parallel agents. Use `plan-build-qa` for a plan-led build with dedicated QA/validation gates and at most five parallel agents. Preserve the returned `runId`, `revision`, and `stage` for compare-before-write transitions:
+4. Otherwise parse the optional leading `--workflow <default|plan-build-qa>` selector and remove it from the task text used as the goal. If the selector is omitted, use `default`: bounded task-wave execution with at most three parallel agents. Use `plan-build-qa` for a plan-led build with dedicated QA/validation gates and at most five parallel agents. Create the durable plan and its first task:
 
    ```sh
-   bizar workflow start --workflow "$WORKFLOW_PROFILE" --goal "$TASK_GOAL" --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+   # default profile → bounded task-wave execution, ≤3 parallel agents
+   ok plan add "$TASK_GOAL" --summary "Autopilot plan-build-qa run" --json
+   ok task add "research/spec" --plan "$PLAN_ID" --priority p1 --json
    ```
 
    Examples: `/autopilot implement the task` selects `default`; `/autopilot --workflow plan-build-qa implement the task` selects the plan-led profile. Reject unknown workflow names instead of silently substituting another profile.
 
-Only one workflow may own a project/session pair. Never delete or edit workflow state files directly.
+Only one plan may own a project/session pair at a time. Never delete or edit `.ok/` files directly — always go through the `ok` CLI.
 
 ## Lifecycle
 
-For every transition, re-read status and use the current values. Record compact evidence that identifies the proving command, result, or artifact; do not place transcripts or secrets in workflow state.
+For every transition, re-read task/plan state and use the current values. Record compact evidence that identifies the proving command, result, or artifact; do not place transcripts or secrets in OpenKan evidence fields.
 
 ```sh
-bizar workflow advance --run "$RUN_ID" --revision "$REVISION" --stage "$CURRENT_STAGE" --evidence "$BOUNDED_EVIDENCE" --json
+ok task update "$TASK_ID" --status in_progress --json
+ok task complete "$TASK_ID" --evidence "$BOUNDED_EVIDENCE" --json
+ok task add "<next-stage>" --plan "$PLAN_ID" --priority p1 --json
 ```
 
-Run the stages in order:
+Run the stages in order. Each stage is a task under the plan; advancing the run means completing the current task with evidence and creating the next.
 
-1. **Research/spec** — establish current behavior from the repository. For external or version-sensitive behavior, WebSearch current official documentation and WebFetch the exact relevant page. Produce explicit acceptance criteria, exclusions, risks, and stop condition. Advance `research` only when this evidence exists.
-2. **Consensus plan** — have the planner draft an implementation-ready plan and a separate QA reviewer challenge architecture, approval boundaries, and test shape. Resolve findings, assign each shared root file to one owner, then advance `plan`.
-3. **Implementation waves** — lock missing behavior with regression tests, then dispatch independent file scopes in parallel. Dependent work stays sequential. Integrate and run targeted checks before advancing `execute`.
-4. **Bounded QA/fix** — reproduce the acceptance path, run affected tests, and fix failures. Limit the cycle to five attempts; a repeated or unrecoverable failure uses `bizar workflow fail` with the current run, revision, and stage plus a concise reason. Advance `qa` only after fresh passing evidence.
-5. **Parallel validation** — use separate functional, security/policy, and code-quality reviewers when their scopes are independent. Reconcile findings, run the repository's required final gates, and advance `validate`. Advancing the final stage completes the run.
+1. **Research/spec** — establish current behavior from the repository. For external or version-sensitive behavior, WebSearch current official documentation and WebFetch the exact relevant page. Produce explicit acceptance criteria, exclusions, risks, and stop condition. Mark `research` done only when this evidence exists.
+2. **Consensus plan** — have the planner draft an implementation-ready plan and a separate QA reviewer challenge architecture, approval boundaries, and test shape. Resolve findings, assign each shared root file to one owner, then mark `plan` done.
+3. **Implementation waves** — lock missing behavior with regression tests, then dispatch independent file scopes in parallel. Dependent work stays sequential. Integrate and run targeted checks before completing `execute`.
+4. **Bounded QA/fix** — reproduce the acceptance path, run affected tests, and fix failures. Limit the cycle to five attempts; a repeated or unrecoverable failure uses `ok task cancel <id> --reason "..."` with the current task id and a concise reason. Complete `qa` only after fresh passing evidence.
+5. **Parallel validation** — use separate functional, security/policy, and code-quality reviewers when their scopes are independent. Reconcile findings, run the repository's required final gates, and complete `validate`. Completing the final task closes the plan.
 
 ## Guardrails
 
 - Continue local read/edit/test/build work autonomously.
 - Never auto-commit, push, open or mutate a pull request, publish, release, deploy, change credentials/access, expose a service publicly, or perform irreversible destruction.
-- Do not add a note vault, wiki, semantic-memory service, daemon, or tmux controller. Durable workflow state is bounded operational state only.
+- Do not add a note vault, wiki, semantic-memory service, daemon, or tmux controller. Durable state lives only in OpenKan's `.ok/` workspace.
 - If cancelled, invoke the `cancel` skill; do not remove state by hand.
-- If a conflict reports a newer revision or different stage, stop the stale write, fetch status, and continue from current state.
+- If a task reports an unexpected status or owner, stop the stale write, fetch `ok task show <id>`, and continue from current state.
 
 ## Phase 6 cross-reference (OMX-derived primitives)
 

@@ -12,6 +12,12 @@ together and complete only when every lane passes a fresh quality gate. It is
 not a parallel-execution engine and not an iterate-on-criterion loop — see
 "Distinct from siblings" below.
 
+> **No `bizar goal` / `bizar workflow` CLI exists.** All durable state
+> lives in the OpenKan `.ok/` workspace (a PRD owns the run, one plan
+> tracks the objective, child OpenKan tasks own the subgoals). The
+> ledger/charter under `docs/specs/ultragoal-<id>.md` is preserved as the
+> human-readable audit trail; `ok` mutations are the source of truth.
+
 ## OMX → Bizar mapping rationale
 
 The OMX `$ultragoal` feature (synthesized from
@@ -24,17 +30,20 @@ adapts that shape to its own runtime:
   (`planning | executing | verifying | done | failed | cancelled`) with three
   additive values: `reviewing | checkpointing | blocked`. `blocked` is
   **non-terminal** and returns to `executing` on resume; `done | failed |
-  cancelled` keep their terminal semantics.
-- Subgoals reuse `ok task` records (parent = ultragoal run id) rather than
-  introducing a new task primitive. Subgoal leases are coordinated with the
-  `ok task` 30-second lease window.
+  cancelled` keep their terminal semantics. The phase is recorded as a
+  tag/metadata on the parent PRD (e.g. PRD `phase: executing`) and on each
+  subgoal task's `description` / acceptance metadata.
+- Subgoals reuse `ok task` records (parent plan = ultragoal run id). Subgoal
+  weight is stored in the task's `acceptance` field (e.g.
+  `--acceptance "weight=0.25"`) so OpenKan's durable schema carries the
+  weighted-subtask information without parallel state.
 - Completion claims pass through a four-lane quality gate (`cleaner`,
-  `verification`, `review`, `architecture_invariant`) — never through OMX
-  state alone.
+  `verification`, `review`, `architecture_invariant`) — never through OpenKan
+  status alone.
 - The hard-approval floor in `AGENTS.md` (push, PR mutation, release,
   publish, deploy, prod writes, credential changes, public exposure,
   irreversible destruction) remains enforced by `permission-request.mjs`
-  even when the run ledger says `done`.
+  even when the plan status says `complete`.
 
 The durable artifacts land under `docs/specs/` per
 `docs/decisions/DEC-022-omx-canonical-artifact-location.md`:
@@ -47,19 +56,24 @@ to `.harness/specs/`, `.omc/specs/`, or a generic note vault.
 
 ## Start or resume
 
-Read durable state first. Resume an unfinished run or start a new one:
+Read durable state first. Resume an unfinished PRD/plan or start a new one:
 
 ```sh
-bizar workflow status --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
-bizar workflow resume --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
-# When no run exists:
-bizar goal start --goal "$ARGUMENTS" --session "$CLAUDE_SESSION_ID" --project "$CLAUDE_PROJECT_DIR" --json
+ok prd list --json
+ok plan list --json
+ok task list --json
+# When no PRD exists:
+ok prd add "$ARGUMENTS" --review-cadence weekly --json
+ok plan add "<objective>" --prd "$PRD_ID" --json
+ok task add "research/spec" --plan "$PLAN_ID" --priority p1 --json
 ```
 
-`bizar goal start` takes a required leading `--mode aggregate|per-story`
-selector. Parse and remove it from `$ARGUMENTS` before passing the remainder
-as the goal text. Reject unknown mode names; do not silently substitute
-`aggregate`.
+`--mode aggregate|per-story` is a leading selector on the ultragoal CLI
+that was retired; the mode is now recorded as PRD metadata
+(`--goals "<id>:aggregate"` or the equivalent written via the plan's
+`--phase` field). Parse and remove the leading `--mode` flag from
+`$ARGUMENTS` before passing the remainder as the goal text. Reject unknown
+mode names; do not silently substitute `aggregate`.
 
 ## Goal modes
 
@@ -70,13 +84,14 @@ The two mode shapes are different on the wire and in the ledger. Pick one at
 
 One `docs/specs/ultragoal-<id>.md` charter and one
 `docs/specs/ultragoal/<id>.jsonl` ledger track every subgoal in the same
-record. Each subgoal carries a `weight` (integer ≥ 0) and the run completes
-when the weighted sum of completed subgoals reaches the configured
-`completionThreshold` (default: `1.0`).
+record. Each subgoal carries a `weight` (integer ≥ 0) recorded in the
+OpenKan task's `acceptance` field; the run completes when the weighted
+sum of completed subgoals reaches the configured `completionThreshold`
+(default: `1.0`).
 
 ```sh
-bizar goal steer add_subgoal --run "$RUN_ID" --revision "$REVISION" \
-  --subgoal-id "<stable-id>" --weight 0.25 --summary "<one line>" --json
+ok task add "<summary>" --plan "$PLAN_ID" --priority p1 \
+  --acceptance "weight=0.25" --description "<summary>" --json
 ```
 
 Use `aggregate` when the subgoals are facets of a single deliverable (e.g.
@@ -89,12 +104,12 @@ The charter lists the stories; every story owns its own
 `docs/specs/ultragoal/<id>/story-<sid>.jsonl` subledger. The parent ledger at
 `docs/specs/ultragoal/<id>.jsonl` carries only steering and cross-story
 checkpoint events. The run completes only when **every** story has reached
-its own `done` state; partial completion stays at `reviewing` or
+its own `done` state; partial completion stays at `review` or
 `checkpointing`.
 
 ```sh
-bizar goal steer add_subgoal --run "$RUN_ID" --revision "$REVISION" \
-  --subgoal-id "<story-id>" --story-ledger --summary "<one line>" --json
+ok task add "<story summary>" --plan "$PLAN_ID" --priority p1 \
+  --acceptance "story=true,story-id=<sid>" --description "<story summary>" --json
 ```
 
 Use `per-story` when each story is genuinely independent progress a different
@@ -109,20 +124,24 @@ planning → executing → verifying → reviewing → checkpointing → done
                                                     blocked (non-terminal, → executing)
 ```
 
-Re-read status at every transition; compare-before-write every steer,
-checkpoint, or phase advance using the returned `revision`.
+The active phase is recorded as PRD/plan metadata (e.g.
+`ok prd update <id> --phase executing` or `--milestone <m> --milestone-status <s>`)
+and reflected in task statuses (`pending` / `in_progress` / `review` /
+`done` / `cancelled`). Re-read state at every transition; never assume
+the previous read is current.
 
 1. **planning** — research the objective, ground any external API / framework
    behavior in current official documentation, and write
    `docs/specs/ultragoal-<id>.md` with: goal, non-goals, subtask list (with
    weights in `aggregate` mode or story ids in `per-story` mode), explicit
    stop condition, and hard-approval carve-outs that apply to this run
-   (push-only, deploy-only, etc.). Advance to `executing` only after the
-   charter exists.
-2. **executing** — claim `ok task` records for each subgoal, dispatch
-   bounded worker agents with disjoint ownership, and append every steer
-   event to the ledger. Long-running subgoals renew their leases inside the
-   30-second window so they are not reaped mid-execution.
+   (push-only, deploy-only, etc.). Create the matching OpenKan plan and the
+   first task (`research/spec`) before claiming `executing`.
+2. **executing** — claim `ok task` records for each subgoal via
+   `ok task claim`, dispatch bounded worker agents with disjoint ownership,
+   and append every steer event to the ledger. Long-running subgoals renew
+   their leases inside the 30-second window so they are not reaped
+   mid-execution.
 3. **verifying** — run targeted tests for each completed subgoal and collect
    the four-lane evidence bundles below. Subgoal completion is local; run
    completion is not.
@@ -131,48 +150,53 @@ checkpoint, or phase advance using the returned `revision`.
    and the residual risk. Reviewer findings must be resolved or explicitly
    accepted in the ledger before the run advances.
 5. **checkpointing** — final integration, full-gate run, and the four-lane
-   quality-gate fence. `done` is reachable only from this phase.
+   quality-gate fence. `complete` is reachable only from this phase.
 6. **done** — terminal. Reachable only after the four-lane fence passes. The
    ledger records the gate evidence; the durable state moves to a frozen
-   snapshot.
+   snapshot via `ok plan update <id> --status complete`.
 7. **blocked** — non-terminal. A subgoal cannot proceed (missing input,
    external dependency, operator decision). The run parks here until the
-   operator steers `update` / `add_subgoal` / `fail`. On resume the run
-   returns to `executing`; do not re-plan from scratch.
+   operator steers via additional `ok task add` or
+   `ok task update <id> --status pending`. On resume the run returns to
+   `executing`; do not re-plan from scratch.
 8. **failed** / **cancelled** — terminal, recorded with reason and final
-   ledger tail.
+   ledger tail. Marked via `ok plan update <id> --status abandoned`.
 
 ## Steer surface
 
-`bizar goal steer` is the only sanctioned mutation path after `start`. Every
-subcommand takes the current `--run` and `--revision`, mutates the ledger
-atomically, and returns the next revision. Do not edit the ledger file or
-charter by hand.
+`ok task` mutations are the only sanctioned mutation path after start.
+Every command takes the current `--plan` / `--task` identity, mutates the
+ledger atomically, and returns the next state. Do not edit the ledger
+file or charter by hand; document each steer as an `ok task update`
+evidence entry so the audit trail stays bounded.
 
-```sh
-bizar goal steer add_subgoal    --run "$RUN_ID" --revision "$REVISION" --subgoal-id "<id>" [--weight N | --story-ledger] --summary "<line>" --json
-bizar goal steer split_subgoal  --run "$RUN_ID" --revision "$REVISION" --subgoal-id "<id>" --into "<id-a>,<id-b>" --json
-bizar goal steer checkpoint     --run "$RUN_ID" --revision "$REVISION" --evidence "$BOUNDED_EVIDENCE" --json
-bizar goal steer update         --run "$RUN_ID" --revision "$REVISION" --field "<dot.path>" --value "<json>" --json
-bizar goal steer fail           --run "$RUN_ID" --revision "$REVISION" --reason "<bounded reason>" --json
-bizar goal steer cancel         --run "$RUN_ID" --revision "$REVISION" --reason "<bounded reason>" --json
-bizar goal steer complete       --run "$RUN_ID" --revision "$REVISION" --quality-gate-json "$GATE_JSON" --json
-```
+| Original `bizar goal steer` | OpenKan replacement |
+|---|---|
+| `add_subgoal --subgoal-id <id> --weight <N>` | `ok task add "<summary>" --plan <plan-id> --acceptance "weight=<N>"` |
+| `split_subgoal --subgoal-id <id> --into <a,b>` | `ok task cancel <id> --reason "split into <a>,<b>"` then `ok task add` for each |
+| `checkpoint --evidence <text>` | `ok task complete <id> --evidence "<bounded text>"` |
+| `update --field <dot.path> --value <json>` | `ok task update <id> --description <text>` / `--acceptance <text>` |
+| `fail --reason <text>` | `ok task cancel <id> --reason "<bounded reason>"` and `ok plan update <plan-id> --status abandoned` |
+| `cancel --reason <text>` | `ok task cancel <id> --reason "<bounded reason>"` and `ok plan update <plan-id> --status abandoned` |
+| `complete --quality-gate-json <path>` | `ok task complete <id> --evidence <text>` after the four-lane fence passes, then `ok plan update <plan-id> --status complete` |
 
-`add_subgoal` and `split_subgoal` are only valid in `planning` or `executing`.
-`checkpoint` is valid in `executing | verifying | reviewing | checkpointing`.
-`fail` and `cancel` are valid in any non-terminal phase.
-`complete` is only valid in `checkpointing` and is rejected unless the
-quality-gate JSON satisfies the four-lane fence.
+Add and split are only valid when the plan is in `planning` or
+`executing`. `checkpoint` (i.e. task completion) is valid in any non-terminal
+phase. `fail` and `cancel` are valid in any non-terminal phase. `complete`
+on the plan is only valid when every child task is `done` AND the four-lane
+fence has been satisfied; otherwise `ok plan update --status complete` is
+rejected by the operator contract.
 
 ## Four-lane completion fence
 
-`bizar goal steer complete` accepts only when the
-`--quality-gate-json` payload carries fresh evidence for **all four** lanes.
-OMX key names are preserved (`cleaner`, `verification`, `review`,
-`architecture_invariant`); Bizar additionally expects each lane value to
-embed a typed `EvidenceBundle` reference so the gate is reproducible from
-the ledger alone.
+The plan only closes when the four-lane quality-gate payload carries fresh
+evidence for **all four** lanes. OMX key names are preserved (`cleaner`,
+`verification`, `review`, `architecture_invariant`); Bizar additionally
+expects each lane value to embed a typed `EvidenceBundle` reference so the
+gate is reproducible from the ledger alone. The fence is enforced by the
+operator before `ok plan update <plan-id> --status complete`; the OpenKan
+CLI itself does not enforce the four-lane shape, so the operator must keep
+the contract.
 
 | Lane | Fresh evidence required (within the current run) |
 |---|---|
@@ -184,30 +208,28 @@ the ledger alone.
 A lane may be marked `"not_applicable": true` only when the operator has
 recorded an explicit carve-out in the run charter and the rationale is in
 the ledger. "I forgot" is never an acceptable rationale. If any lane is
-absent, stale, or contested, `complete` is rejected and the run stays in
-`checkpointing` (or returns to `reviewing`).
+absent, stale, or contested, `ok plan update --status complete` is
+rejected and the run stays in `checkpointing` (or returns to `reviewing`).
 
-**Never claim completion from OMX state alone.** A `done` ledger row, an
-empty todo list, or a quiet process are not completion evidence. Run
+**Never claim completion from OpenKan status alone.** A `done` task row,
+an empty todo list, or a quiet process are not completion evidence. Run
 completion is a typed claim backed by the four-lane fence; subgoal
 completion is local-only and does not promote the parent run.
 
 ## Distinct from siblings
 
 - **vs. `ralph` (single-owner iterate-on-criterion).** Ralph loops on one
-  scoped acceptance criterion, advances a `bizar workflow` run, and is
-  bounded by attempt count. Ultragoal tracks many goals in one durable
-  ledger, advances an `ObjectiveRun` phase enum, and is bounded by the
+  scoped acceptance criterion and advances an OpenKan plan/task. Ultragoal
+  tracks many goals in one durable PRD/plan, and is bounded by the
   four-lane fence. Reach for Ralph when one agent owns one criterion;
   reach for Ultragoal when the run is "ship these N things together" and
   per-goal evidence must survive independently.
 - **vs. `autopilot` (end-to-end phased run).** Autopilot is a top-level
-  workflow (`research → plan → execute → qa → validate`) with parallel
-  validation reviewers and a `bizar workflow` state machine. Ultragoal is
-  a progress tracker that lives inside or alongside an Autopilot run,
-  surfacing weighted subtask progress. Ultragoal does not start workers,
-  does not own the integration tree, and does not replace Autopilot's
-  validation phase.
+  OpenKan plan (`research → plan → execute → qa → validate`) with parallel
+  validation reviewers. Ultragoal is a progress tracker that lives inside
+  or alongside an Autopilot plan, surfacing weighted subtask progress.
+  Ultragoal does not start workers, does not own the integration tree, and
+  does not replace Autopilot's validation phase.
 - **vs. `ultrawork` (bounded parallel implementation).** Ultrawork dispatches
   disjoint work lanes for one implementation phase and integrates the
   results. Ultragoal records progress across subtasks that may execute on
@@ -222,10 +244,10 @@ completion is local-only and does not promote the parent run.
   perform irreversible destruction — even when the run ledger says
   `done`. These seven hard-approval categories live on
   `permission-request.mjs` and are not delegated to the skill.
-- Do not edit the ledger or charter by hand. Use `bizar goal steer`. A
-  conflict that reports a newer revision or different phase means another
-  hook or agent advanced state — stop the stale write, fetch status, and
-  continue from current state.
+- Do not edit the ledger or charter by hand. Use the `ok` CLI. A
+  conflict that reports an unexpected status or owner means another
+  hook or agent advanced state — stop the stale write, fetch
+  `ok task show <id>`, and continue from current state.
 - If the user requests cancellation, invoke the `cancel` skill; do not
   silently drop state.
 - Do not introduce a daemon, tmux surface, memory subsystem, note vault,
