@@ -91,8 +91,8 @@ that OMX-derived flows never silently escalate past a known safety boundary.
 
 ## Bizplan tier selection
 
-When routing to `/bizplan` (or its legacy aliases `/plan` and `/ralplan`),
-Mike MUST pick a tier (`light`, `standard`, or `heavy`) before invoking the
+When routing to `/bizplan`, Mike MUST pick a tier (`light`, `standard`, or
+`heavy`) before invoking the
 skill. The canonical selection rule lives in
 `packages/sdk/src/handoff/bizplan.ts:tierFromRequest`; Mike applies the same
 three-step decision tree as a routing shortcut:
