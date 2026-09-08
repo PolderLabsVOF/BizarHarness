@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+
+## [10.29.1] - 2026-09-08
+
 ### OpenKan 0.7.0 alignment
 - **Storage layout updated to v2** — tasks are now read from
   `.ok/tasks/<id>/task.json` (directory per task) instead of flat
@@ -9,10 +12,26 @@
   task files are detected.
 - **Priority enum updated** — the priority flag now accepts
   `low|normal|high|urgent` instead of `p0|p1|p2|p3`. The `p1` value
-  maps to `normal`.
-- **New subcommands** — `bizar openkan project clean [--apply|--all|--dry-run]`
-  and `bizar openkan board delete <id>` are now available, forwarding to
-  the equivalent `ok` CLI commands.
+  maps to `high` under the v2 enum (p1 in v1 was the high tier).
+- **New subcommands**:
+  - `bizar openkan project clean [--apply|--all|--dry-run]` and
+    `bizar openkan board delete <id>` forward to the equivalent `ok`
+    CLI commands (added in OpenKan 0.6.0 / 0.6.1).
+  - `bizar openkan migrate [--apply] [--tasks|--board]` runs the v1 → v2
+    migration end-to-end against the current `.ok/` workspace. Default
+    is dry-run; `--apply` actually moves files. `--tasks` and `--board`
+    narrow scope. Idempotent.
+- **Vendored migration scripts** at `scripts/openkan/` (the upstream
+  `scripts/migrate-tasks-to-v2.ts` and `scripts/migrate-board-to-v2.ts`
+  are not shipped in the npm tarball; Bizar inlines the type guard and
+  atomic writer so they run as standalone Node scripts). Run via
+  `bizar openkan migrate` or directly via `node --experimental-strip-types`.
+- **SDK `spawnExecutorTask`** writes v2 task layout (`.ok/tasks/<id>/task.json`
+  with `schema: ok.task.v2`) so downstream surfaces that claim the task
+  see a v2 record.
+- **`init.sh` WIP=1 invariant** scans the v2 directory layout.
+- Operators on v1 layout will see a one-time warning log; run
+  `bizar openkan migrate --apply` to upgrade.
 
 
 ## [10.29.0] - 2026-09-08
