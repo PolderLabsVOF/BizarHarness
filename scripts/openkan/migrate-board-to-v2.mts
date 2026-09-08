@@ -115,11 +115,12 @@ function projectBoardTaskToV2(task: LegacyBoardTask): Record<string, unknown> {
   return v2;
 }
 
-export async function migrateBoardToV2(root: string): Promise<MigrationReport> {
+export async function migrateBoardToV2(root: string, options: { dryRun?: boolean } = {}): Promise<MigrationReport> {
   const boardPath = path.join(root, ".ok", "board.json");
   const backupPath = path.join(root, ".ok", "tasks.v1.board.json");
   const tasksDir = path.join(root, ".ok", "tasks");
   const report: MigrationReport = { root, scanned: 0, migrated: 0, skipped: 0, errors: [] };
+  const dryRun = options.dryRun === true;
 
   let raw: string;
   try {
@@ -160,6 +161,10 @@ export async function migrateBoardToV2(root: string): Promise<MigrationReport> {
         /* not yet migrated */
       }
       const v2 = projectBoardTaskToV2(task);
+      if (dryRun) {
+        report.migrated += 1;
+        continue;
+      }
       await fs.mkdir(path.join(tasksDir, id), { recursive: true });
       await atomicWrite(v2File, JSON.stringify(v2, null, 2) + "\n");
       report.migrated += 1;
@@ -168,11 +173,13 @@ export async function migrateBoardToV2(root: string): Promise<MigrationReport> {
     }
   }
 
-  try {
-    await fs.rename(boardPath, backupPath);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      report.errors.push({ id: "<board.json>", reason: `could not move to backup: ${(err as Error).message}` });
+  if (!dryRun) {
+    try {
+      await fs.rename(boardPath, backupPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        report.errors.push({ id: "<board.json>", reason: `could not move to backup: ${(err as Error).message}` });
+      }
     }
   }
 
@@ -191,8 +198,11 @@ function printReport(report: MigrationReport, stream: NodeJS.WritableStream = pr
 }
 
 export async function cmdMigrateBoardToV2(argv: string[]): Promise<number> {
-  const root = argv[0] ?? process.cwd();
-  const report = await migrateBoardToV2(root);
+  const args = argv.slice();
+  const dryRun = args.includes("--dry-run");
+  const rootIdx = args.findIndex((a) => !a.startsWith("--"));
+  const root = rootIdx >= 0 ? args[rootIdx] : process.cwd();
+  const report = await migrateBoardToV2(root, { dryRun });
   printReport(report);
   return report.errors.length > 0 ? 1 : 0;
 }

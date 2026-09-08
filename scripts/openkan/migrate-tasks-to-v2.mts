@@ -120,11 +120,12 @@ async function listV1FlatFiles(tasksDir: string): Promise<string[]> {
   return names.filter((n) => /^tsk-[A-Za-z0-9_-]+\.json$/.test(n));
 }
 
-export async function migrateTasksToV2(root: string): Promise<MigrationReport> {
+export async function migrateTasksToV2(root: string, options: { dryRun?: boolean } = {}): Promise<MigrationReport> {
   const tasksDir = path.join(root, ".ok", "tasks");
   const report: MigrationReport = { root, scanned: 0, migrated: 0, skipped: 0, errors: [] };
   const flat = await listV1FlatFiles(tasksDir);
   report.scanned = flat.length;
+  const dryRun = options.dryRun === true;
   for (const file of flat) {
     const id = file.replace(/\.json$/, "");
     const src = path.join(tasksDir, file);
@@ -153,6 +154,11 @@ export async function migrateTasksToV2(root: string): Promise<MigrationReport> {
         continue;
       }
       const v2 = convertV1ToV2(parsed);
+      if (dryRun) {
+        // Plan only: count as if migrated but make no filesystem changes.
+        report.migrated += 1;
+        continue;
+      }
       await fs.mkdir(dir, { recursive: true });
       await atomicWrite(v2File, JSON.stringify(v2, null, 2) + "\n");
       // Move the legacy flat file into the new directory as backup.
@@ -177,8 +183,11 @@ function printReport(report: MigrationReport, stream: NodeJS.WritableStream = pr
 }
 
 export async function cmdMigrateTasksToV2(argv: string[]): Promise<number> {
-  const root = argv[0] ?? process.cwd();
-  const report = await migrateTasksToV2(root);
+  const args = argv.slice();
+  const dryRun = args.includes("--dry-run");
+  const rootIdx = args.findIndex((a) => !a.startsWith("--"));
+  const root = rootIdx >= 0 ? args[rootIdx] : process.cwd();
+  const report = await migrateTasksToV2(root, { dryRun });
   printReport(report);
   return report.errors.length > 0 ? 1 : 0;
 }

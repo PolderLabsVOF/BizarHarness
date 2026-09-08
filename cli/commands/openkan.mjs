@@ -127,12 +127,12 @@ export async function run(name, args, isHelpRequest) {
       let exitCode = 0;
       if (!boardOnly) {
         process.stdout.write('=== Migrating tasks (.ok/tasks/<id>.json → <id>/task.json) ===\n');
-        const code = runMigrateScript(MIGRATE_TASKS, []);
+        const code = runMigrateScript(MIGRATE_TASKS, apply ? [] : ['--dry-run']);
         if (code !== 0) exitCode = code;
       }
       if (!tasksOnly) {
         process.stdout.write('\n=== Migrating board.json → per-task directories ===\n');
-        const code = runMigrateScript(MIGRATE_BOARD, []);
+        const code = runMigrateScript(MIGRATE_BOARD, apply ? [] : ['--dry-run']);
         if (code !== 0) exitCode = code;
       }
       if (exitCode === 0) {
