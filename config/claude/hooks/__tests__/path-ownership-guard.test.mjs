@@ -57,9 +57,10 @@ test('edit hook enforces sibling claims as advisory reminders, never blocks', ()
   roots.push(root);
   mkdirSync(join(root, 'src'), { recursive: true });
   mkdirSync(join(root, 'docs'), { recursive: true });
-  mkdirSync(join(root, '.ok', 'tasks'), { recursive: true });
-  writeFileSync(join(root, '.ok', 'tasks', 'tsk-source.json'), JSON.stringify({
-    schema: 'ok.task.v1', id: 'tsk-source', owner: 'todd', status: 'in_progress', scopes: ['src/**'],
+  const taskDir = join(root, '.ok', 'tasks', 'tsk-source');
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, 'task.json'), JSON.stringify({
+    schema: 'ok.task.v2', id: 'tsk-source', owner: 'todd', status: 'in_progress', scopes: ['src/**'],
   }));
 
   // Active task editing inside its own scope → silent allow.

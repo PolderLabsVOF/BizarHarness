@@ -38,7 +38,7 @@ Use Autopilot for a clear, non-trivial outcome that should be delivered locally 
    ```sh
    # default profile → bounded task-wave execution, ≤3 parallel agents
    ok plan add "$TASK_GOAL" --summary "Autopilot plan-build-qa run" --json
-   ok task add "research/spec" --plan "$PLAN_ID" --priority p1 --json
+   ok task add "research/spec" --plan "$PLAN_ID" --priority normal --json
    ```
 
    Examples: `/autopilot implement the task` selects `default`; `/autopilot --workflow plan-build-qa implement the task` selects the plan-led profile. Reject unknown workflow names instead of silently substituting another profile.
@@ -52,7 +52,7 @@ For every transition, re-read task/plan state and use the current values. Record
 ```sh
 ok task update "$TASK_ID" --status in_progress --json
 ok task complete "$TASK_ID" --evidence "$BOUNDED_EVIDENCE" --json
-ok task add "<next-stage>" --plan "$PLAN_ID" --priority p1 --json
+ok task add "<next-stage>" --plan "$PLAN_ID" --priority normal --json
 ```
 
 Run the stages in order. Each stage is a task under the plan; advancing the run means completing the current task with evidence and creating the next.

@@ -82,7 +82,7 @@ ok plan list --json
 ok prd list --json
 # When no plan exists:
 ok plan add "$ARGUMENTS" --summary "bizplan plan-build" --json
-ok task add "research/spec" --plan "$PLAN_ID" --priority p1 --json
+ok task add "research/spec" --plan "$PLAN_ID" --priority normal --json
 ```
 
 Ground the specification in repository evidence. For external APIs, frameworks,

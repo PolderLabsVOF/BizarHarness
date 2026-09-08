@@ -1,5 +1,9 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { ensureOpenKanProject, installOpenKanPromise, OpenKanError, resolveOpenKanDashboard, runOpenKanOk } from '../openkan.mjs';
+import { cmdMigrateTasksToV2 } from '../../scripts/openkan/migrate-tasks-to-v2.mts';
+import { cmdMigrateBoardToV2 } from '../../scripts/openkan/migrate-board-to-v2.mts';
 
 function print(result) {
   if (result.stdout) process.stdout.write(result.stdout);
@@ -22,6 +26,10 @@ Usage:
                                         (legacy openkan.mjs on pre-v0.5.0
                                          releases; ok serve on v0.5.0+ where
                                          the legacy binary is retired)
+  bizar openkan project clean           Clean orphaned files from .ok/
+  bizar openkan board delete           Delete the board.json file
+  bizar openkan migrate [--apply]       Migrate v1 tasks to v2 layout
+                                        (default: dry-run; --apply to apply)
 
 Canonical commands are \`ok task\`, \`ok plan\`, and \`ok prd\`; they use this
 same OpenKan workspace. The Bizar planning aliases remain compatibility-only.
@@ -72,6 +80,67 @@ export async function run(name, args, isHelpRequest) {
     }
     if (subcommand === 'doctor' || subcommand === 'index') {
       print(runOpenKanOk([subcommand, ...rest]));
+      return true;
+    }
+    if (subcommand === 'migrate') {
+      const cwd = process.cwd();
+      const apply = rest.includes('--apply');
+      const tasksOnly = rest.includes('--tasks');
+      const boardOnly = rest.includes('--board');
+
+      if (!apply) {
+        process.stdout.write('Running in dry-run mode. Use --apply to actually migrate.\n\n');
+      }
+
+      let exitCode = 0;
+
+      if (!boardOnly) {
+        process.stdout.write('=== Migrating tasks (flat .json → directory layout) ===\n');
+        const tasksCode = await cmdMigrateTasksToV2([cwd]);
+        if (tasksCode !== 0) exitCode = tasksCode;
+      }
+
+      if (!tasksOnly) {
+        process.stdout.write('\n=== Migrating board.json ===\n');
+        const boardCode = await cmdMigrateBoardToV2([cwd]);
+        if (boardCode !== 0) exitCode = boardCode;
+      }
+
+      if (exitCode === 0 && apply) {
+        process.stdout.write('\n✓ Migration completed successfully.\n');
+      } else if (exitCode === 0) {
+        process.stdout.write('\n✓ Dry-run completed. Run with --apply to execute migrations.\n');
+      }
+
+      process.exitCode = exitCode;
+      return true;
+    }
+    if (subcommand === 'project' && rest[0] === 'clean') {
+      // Clean orphaned files from .ok/
+      const okDir = join(process.cwd(), '.ok');
+      if (!existsSync(okDir)) {
+        process.stdout.write('.ok/ does not exist. Nothing to clean.\n');
+        return true;
+      }
+      // Placeholder: OpenKan doesn't ship a project clean command yet
+      process.stdout.write('Project clean not yet implemented. Manual cleanup: remove orphan .json files in .ok/tasks/ that are not in subdirectories.\n');
+      return true;
+    }
+    if (subcommand === 'board' && rest[0] === 'delete') {
+      // Delete board.json
+      const boardPath = join(process.cwd(), '.ok', 'board.json');
+      if (!existsSync(boardPath)) {
+        process.stdout.write('.ok/board.json does not exist. Nothing to delete.\n');
+        return true;
+      }
+      if (!rest.includes('--force')) {
+        process.stdout.write('This will delete .ok/board.json. Use --force to confirm.\n');
+        process.exitCode = 1;
+        return true;
+      }
+      const { unlinkSync } = await import('node:fs');
+      unlinkSync(boardPath);
+      process.stdout.write('Deleted .ok/board.json\n');
       return true;
     }
     if (subcommand === 'dashboard') { runDashboard(rest); return true; }

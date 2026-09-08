@@ -248,7 +248,7 @@ export function validateBizplanHandoff(
 // ── Persistence (bizplan → .ok/plans/ + .ok/tasks/) ────────────────────────────
 
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 export interface PersistedPlan extends BizplanPlan {
@@ -364,6 +364,35 @@ export function persistBizplanPlan(plan: BizplanPlan, opts: PersistOptions = {})
   return persisted;
 }
 
+// Track whether we've warned about v1 tasks to avoid spamming
+let warnedAboutV1Tasks = false;
+
+/**
+ * Check for legacy v1 task files and warn the user.
+ * Called once per process to alert operators on v1 workspaces.
+ */
+function warnAboutV1Tasks(okDir: string): void {
+  if (warnedAboutV1Tasks) return;
+  try {
+    const tasksDir = join(okDir, "tasks");
+    if (!existsSync(tasksDir)) return;
+    const entries = readdirSync(tasksDir, { withFileTypes: true });
+    const v1Files = entries.filter(
+      (e) => e.isFile() && e.name.match(/^tsk-[A-Za-z0-9_-]+\.json$/)
+    );
+    if (v1Files.length > 0) {
+      warnedAboutV1Tasks = true;
+      console.warn(
+        `\n⚠️  Found ${v1Files.length} legacy v1 task file(s) in .ok/tasks/\n` +
+        `    OpenKan 0.7.0 uses v2 layout (.ok/tasks/<id>/task.json).\n` +
+        `    Run 'bizar openkan migrate --apply' to upgrade.\n`
+      );
+    }
+  } catch {
+    // Ignore errors - don't spam on startup
+  }
+}
+
 /**
  * Spawn an executor task under `.ok/tasks/` linked to the given plan.
  * The task is written with `status: "claimed"` so downstream autopilot
@@ -375,6 +404,10 @@ export function spawnExecutorTask(plan: BizplanPlan, opts: SpawnOptions = {}): S
     throw new Error("spawnExecutorTask: plan.id is required (call persistBizplanPlan first)");
   }
   const okDir = opts.okDir ?? resolveDefaultOkDir();
+
+  // Check for v1 files and warn once
+  warnAboutV1Tasks(okDir);
+
   const id = generateId("tsk");
   const assignedAt = new Date().toISOString();
   const task: SpawnedTask = Object.freeze({
@@ -386,9 +419,20 @@ export function spawnExecutorTask(plan: BizplanPlan, opts: SpawnOptions = {}): S
     links: Object.freeze({ planId: plan.id }),
   });
 
-  const tasksDir = join(okDir, "tasks");
-  mkdirSync(tasksDir, { recursive: true });
-  atomicWrite(join(tasksDir, `${id}.json`), JSON.stringify(task, null, 2) + "\n");
+  // v2 layout: .ok/tasks/<id>/task.json
+  const taskDir = join(okDir, "tasks", id);
+  mkdirSync(taskDir, { recursive: true });
+  const v2Task = {
+    schema: "ok.task.v2",
+    id: task.id,
+    title: `Task for plan ${plan.id}`,
+    status: "claimed",
+    planId: plan.id,
+    assignedAt,
+    ...(opts.assignee ? { assignee: opts.assignee } : {}),
+    links: { planId: plan.id },
+  };
+  atomicWrite(join(taskDir, "task.json"), JSON.stringify(v2Task, null, 2) + "\n");
 
   return task;
 }

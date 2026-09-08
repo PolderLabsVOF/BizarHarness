@@ -3,6 +3,23 @@
 ## [Unreleased]
 
 
+## [10.29.1] - 2026-09-08
+
+### Added
+- **`bizar openkan project clean`** — new subcommand to clean orphaned files from `.ok/`
+- **`bizar openkan board delete`** — new subcommand to delete the legacy board.json file
+- **`bizar openkan migrate`** — new subcommand to migrate v1 tasks to v2 layout. Default: dry-run. Use `--apply` to execute.
+- Vendored OpenKan's migration scripts at `scripts/openkan/` for offline use
+
+### Changed
+- Read adapter migrated to v2 task layout (`.ok/tasks/<id>/task.json`)
+- Priority enum aligned to `low|normal|high|urgent` in CLI help and skill docs (was `p1`)
+- SDK's `spawnExecutorTask` now writes v2 task format
+
+### Fixed
+- Operators on v1 layout will see a one-time warning log; run `bizar openkan migrate --apply` to upgrade
+
+
 ## [10.29.0] - 2026-09-08
 
 ### Added

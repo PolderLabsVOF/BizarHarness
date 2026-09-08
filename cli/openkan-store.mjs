@@ -1,6 +1,9 @@
 /** Read-only `.ok/` adapter used by Bizar hooks and control snapshots. */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+
+// Track whether we've warned about v1 tasks to avoid spamming
+let warnedAboutV1 = false;
 
 function readJson(path, fallback = null) {
   try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return fallback; }
@@ -11,8 +14,42 @@ export function openKanDir(root = process.cwd()) { return join(resolve(root), '.
 export function listOpenKanTasks(root = process.cwd()) {
   const dir = join(openKanDir(root), 'tasks');
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter((name) => name.endsWith('.json')).sort()
-    .map((name) => readJson(join(dir, name))).filter((task) => task?.schema === 'ok.task.v1');
+
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const tasks = [];
+
+  // Check for v1 flat files and warn once
+  const v1Files = entries.filter((e) => e.isFile() && e.name.match(/^tsk-[A-Za-z0-9_-]+\.json$/));
+  if (v1Files.length > 0 && !warnedAboutV1) {
+    warnedAboutV1 = true;
+    console.warn(
+      `\n⚠️  Found ${v1Files.length} legacy v1 task file(s) in .ok/tasks/\n` +
+      `    OpenKan 0.7.0 uses v2 layout (.ok/tasks/<id>/task.json).\n` +
+      `    Run 'bizar openkan migrate --apply' to upgrade.\n`
+    );
+  }
+
+  // Read v1 format (legacy): .ok/tasks/tsk-<id>.json
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.match(/^tsk-[A-Za-z0-9_-]+\.json$/)) continue;
+    const task = readJson(join(dir, entry.name));
+    if (task?.schema === 'ok.task.v1') {
+      tasks.push(task);
+    }
+  }
+
+  // Read v2 format: .ok/tasks/<id>/task.json
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const taskPath = join(dir, entry.name, 'task.json');
+    const task = readJson(taskPath);
+    if (task?.schema === 'ok.task.v2') {
+      tasks.push(task);
+    }
+  }
+
+  return tasks.sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export function listOpenKanPlans(root = process.cwd()) {

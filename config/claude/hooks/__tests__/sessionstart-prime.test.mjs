@@ -9,16 +9,23 @@ import { fileURLToPath } from 'node:url';
 const hook = join(dirname(fileURLToPath(import.meta.url)), '..', 'sessionstart-prime.mjs');
 
 function writeOk(dir, kind, value) {
-  const folder = kind === 'task' ? 'tasks' : kind === 'plan' ? 'plans' : 'prds';
-  mkdirSync(join(dir, '.ok', folder), { recursive: true });
-  writeFileSync(join(dir, '.ok', folder, `${value.id}.json`), JSON.stringify(value));
+  if (kind === 'task') {
+    // v2 layout: .ok/tasks/<id>/task.json
+    const taskDir = join(dir, '.ok', 'tasks', value.id);
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(join(taskDir, 'task.json'), JSON.stringify(value));
+  } else {
+    const folder = kind === 'plan' ? 'plans' : 'prds';
+    mkdirSync(join(dir, '.ok', folder), { recursive: true });
+    writeFileSync(join(dir, '.ok', folder, `${value.id}.json`), JSON.stringify(value));
+  }
 }
 
 function project({ active = true } = {}) {
   const dir = join(tmpdir(), `bizar-openkan-prime-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   mkdirSync(join(dir, '.bizar'), { recursive: true });
   writeFileSync(join(dir, '.bizar', 'PROJECT.md'), '# TestProject\nA test fixture for the OpenKan SessionStart hook.\n');
-  writeOk(dir, 'task', { schema: 'ok.task.v1', id: 'tsk-101', title: 'Wire OpenKan briefing', status: active ? 'in_progress' : 'pending' });
+  writeOk(dir, 'task', { schema: 'ok.task.v2', id: 'tsk-101', title: 'Wire OpenKan briefing', status: active ? 'in_progress' : 'pending' });
   writeOk(dir, 'plan', { schema: 'ok.plan.v1', id: 'plan-1', title: 'Migration', status: 'active' });
   writeOk(dir, 'prd', { schema: 'ok.prd.v1', id: 'prd-1', title: 'OpenKan-first Bizar', status: 'active' });
   spawnSync('git', ['init', '-q'], { cwd: dir });
@@ -83,7 +90,7 @@ test('missing .ok remains a helpful, non-blocking briefing', () => {
 test('briefing is bounded', () => {
   const dir = project();
   try {
-    for (let i = 0; i < 40; i++) writeOk(dir, 'task', { schema: 'ok.task.v1', id: `tsk-${i}`, title: 'x'.repeat(100), status: 'in_progress' });
+    for (let i = 0; i < 40; i++) writeOk(dir, 'task', { schema: 'ok.task.v2', id: `tsk-${i}`, title: 'x'.repeat(100), status: 'in_progress' });
     assert.ok(context(dir).length <= 1200);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
