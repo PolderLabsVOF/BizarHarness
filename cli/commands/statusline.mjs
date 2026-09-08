@@ -172,11 +172,9 @@ async function getGitDirty(cwd, timeout = 2000) {
     let modified = 0;
     let staged = 0;
     for (const line of output.split('\n')) {
-      if (!line) continue;
-      if (line[0] === ' ' && (line[1] === 'M' || line[1] === 'm')) modified++;
-      else if (line[0] === 'M') staged++;
-      else if (line[0] === '?') {} // untracked, ignore
-      else if (line[1] === 'M') modified++; // staged but also modified
+      if (!line || line.startsWith('??')) continue;
+      if (line[0] !== ' ' && line[0] !== '?') staged++;
+      if (line[1] !== ' ' && line[1] !== '?') modified++;
     }
     const result = { modified, staged };
     gitCache.set(cacheKey, { value: result, timestamp: Date.now() });
