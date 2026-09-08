@@ -3,6 +3,61 @@
 ## [Unreleased]
 
 
+## [10.29.0] - 2026-09-08
+
+### Added
+- **`bizar orchestrator`** — interactive multi-select model picker for
+  Claude Code's `modelPicker` setting. Users run it directly (not from
+  agents) to select multiple models from a single scrolling, searchable
+  list. Selected models are appended to `settings.json.modelPicker`
+  preserving existing entries. Metadata (name, description, supported
+  capabilities, context/output limits, modality, cost) is fetched from
+  [`models.dev`](https://models.dev) with a five-minute disk cache at
+  `~/.cache/bizar/models-dev-cache.json`. Also accepts the local Claude
+  gateway `/v1/models?limit=1000` response. Use `--endpoint <id>` to
+  point at a non-default Anthropic base URL, and `--provider` to scope
+  the picker to a single provider. Supports `pick|show|clear|validate`
+  subcommands and `--json` for machine output. See
+  `docs/orchestrator-picker.md` and the [Claude Code settings
+  reference](https://code.claude.com/docs/en/settings-reference#modelpicker).
+
+- **`bizar advisor`** — Claude Code's
+  [advisor tool](https://code.claude.com/docs/en/advisor) config. Picks
+  a stronger advisor model (`fable`, `opus-4-5`, `sonnet-4-5`,
+  `sonnet-5`, etc.) based on the active main model in a pairing table
+  (`haiku-4-5` → `{fable, opus-4-5, sonnet-4-5}`,
+  `sonnet-4-6/5` → `{fable, opus-4-5, sonnet-4-5}`,
+  `opus-4-6` → `{fable, opus-4-5, sonnet-5}`, etc.). Restricted to the
+  Anthropic API (Bedrock / Vertex / Foundry require explicit env-var
+  configuration); Fable pairing triggers a one-time consent warning
+  (`bizar advisor --accept-fable` to silence). Supports `pick|show|disable|clear|validate`
+  and detects an existing `CLAUDE_CODE_DISABLE_ADVISOR_TOOL=1` value
+  before exporting. The companion `/advisor` slash command mirrors
+  Claude Code's built-in command. See `docs/advisor.md`.
+
+- **`bizar statusline`** — customized Claude Code
+  [status bar](https://code.claude.com/docs/en/statusline). Three
+  templates (`default`, `compact`, `git-only`) read session JSON from
+  stdin and use `COLUMNS` / `LINES` env vars (no `tput`). Resolves
+  the current model from `settings.json` (`ANTHROPIC_CUSTOM_MODEL_OPTION`,
+  `modelPicker`, `model`) and the configured advisor model. Supports
+  `render|install|remove|show|preview`. The companion `/statusline`
+  slash command uses `!bizar statusline show` to inline the current
+  bar. See `docs/statusline.md`.
+
+### Fixed
+- **`binar <cmd> --help` regression** — the help dispatcher in
+  `cli/bin.mjs` previously routed direct command modules through
+  `mod.run(name, args, isHelpRequest)` (the legacy 3-arg signature)
+  and crashed with `subargs.find is not a function`. The fallback was
+  removed so direct modules (`bench`, `release-provenance`,
+  `verify-release`, `spec-list`, `ambiguity`, `guard`,
+  `goal-bootstrap`, plus the new `advisor`, `orchestrator`,
+  `statusline`) fall through to the single-arg `run(cmdArgs)` path.
+  `cli/__tests__/bin-help-dispatch.test.mjs` was extended to cover
+  the new commands.
+
+
 ## [10.28.1] - 2026-09-08
 
 ### Fixed
