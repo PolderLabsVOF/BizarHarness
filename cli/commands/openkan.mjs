@@ -18,6 +18,8 @@ Usage:
   ok plan <add|list|show|update>         Manage plans and phases
   ok prd <add|list|show|update>          Manage PRDs, goals, and milestones
   ok doctor                              Validate the .ok/ workspace
+  bizar openkan project clean [--apply|--all|--dry-run]  Clean project workspace
+  bizar openkan board delete <id>        Delete a board
   bizar openkan dashboard [args...]     Forward to the OpenKan dashboard CLI
                                         (legacy openkan.mjs on pre-v0.5.0
                                          releases; ok serve on v0.5.0+ where
@@ -71,6 +73,16 @@ export async function run(name, args, isHelpRequest) {
       return true;
     }
     if (subcommand === 'doctor' || subcommand === 'index') {
+      print(runOpenKanOk([subcommand, ...rest]));
+      return true;
+    }
+    if (subcommand === 'project') {
+      // Forward project subcommands (e.g., project clean)
+      print(runOpenKanOk([subcommand, ...rest]));
+      return true;
+    }
+    if (subcommand === 'board') {
+      // Forward board subcommands (e.g., board delete)
       print(runOpenKanOk([subcommand, ...rest]));
       return true;
     }
