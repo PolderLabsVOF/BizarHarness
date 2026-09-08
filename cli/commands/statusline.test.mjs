@@ -273,9 +273,11 @@ test('assertOperatorContext does NOT refuse render even when BIZAR_AGENT set', (
 });
 
 test('STATUSLINE_TEMPLATES has expected shapes', () => {
-  assert.equal(STATUSLINE_TEMPLATES.default.lines, 3);
-  assert.equal(STATUSLINE_TEMPLATES.compact.lines, 1);
-  assert.equal(STATUSLINE_TEMPLATES['git-only'].lines, 1);
+  assert.deepEqual(STATUSLINE_TEMPLATES, [
+    { name: 'default', lines: 3 },
+    { name: 'compact', lines: 1 },
+    { name: 'git-only', lines: 1 },
+  ]);
 });
 
 test('showStatuslineHelp does not throw', () => {

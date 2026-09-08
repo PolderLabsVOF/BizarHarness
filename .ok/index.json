@@ -2,6 +2,12 @@
   "schema": "ok.index.v1",
   "tasks": [
     {
+      "id": "tsk-qJvzggbu",
+      "status": "pending",
+      "title": "Implement Bizar Claude Code statusline",
+      "updatedAt": "2026-09-08T16:20:04.768Z"
+    },
+    {
       "id": "tsk-sdk-version-sync",
       "status": "done",
       "title": "sdk-version-sync",
@@ -84,5 +90,5 @@
       "updatedAt": "2026-09-07T13:30:00.000Z"
     }
   ],
-  "updatedAt": "2026-09-07T11:21:35.919Z"
+  "updatedAt": "2026-09-08T16:20:04.774Z"
 }

@@ -35,20 +35,13 @@ export function readSettings(path = settingsPath()) {
 
 // ── Template registry ─────────────────────────────────────────────────────────
 
-export const STATUSLINE_TEMPLATES = {
-  default: {
-    name: 'default',
-    lines: 3,
-  },
-  compact: {
-    name: 'compact',
-    lines: 1,
-  },
-  'git-only': {
-    name: 'git-only',
-    lines: 1,
-  },
-};
+export const STATUSLINE_TEMPLATES = [
+  { name: 'default', lines: 3 },
+  { name: 'compact', lines: 1 },
+  { name: 'git-only', lines: 1 },
+];
+
+const TEMPLATE_NAMES = new Set(STATUSLINE_TEMPLATES.map(({ name }) => name));
 
 // ── Argument parsing ─────────────────────────────────────────────────────────
 
@@ -66,7 +59,7 @@ export function parseStatuslineArgs(args = []) {
       subcommand = arg;
     } else if (arg === '--template' && i + 1 < args.length) {
       template = args[++i];
-      if (!STATUSLINE_TEMPLATES[template]) {
+      if (!TEMPLATE_NAMES.has(template)) {
         throw new Error(`Unknown template: ${template}. Valid: default, compact, git-only`);
       }
     } else if (arg === '--padding' && i + 1 < args.length) {
@@ -244,7 +237,7 @@ function formatDuration(seconds) {
 // Uses injected settings for purity - caller passes settings from readSettings()
 
 export function formatStatusline(data, templateName, env, deps = {}) {
-  const template = STATUSLINE_TEMPLATES[templateName] || STATUSLINE_TEMPLATES.default;
+  const template = TEMPLATE_NAMES.has(templateName) ? templateName : 'default';
   const columns = parseInt(env.COLUMNS || '80', 10);
 
   // Extract data with fallbacks
@@ -276,7 +269,7 @@ export function formatStatusline(data, templateName, env, deps = {}) {
   // Build segments
   const lines = [];
 
-  if (templateName === 'default') {
+  if (template === 'default') {
     // Line 1: model + advisor + custom model
     let line1 = `\u{1F916} ${modelDisplay}`;
     if (customModel) {
@@ -291,7 +284,7 @@ export function formatStatusline(data, templateName, env, deps = {}) {
     let line2 = `\u{1F4C1} ${truncatedCwd}`;
     if (branch) {
       let branchInfo = ` ↧ ${branch}`;
-      if (dirty.modified > 0 || dirty.staged > 0) {
+      if (dirty.modified > 0 && dirty.staged > 0) {
         branchInfo += `*${dirty.modified}+${dirty.staged}`;
       }
       line2 += branchInfo;
@@ -307,12 +300,12 @@ export function formatStatusline(data, templateName, env, deps = {}) {
     const line3 = `${progressBar} ${percentage}% (${formatTokens(contextUsed)}/${totalLabel})  \u{1F4B5} $${cost.toFixed(2)}  \u{23F1} ${formatDuration(sessionDuration)}`;
     lines.push(line3);
 
-  } else if (templateName === 'compact') {
+  } else if (template === 'compact') {
     // Single line: model · % ctx · $cost · branch · cwd
     let line = `\u{1F916} ${modelDisplay} · ${percentage}% ctx · $${cost.toFixed(2)}`;
     if (branch) {
       let branchInfo = ` · ↧ ${branch}`;
-      if (dirty.modified > 0 || dirty.staged > 0) {
+      if (dirty.modified > 0 && dirty.staged > 0) {
         branchInfo += `*${dirty.modified}+${dirty.staged}`;
       }
       line += branchInfo;
@@ -325,7 +318,7 @@ export function formatStatusline(data, templateName, env, deps = {}) {
     let line = '';
     if (branch) {
       let branchInfo = `↧ ${branch}`;
-      if (dirty.modified > 0 || dirty.staged > 0) {
+      if (dirty.modified > 0 && dirty.staged > 0) {
         branchInfo += `*${dirty.modified}+${dirty.staged}`;
       }
       line += branchInfo;
