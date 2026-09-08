@@ -68,14 +68,17 @@ function setupFixture({
   const taskDir = join(root, '.ok', 'tasks');
   mkdirSync(taskDir, { recursive: true });
   const tasks = done
-    ? [{ schema: 'ok.task.v1', id: 'tsk-a', title: 'Build the SDK', status: 'done' }]
+    ? [{ schema: 'ok.task.v2', id: 'tsk-a', title: 'Build the SDK', status: 'done' }]
     : driftPlan
-      ? [{ schema: 'ok.task.v1', id: 'tsk-a', title: 'Update OpenKan command bridge', description: 'keep bridge semantics aligned', status: 'in_progress' }]
+      ? [{ schema: 'ok.task.v2', id: 'tsk-a', title: 'Update OpenKan command bridge', description: 'keep bridge semantics aligned', status: 'in_progress' }]
       : [
-          { schema: 'ok.task.v1', id: 'tsk-a', title: 'Build the SDK', status: 'in_progress' },
-          { schema: 'ok.task.v1', id: 'tsk-b', title: 'Wire the CLI', status: 'pending' },
+          { schema: 'ok.task.v2', id: 'tsk-a', title: 'Build the SDK', status: 'in_progress' },
+          { schema: 'ok.task.v2', id: 'tsk-b', title: 'Wire the CLI', status: 'pending' },
         ];
-  for (const task of tasks) writeFileSync(join(taskDir, `${task.id}.json`), JSON.stringify(task));
+  for (const task of tasks) {
+    mkdirSync(join(taskDir, task.id), { recursive: true });
+    writeFileSync(join(taskDir, task.id, 'task.json'), JSON.stringify(task));
+  }
 
   // For "stuck" tests: stamp the .ok/ workspace older than last check,
   // and make sure there are no commits in this tmp (no .git).
