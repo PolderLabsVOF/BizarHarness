@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+
+
+## [10.28.0] - 2026-09-08
+
 ### Added
 - **Three-tier release branches + automatic CI/CD with OIDC trusted
   publishing** — `master` (stable `@latest`), `beta` (`@beta`),
@@ -36,26 +40,100 @@
   `docs/branches.md`, `docs/versioning.md`, `docs/development.md`,
   `docs/trusted-publishing.md` (the last is the operator-side setup
   guide for npmjs.com Trusted Publishers).
+- **`bizar-mcp` bin entry on `@polderlabs/bizar-sdk`** — exposes the
+  SDK's MCP server entrypoint (`packages/sdk/dist/mcp/bin.js`) so the
+  published package is usable as a standalone MCP server, not just as
+  a library.
 
 ### Changed
 - **Fixed wrong `repository.url`** in `package.json` (was pointing at
   the `DrB0rk` fork) and added `repository` to
   `packages/sdk/package.json` so the npm package page links back to
   the canonical `PolderLabsVOF/BizarHarness` repo.
-- **Static four-alias dispatch (cutover from model-router/picker)**
-  — Bizar dispatches through four native Claude Code aliases
-  (`haiku`/`sonnet`/`opus`/`fable`); OmniRoute handles ordered
-  failover between configured full IDs for the chosen alias. The
-  `model-router.json`, `BIZAR_MODEL_ROUTER_URL`, picker-style
-  gateway IDs, and `args.routing` plumbing are gone. Workflow scripts
-  inline their own dispatch wrapper and select the alias via
-  `pickAlias(risk)`; agent definitions stay model-agnostic. Removed
-  `agent-model-guard.mjs`, `sessionstart-model-sync.mjs`,
-  `thinking-route.mjs`, the `bizar models` picker, and their
-  companion tests. New contract tests fence the static-alias surface:
-  `config/claude/hooks/__tests__/alias-routing.test.mjs`,
-  `config/claude/hooks/__tests__/alias-hooks.test.mjs`,
-  `config/workflows/__tests__/alias-dispatch.test.mjs`.
+
+### Fixed
+- **OIDC trusted publishing fully operational** — three compounding
+  bugs were silently blocking every release since the OIDC cutover;
+  all fixed in this release:
+  1. The publish steps were setting
+     `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` — but
+     `secrets.NPM_TOKEN` is not configured (the design relies entirely
+     on OIDC). The empty-string override replaced setup-node's
+     OIDC-derived token, breaking auth. Removed from all four
+     publish steps; setup-node + `registry-url` now injects the
+     OIDC token end-to-end.
+  2. Node 22 LTS ships npm 10.9.8; npm 10 cannot validate OIDC
+     trust claims and surfaces the failure as a misleading `E404
+     "is not in this registry"` mid-publish — even when the trust
+     claim, workflow filename, package owner, and environment all
+     match. Bumped the publish job to Node 24 (npm 11.x) and added
+     a hard guard step that fails the job with a clear error if
+     npm is older than `11.5.1` so any future regression surfaces
+     readably instead of as a cryptic 404.
+  3. The source repository is private, and npmjs.com's sigstore
+     provenance verifier refuses `--provenance` for private repos
+     with `E422 - Error verifying sigstore provenance bundle:
+     Unsupported GitHub Actions source repository visibility:
+     "private"`. The OIDC trust chain does not require
+     `--provenance` (it's an independent attestation path), so
+     dropping the flag from both `release-stable.yml` and
+     `release-beta.yml` unblocks publishing. Re-introduce
+     `--provenance` is a one-line revert if/when the repo is made
+     public. (Diagnostic source: kzahel/yepanywhere
+     `docs/tactical/007-npm-trusted-publishing-release.md`.)
+- **clean-check: surface every TAP failure line, not the truncated
+  tail** (`4abf0ee1`) — the previous behaviour dropped the
+  first lines of long failure output and only showed the last
+  20 lines, hiding the actual failure root cause for tests with
+  verbose scaffolding.
+- **clean-check: show TAP failure lines on failed test step**
+  (`65b572fa`) — sibling fix; explicitly enumerates each failing
+  TAP line on the failed-test step rather than summarising.
+- **ci: use `npm install`** (`9ab93524`) — repo uses `bun.lock`
+  but the workflow was running `bun install` then `npm install`,
+  which left the two lockfiles out of sync. Switched dependency
+  install in release workflows to `bun install --no-save`.
+- **ci: use `bun install --frozen-lockfile`** (`005a952c`,
+  `76ca7114`) — lockfile producer/consumer drift between
+  operator runs and runner caused non-reproducible installs;
+  dropped `--frozen-lockfile` once the underlying `bun.lock`
+  source was verified.
+- **ci: build SDK before verify-repo-structure** (`69da32d7`) —
+  `verify-repo-structure` checks for `packages/sdk/dist/index.js`
+  to exist; build now runs first.
+- **ci: skip release-stable on non-release commits to master**
+  (`164422ee`) — the workflow was triggering on every push to
+  master; gated on `startsWith(head_commit.message,
+  'chore(release):')` so docs/fix pushes don't fire a release.
+- **ci: resolve 3 pre-existing check-arch failures**
+  (`19d93c17`) — `agent-grounding`, `workflow-bloat-pin`, and
+  `omx-canonical-location` checks were failing on every push;
+  the underlying rules are now satisfiable.
+- **arch: also prune `./.worktrees` from omx-canonical-location
+  check** (`6c230029`) — the check now excludes `.worktrees/`
+  in addition to `.git/` and `node_modules/`; clean-check
+  surfaces 40 lines on failure (up from a much shorter tail)
+  to match the new sibling behaviour.
+- **test: isolate XDG_CONFIG_HOME in evidence-bundles tests**
+  (`b176e994`) — tests were reading/writing the user's real
+  `~/.config/bizar`; now scoped to a per-test temp dir so they
+  are hermetic and parallel-safe.
+- **provision: setupMcpServer dryRun no longer requires `claude`
+  CLI** (`b8c4594d`) — `--dry-run` was failing in environments
+  without the `claude` binary on PATH; the dry-run path now
+  short-circuits before the CLI check.
+
+### Docs
+- **PolderLabs sponsorship branding** (`e12401f3`,
+  `cb37194b`) — sponsor banner added to README and moved to the
+  site footer.
+- **Clarify prerequisites and OpenKan integration** (`b0d6e2ce`)
+  — onboarding docs now call out OpenKan install + auth
+  requirements explicitly.
+- **Refresh README presentation and inventory** (`ee13a4e6`)
+  — README's feature inventory and quickstart match the
+  post-cutover surface (no more references to removed
+  CLI/workflow surfaces).
 
 
 ## [10.27.1] - 2026-09-07
@@ -116,6 +194,29 @@
   `in_progress → execute`, `review → qa`, `done → validate`; weighted
   subtasks map to `ok task ... --acceptance "weight=<N>"` and per-story
   mode to `"story=true,story-id=<sid>"`.
+
+## [10.26.0] - 2026-09-06
+
+> Back-filled entry — this section was not added at release time; the
+> changes below shipped in `v10.26.0` (commit `chore(release): 10.26.0`)
+> but were rolled together with 10.27.0 entries above. Recording them
+> here for the historical record.
+
+### Changed
+- **Static four-alias dispatch (cutover from model-router/picker)** —
+  Bizar dispatches through four native Claude Code aliases
+  (`haiku`/`sonnet`/`opus`/`fable`); OmniRoute handles ordered failover
+  between configured full IDs for the chosen alias. The
+  `model-router.json`, `BIZAR_MODEL_ROUTER_URL`, picker-style gateway
+  IDs, and `args.routing` plumbing are gone. Workflow scripts inline
+  their own dispatch wrapper and select the alias via `pickAlias(risk)`;
+  agent definitions stay model-agnostic. Removed `agent-model-guard.mjs`,
+  `sessionstart-model-sync.mjs`, `thinking-route.mjs`, the `bizar models`
+  picker, and their companion tests. New contract tests fence the
+  static-alias surface: `config/claude/hooks/__tests__/alias-routing.test.mjs`,
+  `config/claude/hooks/__tests__/alias-hooks.test.mjs`,
+  `config/workflows/__tests__/alias-dispatch.test.mjs`.
+
 
 ## [10.24.0] - 2026-09-03
 
