@@ -103,10 +103,15 @@ if [[ -d .ok/tasks ]]; then
     const fs = require("fs"), path = require("path");
     try {
       const dir = path.join(process.cwd(), ".ok", "tasks");
-      const tasks = fs.readdirSync(dir)
-        .filter((name) => name.endsWith(".json"))
-        .map((name) => JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")))
-        .filter((t) => t && t.schema === "ok.task.v1");
+      // v2 layout: directories containing task.json with schema ok.task.v2
+      const tasks = fs.readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => {
+          try {
+            return JSON.parse(fs.readFileSync(path.join(dir, entry.name, "task.json"), "utf8"));
+          } catch (_) { return null; }
+        })
+        .filter((t) => t && t.schema === "ok.task.v2");
       console.log(tasks.filter((t) => t.status === "in_progress").length);
     } catch (e) { console.log(-1); }
   ')

@@ -393,9 +393,11 @@ describe("spawnExecutorTask", () => {
     assert.equal(task.planId, "pln-test01");
     assert.equal(task.status, "claimed");
     assert.equal(task.links.planId, "pln-test01");
-    const taskFile = join(okDir, "tasks", `${task.id}.json`);
+    // OpenKan 0.7.0 stores tasks under .ok/tasks/<id>/task.json (v2 layout)
+    const taskFile = join(okDir, "tasks", task.id, "task.json");
     assert.ok(existsSync(taskFile));
     const parsed = JSON.parse(readFileSync(taskFile, "utf8")) as Record<string, unknown>;
+    assert.equal(parsed.schema, "ok.task.v2");
     assert.equal(parsed.status, "claimed");
     const links = parsed.links as { planId: string };
     assert.equal(links.planId, "pln-test01");
@@ -414,8 +416,9 @@ describe("spawnExecutorTask", () => {
     const plan = samplePlan({ id: "pln-with-assignee", title: "with assignee" });
     const task = spawnExecutorTask(plan, { okDir, assignee: "todd" });
     assert.equal(task.assignee, "todd");
-    const taskFile = join(okDir, "tasks", `${task.id}.json`);
-    const parsed = JSON.parse(readFileSync(taskFile, "utf8")) as { assignee?: string };
+    const taskFile = join(okDir, "tasks", task.id, "task.json");
+    const parsed = JSON.parse(readFileSync(taskFile, "utf8")) as { assignee?: string; schema?: string };
+    assert.equal(parsed.schema, "ok.task.v2");
     assert.equal(parsed.assignee, "todd");
   });
 

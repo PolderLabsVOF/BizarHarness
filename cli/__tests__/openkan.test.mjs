@@ -57,10 +57,10 @@ test('OpenKan command bridge gives an actionable error when absent', () => {
 test('OpenKan store reads tasks, plans, goals and sibling scopes from .ok', () => {
   const { root } = fixture();
   const dir = join(root, '.ok');
-  mkdirSync(join(dir, 'tasks'), { recursive: true });
+  mkdirSync(join(dir, 'tasks', 'tsk-a'), { recursive: true });
   mkdirSync(join(dir, 'plans'), { recursive: true });
   mkdirSync(join(dir, 'prds'), { recursive: true });
-  writeFileSync(join(dir, 'tasks', 'tsk-a.json'), JSON.stringify({ schema: 'ok.task.v1', id: 'tsk-a', status: 'in_progress', owner: 'alice', scopes: ['cli/**'] }));
+  writeFileSync(join(dir, 'tasks', 'tsk-a', 'task.json'), JSON.stringify({ schema: 'ok.task.v2', id: 'tsk-a', status: 'in_progress', owner: 'alice', scopes: ['cli/**'] }));
   writeFileSync(join(dir, 'plans', 'pln-a.json'), JSON.stringify({ schema: 'ok.plan.v1', id: 'pln-a' }));
   writeFileSync(join(dir, 'prds', 'prd-a.json'), JSON.stringify({ schema: 'ok.prd.v1', id: 'prd-a', goals: [] }));
   assert.equal(listOpenKanTasks(root).length, 1);

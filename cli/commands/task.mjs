@@ -6,7 +6,7 @@ function help() {
   ok task — OpenKan-backed task lifecycle
 
   Usage:
-    ok task add <title> [--owner agent] [--priority p0|p1|p2|p3]
+    ok task add <title> [--owner agent] [--priority low|normal|high|urgent]
     ok task list [--status pending|in_progress|review|done|cancelled] [--json]
     ok task show <id> [--json]
     ok task claim <id> --owner <agent> [--lease-ms <ms>]
