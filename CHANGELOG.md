@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### OpenKan 0.7.0 alignment
+- **Storage layout updated to v2** — tasks are now read from
+  `.ok/tasks/<id>/task.json` (directory per task) instead of flat
+  `.ok/tasks/<id>.json` files. A warning is emitted when legacy v1
+  task files are detected.
+- **Priority enum updated** — the priority flag now accepts
+  `low|normal|high|urgent` instead of `p0|p1|p2|p3`. The `p1` value
+  maps to `normal`.
+- **New subcommands** — `bizar openkan project clean [--apply|--all|--dry-run]`
+  and `bizar openkan board delete <id>` are now available, forwarding to
+  the equivalent `ok` CLI commands.
+
 
 ## [10.29.0] - 2026-09-08
 
