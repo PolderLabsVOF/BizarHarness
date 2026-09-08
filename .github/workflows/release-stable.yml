@@ -22,8 +22,11 @@
 # What it does:
 #   1. Reads the version from packages/sdk/src/version.ts (the single source).
 #   2. Builds the SDK (npm run build:sdk).
-#   3. Publishes @polderlabs/bizar-sdk → @latest (provenance ON).
-#   4. Publishes @polderlabs/bizar     → @latest (provenance ON, deps include SDK dist).
+#   3. Publishes @polderlabs/bizar-sdk → @latest (OIDC trusted publishing).
+#   4. Publishes @polderlabs/bizar     → @latest (OIDC trusted publishing, deps include SDK dist).
+#      Note: --provenance is intentionally omitted because the source
+#      repository is private; npmjs refuses provenance for private repos
+#      with E422. OIDC trust still works without provenance.
 #   5. Creates a git tag v<version> on the merged commit (idempotent).
 #   6. Creates a GitHub Release with a generated changelog.
 name: Release — stable (@latest)
@@ -147,19 +150,22 @@ jobs:
         run: |
           make verify-removed-surfaces verify-repo-structure check-arch clean-check check test
 
-      - name: Publish @polderlabs/bizar-sdk @ @latest (OIDC, provenance ON)
+      - name: Publish @polderlabs/bizar-sdk @ @latest (OIDC)
         if: ${{ inputs.dry_run != 'true' }}
         working-directory: packages/sdk
         # OIDC trusted publishing: setup-node + registry-url injects the
         # job-level NODE_AUTH_TOKEN from the OIDC token exchange. Do NOT
         # set NODE_AUTH_TOKEN explicitly here — secrets.NPM_TOKEN is not
         # configured, and an explicit empty override breaks the OIDC path.
-        run: npm publish --access public --provenance --tag latest
+        # Note: --provenance is intentionally omitted because the source
+        # repository is private; npmjs refuses provenance for private
+        # repos with E422. OIDC trust still works without it.
+        run: npm publish --access public --tag latest
 
-      - name: Publish @polderlabs/bizar @ @latest (OIDC, provenance ON)
+      - name: Publish @polderlabs/bizar @ @latest (OIDC)
         if: ${{ inputs.dry_run != 'true' }}
         # OIDC trusted publishing: same as SDK step above — no explicit env override.
-        run: npm publish --access public --provenance --tag latest
+        run: npm publish --access public --tag latest
 
       - name: Create git tag v${{ steps.version.outputs.value }}
         if: ${{ inputs.dry_run != 'true' && github.event_name == 'push' }}
