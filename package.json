@@ -1,6 +1,6 @@
 {
   "name": "@polderlabs/bizar",
-  "version": "10.28.0-beta.1",
+  "version": "10.28.0-beta.2",
   "description": "Autonomous, human-in-the-loop multi-agent harness for Claude Code with guarded workflows, typed SDK primitives, and MCP tools.",
   "type": "module",
   "bin": {
