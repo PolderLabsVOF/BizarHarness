@@ -46,6 +46,7 @@ const DIRECT_COMMANDS = [
   { cmd: 'ambiguity', expect: 'bizar ambiguity — score a deep-interview' },
   { cmd: 'guard', expect: 'bizar guard — F-206 progress-guarding loop' },
   { cmd: 'goal-bootstrap', expect: 'OpenKan PRDs are the default goal system' },
+  { cmd: 'advisor', expect: 'bizar advisor' },
 ];
 
 // Util-routed commands: still go through the help dispatcher and
