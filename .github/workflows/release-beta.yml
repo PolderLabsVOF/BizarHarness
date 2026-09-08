@@ -106,15 +106,15 @@ jobs:
       - name: Publish @polderlabs/bizar-sdk @ @beta (OIDC, provenance ON)
         if: ${{ inputs.dry_run != 'true' }}
         working-directory: packages/sdk
+        # OIDC trusted publishing: setup-node + registry-url injects the
+        # job-level NODE_AUTH_TOKEN from the OIDC token exchange. Do NOT
+        # set NODE_AUTH_TOKEN explicitly here — secrets.NPM_TOKEN is not
+        # configured, and an explicit empty override breaks the OIDC path.
         run: npm publish --access public --provenance --tag beta
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @polderlabs/bizar @ @beta (OIDC, provenance ON)
         if: ${{ inputs.dry_run != 'true' }}
         run: npm publish --access public --provenance --tag beta
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create git tag v${{ steps.version.outputs.value }}
         if: ${{ inputs.dry_run != 'true' }}
