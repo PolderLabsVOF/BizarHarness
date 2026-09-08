@@ -3,6 +3,29 @@
 ## [Unreleased]
 
 
+## [10.28.1] - 2026-09-08
+
+### Fixed
+- **CHANGELOG accuracy for v10.28.0** — the v10.28.0 release shipped
+  with `[Unreleased]` still in `CHANGELOG.md`, so the published npm
+  version did not match what the changelog claimed. This docs-only
+  release:
+  - Promotes `[Unreleased]` → `[10.28.0] - 2026-09-08`.
+  - Records the 14 CI fixes and 4 docs updates that actually shipped
+    in v10.28.0 but were missing from the changelog (OIDC trusted
+    publishing fix chain, clean-check TAP output, lockfile alignment,
+    skip-on-non-release gating, check-arch repair, hermetic tests,
+    provision dry-run, sponsor banners, prerequisites, README
+    refresh).
+  - Moves the alias-routing overhaul to a back-filled
+    `[10.26.0] - 2026-09-06` section, where it actually shipped.
+  - Re-records the `bizar-mcp` bin entry that landed on the SDK
+    package in v10.28.0.
+
+No code, no behaviour, no public API change. Install `10.28.1` only if
+you want the corrected changelog metadata.
+
+
 ## [10.28.0] - 2026-09-08
 
 ### Added
