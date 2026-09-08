@@ -71,9 +71,15 @@ jobs:
           fetch-tags: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # npm 11.5.1+ is REQUIRED for OIDC trusted publishing — npm 10 (Node 22's
+      # default) silently produces a misleading "is not in this registry" 404
+      # even when the trust claim, the workflow filename, and the package
+      # owner all line up. Node 24 ships npm 11.x, so use it for the publish
+      # job. See https://github.com/kzahel/yepanywhere/blob/main/docs/tactical/
+      # 007-npm-trusted-publishing-release.md for the post-mortem.
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org/'
 
       - uses: oven-sh/setup-bun@v2
@@ -82,6 +88,25 @@ jobs:
 
       - name: Install dependencies (bun install)
         run: bun install --no-save
+
+      - name: Verify trusted-publishing runtime (npm >= 11.5.1)
+        # Hard gate. If npm is too old, fail with a clear error instead of
+        # the cryptic 404 that npm 10 produces mid-publish.
+        run: |
+          set -euo pipefail
+          echo "node $(node --version)"
+          NPM_VER="$(npm --version)"
+          echo "npm ${NPM_VER}"
+          node - "${NPM_VER}" <<'NODE'
+          const v = process.argv[2].split('.');
+          const major = Number(v[0] ?? 0);
+          const minor = Number(v[1] ?? 0);
+          const patch = Number(v[2] ?? 0);
+          if (major < 11 || (major === 11 && minor < 5) || (major === 11 && minor === 5 && patch < 1)) {
+            console.error(`::error::npm ${process.argv[2]} is too old for OIDC trusted publishing. Need >= 11.5.1.`);
+            process.exit(1);
+          }
+          NODE
 
       - name: Detect version
         id: version
