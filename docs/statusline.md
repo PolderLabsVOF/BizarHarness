@@ -2,14 +2,18 @@
 
 Customized status bar for Claude Code that displays session information in a terminal-friendly format.
 
+> **Note (v10.29.2+):** Bizar auto-installs the statusline during `bizar install`. Use `bizar statusline install` to change the template, padding, refresh interval, or to re-install after a wipe.
+
 ## Overview
 
 The status line runs as a shell script that receives JSON session data from Claude Code and prints formatted text. See [Claude Code Status Line Docs](https://code.claude.com/docs/en/statusline) for the official documentation.
 
 ## Quick Start
 
+The statusline is installed automatically by `bizar install` (v10.29.2+). To re-install it manually or customize its settings, run:
+
 ```bash
-# Install the statusline
+# Install or re-install the statusline, optionally with template/settings flags
 bizar statusline install
 
 # Preview what it looks like
