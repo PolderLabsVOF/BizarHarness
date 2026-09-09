@@ -56,6 +56,37 @@ describe('runInstaller()', () => {
     const result = await runInstaller({ mode: 'update', dryRun: true });
     assert.equal(result.ok, true);
   });
+
+  test('runInstaller({ dryRun: false }) attempts runStatuslineInstall with []', async () => {
+    const { runInstaller } = await import('./index.mjs');
+    let callCount = 0;
+    let callArgs = null;
+    const statuslineInstall = async (args) => {
+      callCount++;
+      callArgs = args;
+      return { ok: true };
+    };
+
+    const provision = async () => ({ ok: true });
+    await runInstaller({ mode: 'update', dryRun: false, statuslineInstall, provision });
+
+    assert.equal(callCount, 1, 'runStatuslineInstall must be called exactly once');
+    assert.deepEqual(callArgs, [], 'runStatuslineInstall must be called with []');
+  });
+
+  test('runInstaller({ dryRun: true }) does NOT call runStatuslineInstall', async () => {
+    const { runInstaller } = await import('./index.mjs');
+    let callCount = 0;
+    const statuslineInstall = async () => {
+      callCount++;
+      return { ok: true };
+    };
+
+    const provision = async () => ({ ok: true });
+    await runInstaller({ dryRun: true, quiet: true, statuslineInstall, provision });
+
+    assert.equal(callCount, 0, 'runStatuslineInstall must NOT be called on dryRun');
+  });
 });
 
 console.log('  index.test.mjs loaded — run with: node --test cli/install/index.test.mjs');

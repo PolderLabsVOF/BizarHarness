@@ -5,8 +5,11 @@
  * that delegates to the provisioner.
  */
 
+import chalk from 'chalk';
+
 import { runProvision, forceCleanInstall, clearSavedEnv } from '../provision.mjs';
 import { runDoctor } from '../doctor.mjs';
+import { runStatuslineInstall } from '../commands/statusline.mjs';
 import { showBanner, sectionHeading } from './banner.mjs';
 import { printInstallLocations } from './paths.mjs';
 import { runInteractiveSetup } from './interactive-setup.mjs';
@@ -32,9 +35,19 @@ import { runInteractiveSetup } from './interactive-setup.mjs';
  * @param {boolean} [opts.quiet]   - Only print the location card
  * @param {string}  [opts.mode]    - 'install' | 'update'
  * @param {boolean} [opts.yes]     - assume yes for any non-destructive prompts
+ * @param {Function} [opts.statuslineInstall] - injectable statusline installer for tests
+ * @param {Function} [opts.provision] - injectable provisioner for tests
  */
 export async function runInstaller(opts = {}) {
-  const { dryRun = false, force = false, quiet = false, mode = 'install', yes = false } = opts;
+  const {
+    dryRun = false,
+    force = false,
+    quiet = false,
+    mode = 'install',
+    yes = false,
+    statuslineInstall = runStatuslineInstall,
+    provision = runProvision,
+  } = opts;
 
   if (quiet) {
     printInstallLocations({ dryRun, force });
@@ -78,7 +91,7 @@ export async function runInstaller(opts = {}) {
   // Always pass `force: true` downstream so `runProvision` re-emits the
   // template-owned keys (permissions.allow wildcards, mcpServers, hooks)
   // into the freshly-empty settings file.
-  const provisionResult = await runProvision({
+  const provisionResult = await provision({
     mode,
     dryRun,
     force: true,
@@ -86,6 +99,22 @@ export async function runInstaller(opts = {}) {
     openkanHome: interactive?.openkanHome,
     initializeOpenKanProject: interactive?.initializeOpenKanProject === true,
   });
+
+  // Auto-install statusline (v10.29.2+). Skipped on dry-run, non-fatal on failure.
+  // Idempotent: re-running is safe — updateStatuslineSettings re-writes the same field.
+  if (!dryRun) {
+    try {
+      const statuslineResult = await statuslineInstall([]);
+      if (statuslineResult?.ok) {
+        provisionResult.statuslineInstalled = true;
+      } else {
+        console.log(chalk.yellow(`  ! statusline auto-install failed: ${statuslineResult?.error || 'unknown'}`));
+      }
+    } catch (err) {
+      // Non-fatal: the user can still run `bizar statusline install` manually.
+      console.log(chalk.yellow(`  ! statusline auto-install skipped: ${err?.message || err}`));
+    }
+  }
 
   // F-183 — post-install health check. Surfaced as a warning rather
   // than a hard failure so a forced install that completes without
