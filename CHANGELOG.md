@@ -3,6 +3,23 @@
 ## [Unreleased]
 
 
+## [10.29.2] - 2026-09-09
+
+### Statusline auto-install
+- **Statusline is now wired into `bizar install`** — the customized
+  bottom bar (`bizar statusline`) is auto-installed on every fresh
+  install and update. Previously shipped in v10.29.0 as opt-in, this
+  resolves the UX regression where freshly installed versions showed
+  no bottom bar until the operator ran `bizar statusline install`
+  manually. The hook is idempotent, honors `--dry-run`, and is
+  non-fatal on failure (the operator can still re-run
+  `bizar statusline install` to recover).
+- **`runInstaller` gained a `statuslineInstall` DI seam** (and a
+  matching `provision` seam) so installer tests can mock the
+  statusline installer and assert the dry-run / non-dry-run paths
+  without touching the real settings file.
+
+
 ## [10.29.1] - 2026-09-08
 
 ### OpenKan 0.7.0 alignment
