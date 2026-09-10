@@ -58,8 +58,9 @@ const INCIDENT_ID = typeof args === 'string'
       : (args && typeof args.topic === 'string')
         ? args.topic
         : String(args || '')
-const WORKFLOW_ROUTING_ID = (args && typeof args.routingDecisionId === 'string')
-  ? args.routingDecisionId
+const RAW_ARGS = args
+const WORKFLOW_ROUTING_ID = (RAW_ARGS && typeof RAW_ARGS.routingDecisionId === 'string')
+  ? String(RAW_ARGS.routingDecisionId)
   : ''
 
 const RUN_ID = 'bizar-postmortem'

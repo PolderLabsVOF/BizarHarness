@@ -44,7 +44,8 @@ const dispatchAgent = (agentFn, agentName, prompt, opts = {}) => {
   if (opts.schema) agentOptions.schema = opts.schema
   if (opts.isolation) agentOptions.isolation = opts.isolation
   if (opts.disallowedTools) agentOptions.disallowedTools = opts.disallowedTools
-  const routingDecisionId = opts.routingDecisionId || (args && args.routingDecisionId)
+  const RAW_ARGS = args
+  const routingDecisionId = opts.routingDecisionId || (RAW_ARGS && RAW_ARGS.routingDecisionId)
   if (routingDecisionId) agentOptions.routingDecisionId = routingDecisionId
   return agentFn(`${prefix}\n${prompt}`, agentOptions)
 }

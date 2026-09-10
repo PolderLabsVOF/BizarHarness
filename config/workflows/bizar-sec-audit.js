@@ -48,8 +48,9 @@ const barrierRef = ({ phase, label, summary }) => {
 
 const TARGET = typeof args === 'string' ? args : args?.target || 'the current working diff'
 const FIX_MODE = Boolean(args && args.fix)
-const ROUTING_ID = (args && args.routing && typeof args.routing.routingDecisionId === 'string')
-  ? args.routing.routingDecisionId
+const RAW_ARGS = args
+const ROUTING_ID = (RAW_ARGS && RAW_ARGS.routing && typeof RAW_ARGS.routing.routingDecisionId === 'string')
+  ? String(RAW_ARGS.routing.routingDecisionId)
   : 'routing-id-absent'
 
 const RUN_ID = 'bizar-sec-audit'

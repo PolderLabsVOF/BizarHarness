@@ -11,11 +11,15 @@ const workflowsDir = resolve(import.meta.dirname, '..');
 
 test('every shipped workflow satisfies Claude native discovery grammar', () => {
   const result = validateNativeWorkflowDirectory(workflowsDir);
-  assert.equal(result.count, 6);
+  assert.equal(result.count, 10);
   assert.deepEqual(result.names.sort(), [
     'bizar-debug',
     'bizar-implement',
+    'bizar-migrate',
+    'bizar-postmortem',
     'bizar-research',
+    'bizar-sec-audit',
+    'bizar-upgrade',
     'ultracode',
     'ultracode-research',
     'ultracode-review',
