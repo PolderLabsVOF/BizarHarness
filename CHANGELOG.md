@@ -3,6 +3,91 @@
 ## [Unreleased]
 
 
+## [10.30.0] - 2026-09-10
+
+### Installer redesign v2
+- **New layered installer architecture** — `bizar install` is now composed
+  of single-responsibility modules: `detect → provider / desktop-config →
+  merge-settings → wizard → orchestrator → provisioner`. The orchestrator at
+  `cli/install/index.mjs` is the only module that composes the others;
+  `cli/provision.mjs` remains the sole writer to disk.
+- **Clack-based visual wizard** — 9-page state machine (`intro → detection
+  → targetSelect → claudeCodeConfig | desktopConfig → gateway → confirm →
+  execute → outro`) using `@clack/prompts` for `intro(...)`, `spinner(...)`,
+  `multiselect(...)`, `text(...)`, `confirm(...)`, `tasks(...)`, and
+  `outro(...)`. Brand palette is reused from `cli/install/banner.mjs`.
+  `isCancel` exits cleanly with the `cancelled` code; failures exit
+  `failed` with a non-zero code.
+- **Multi-target detection** — `cli/install/detect.mjs` discovers Claude
+  Code CLI, Claude Desktop, and OpenKan on the host. The wizard's
+  `multiselect` lets the operator pick Claude Code, Desktop, or both from
+  the detected set; `--targets=<csv>` overrides for scripted installs.
+- **Gateway preservation in Claude Desktop** —
+  `cli/install/desktop-config.mjs` reads the user's `configLibrary/<id>.json`
+  (resolved via the `_meta.json` pointer — no hardcoded UUIDs, URLs, keys,
+  or model identifiers), writes only the four gateway keys
+  (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `apiKeyHelper`,
+  `customModels`) plus `inferenceProvider`, and preserves every other key
+  (`inferenceModels`, `coworkEgressAllowedHosts`, `toolSearchEnabled`,
+  `telemetry`, custom env vars) verbatim. Never injects `anthropicFamilyTier`
+  on any model (Claude Desktop rejects non-Anthropic models with this).
+- **Managed-source refusal** — writes to Claude Desktop config are blocked
+  when `/etc/claude-desktop/managed-settings.json` (or the platform-managed
+  equivalent) is present, unless `--force-targets=<id>` overrides. Backup
+  files (`.<id>.json.bak.<timestamp>`) are written next to the original
+  before any modification.
+- **`installClaudeCli` opt-in default** — `runProvision({ installClaudeCli })`
+  defaults to `false`. The wizard asks "Install Claude Code CLI?" (default
+  `no`) when Claude Code is detected but the binary is missing; pass
+  `bizar install --install-claude-cli` to opt in non-interactively. This is
+  a breaking change vs. v10.29.x where the installer always installed the
+  CLI when missing.
+- **`bizar update` skips the wizard** — `bizar update` runs in auto-detect
+  mode regardless of TTY; only `bizar install` enters the wizard path.
+- **New runtime dependency** — `@clack/prompts ^1.0` (added in commit 1).
+
+### New modules
+- `cli/install/detect.mjs` — multi-target presence detection with config-paths
+  resolver (Desktop `_meta.json` pointer, no hardcoded identifiers).
+- `cli/install/desktop-config.mjs` — Desktop configLibrary read/merge/backup
+  /roundtrip with managed-source refusal.
+- `cli/install/wizard.mjs` — clack-based 9-page wizard and state machine.
+- `cli/install/merge-settings.mjs` — Claude Code `~/.claude/settings.json`
+  merge, extracted from `cli/provision.mjs`.
+- `cli/install/provider.mjs` — provider URL/key/model prompt surface,
+  extracted from `cli/install/interactive-setup.mjs`.
+
+### New CLI flags
+- `bizar install --targets=<csv>` — override detected targets
+  (`claude-code`, `claude-desktop`, comma-separated). Skips wizard selection.
+- `bizar install --install-claude-cli` — opt into Claude Code CLI install
+  when missing (otherwise required by `install.sh --non-interactive` and
+  `bizar install --yes`).
+- `bizar install --force-targets=<csv>` — override the managed-source
+  refusal for the listed target ids.
+
+### Tests added
+- `cli/install/__tests__/detect.test.mjs` (44 cases)
+- `cli/install/__tests__/desktop-config.test.mjs` (40 cases)
+- `cli/install/__tests__/wizard.test.mjs` (39 cases)
+- `cli/install/__tests__/install-claude-cli-default.test.mjs` (7 cases)
+- `cli/install/__tests__/index.test.mjs` — new orchestrator routing cases (+13)
+- `cli/commands/__tests__/update-help-contract.test.mjs` — extended for new
+  flags
+- `cli/install/__tests__/interactive-setup.test.mjs` — rewritten against the
+  new `cli/install/provider.mjs` shim contract (readline contract replaced
+  by clack streams)
+
+### Hard gates preserved
+- `cli/install/__tests__/merge-settings.test.mjs` passes unchanged (commit 3
+  invariant). The merge behavior ships identically under the new module
+  path.
+- `cli/install.mjs` shim exports the same surface; callers that import the
+  legacy entrypoint continue to work.
+- `install.sh --non-interactive` continues to invoke
+  `cli/provision.mjs --mode=install --yes`.
+
+
 ## [10.29.2] - 2026-09-09
 
 ### Statusline auto-install

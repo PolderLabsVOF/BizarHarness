@@ -114,8 +114,12 @@ main() {
     case "$1" in
       --help|-h) cat <<'EOF'
 install.sh — BizarHarness OS-dependencies installer
-  ./install.sh --non-interactive   CI safe
+  ./install.sh --non-interactive   CI safe (skips wizard; uses auto-detect)
   ./install.sh --dry-run           print actions, no changes
+
+After install.sh completes, run `bizar install` for the visual wizard or
+`bizar install --yes` for non-interactive. Use `bizar install --help` for
+all flags including --targets, --install-claude-cli, --force-targets.
 EOF
         exit 0;;
       --dry-run) export DRY=1;;
