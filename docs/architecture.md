@@ -216,6 +216,86 @@ commit, push, pull-request, release, package-publication, deployment, public
 exposure, or irreversible-destruction path. Those mutations remain protected
 by the human-approval hooks even while autopilot is active.
 
+## Installer architecture (v10.30)
+
+`bizar install` is a layered pipeline. Each layer has a single responsibility
+and a small test surface; the orchestrator at `cli/install/index.mjs` is the
+only module that composes them.
+
+```
+detect  →  provider / desktop-config  →  merge-settings  →  wizard  →  orchestrator  →  provisioner
+```
+
+- **`detect` (`cli/install/detect.mjs`)** — discovers Claude Code CLI,
+  Claude Desktop, and OpenKan on the host. Resolves Desktop's
+  `configLibrary/_meta.json` pointer to the live config id without
+  hardcoding UUIDs, URLs, keys, or model identifiers. Returns a normalized
+  presence record per target plus the existing gateway URL/key when found.
+- **`provider` (`cli/install/provider.mjs`)** — extracted prompt/validation
+  surface for the gateway URL, key, and selected models. Used by the wizard
+  and by `bizar install --yes`.
+- **`desktop-config` (`cli/install/desktop-config.mjs`)** — reads the user's
+  `configLibrary/<id>.json`, performs the four-key gateway merge
+  (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `apiKeyHelper`,
+  `customModels` + `inferenceProvider`), backs the file up next to itself
+  with a `.bak.<timestamp>` suffix before any write, and roundtrips through
+  JSON parse/stringify with key-order preservation. Refuses to write when a
+  managed-source file is detected (`/etc/claude-desktop/managed-settings.json`
+  or platform equivalent) unless `--force-targets` overrides.
+- **`merge-settings` (`cli/install/merge-settings.mjs`)** — Claude Code
+  `~/.claude/settings.json` merge (extracted from `cli/provision.mjs`; the
+  hard gate `cli/install/__tests__/merge-settings.test.mjs` still passes
+  unchanged).
+- **`wizard` (`cli/install/wizard.mjs`)** — `@clack/prompts`-based 9-page
+  state machine: `intro → detection → targetSelect → (claudeCodeConfig |
+  desktopConfig) → gateway → confirm → execute → outro`. Renders
+  `intro(...)`, `spinner(...)`, `multiselect(...)`, `text(...)`,
+  `confirm(...)`, `tasks(...)`, and `outro(...)` with the brand palette from
+  `cli/install/banner.mjs`. Cancelled prompts (`isCancel`) exit `cancelled`;
+  failed execution exits `failed` with a non-zero code.
+- **`orchestrator` (`cli/install/index.mjs`)** — the public entrypoint that
+  wires TTY detection, CLI flags (`--targets=<csv>`, `--install-claude-cli`,
+  `--force-targets=<csv>`, `--yes`, `--dry-run`), and the wizard / non-TTY
+  branches. Calls `runProvision(...)` exactly once with the resolved plan.
+- **`provisioner` (`cli/provision.mjs`)** — the only module that touches
+  disk. Accepts `installClaudeCli: boolean` (default `false`); the wizard
+  must opt the user in via a confirm prompt or `--install-claude-cli`.
+
+### Multi-target detection
+
+Detection is target-agnostic. Each target exposes a `presence` record and an
+optional `gateway` block. The wizard's `multiselect` lets the operator
+choose Claude Code, Desktop, or both from the detected set. `--targets=...`
+overrides the selection (CI / scripted installs).
+
+### Gateway preservation
+
+`mergeGatewayIntoDesktopConfig` writes only the four gateway keys plus
+`inferenceProvider`. Every other field on the user's Desktop config
+(`inferenceModels`, `coworkEgressAllowedHosts`, `toolSearchEnabled`,
+`telemetry`, custom env vars, etc.) is preserved verbatim. The merger never
+injects `anthropicFamilyTier` — Claude Desktop rejects non-Anthropic models
+that carry it.
+
+### `installClaudeCli` opt-in
+
+`runProvision({ installClaudeCli })` defaults to `false`. The wizard asks
+"Install Claude Code CLI?" (default `no`) when Claude Code is detected but
+the binary is missing. `bizar install --yes` and `install.sh --non-interactive`
+propagate `installClaudeCli: false` unless `--install-claude-cli` is passed.
+`bizar update` skips the wizard entirely and runs auto-detect mode
+regardless of TTY.
+
+### Backward compatibility
+
+- `cli/install.mjs` shim is unchanged — callers that import the old
+  re-export still get the same surface.
+- `install.sh --non-interactive` continues to invoke `cli/provision.mjs
+  --mode=install --yes`. New behavior is opt-in.
+- `bizar update` does not enter the wizard path.
+- The hard gate `cli/install/__tests__/merge-settings.test.mjs` passes
+  unchanged (commit 3 invariant).
+
 ## No embedded local web surface
 
 The retained CLI starts no web server. Visual planning uses Claude Code's
