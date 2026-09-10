@@ -62,6 +62,7 @@
     "bun": ">=1.1.0"
   },
   "dependencies": {
+    "@clack/prompts": "^1.0.0",
     "better-sqlite3": "^12.11.1",
     "chalk": "^5.4.0",
     "zod": "4.1.8"
