@@ -1049,6 +1049,19 @@ export async function ensureOpenKanRuntime({
 /**
  * The unified provision flow. `mode` is 'install' or 'update'.
  * Every step is idempotent.
+ *
+ * `installClaudeCli` (F-7, default OFF): gates the native Claude Code
+ * install. The installer MUST NOT auto-install Claude Code by default;
+ * the wizard user must opt in (page 4 confirm) or the operator must
+ * pass `--install-claude-cli`. `install.sh --non-interactive` and
+ * `bizar install --yes` therefore default to OFF. The orchestrator
+ * (`cli/install/index.mjs`) and the CLI parser
+ * (`cli/commands/install.mjs`) thread `installClaudeCli: true` from
+ * the wizard opt-in or from the flag; commit 7 wires that up.
+ *
+ * NOTE: we read `opts.installClaudeCli` directly (rather than
+ * destructuring it) so the option name does NOT shadow the module-
+ * level `installClaudeCli` function referenced on the next line.
  */
 export async function runProvision(opts = {}) {
   const {
@@ -1073,7 +1086,11 @@ export async function runProvision(opts = {}) {
   if (bizarHomeStep.ok) logOk(bizarHomeStep.message); else logErr(bizarHomeStep.message);
 
   checkToolchain();
-  installClaudeCli({ force, dryRun });
+  // F-7 — opt-in gate. Default OFF: `installClaudeCli` is false unless
+  // the caller explicitly passes `true`. The wizard opt-in and the
+  // `--install-claude-cli` CLI flag both flow through `installClaudeCli:
+  // true` from their respective layers (see commit 7).
+  if (opts.installClaudeCli) installClaudeCli({ force, dryRun });
 
   const stepResults = [];
   const runStep = async (label, fn) => {
