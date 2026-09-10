@@ -65,7 +65,7 @@ ok task list --json
 # When no PRD exists:
 ok prd add "$ARGUMENTS" --review-cadence weekly --json
 ok plan add "<objective>" --prd "$PRD_ID" --json
-ok task add "research/spec" --plan "$PLAN_ID" --priority p1 --json
+ok task add "research/spec" --plan "$PLAN_ID" --priority normal --json
 ```
 
 `--mode aggregate|per-story` is a leading selector on the ultragoal CLI
@@ -90,7 +90,7 @@ sum of completed subgoals reaches the configured `completionThreshold`
 (default: `1.0`).
 
 ```sh
-ok task add "<summary>" --plan "$PLAN_ID" --priority p1 \
+ok task add "<summary>" --plan "$PLAN_ID" --priority normal \
   --acceptance "weight=0.25" --description "<summary>" --json
 ```
 
@@ -108,7 +108,7 @@ its own `done` state; partial completion stays at `review` or
 `checkpointing`.
 
 ```sh
-ok task add "<story summary>" --plan "$PLAN_ID" --priority p1 \
+ok task add "<story summary>" --plan "$PLAN_ID" --priority normal \
   --acceptance "story=true,story-id=<sid>" --description "<story summary>" --json
 ```
 

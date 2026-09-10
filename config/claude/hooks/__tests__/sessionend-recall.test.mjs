@@ -38,9 +38,9 @@ function makeProject({ withActiveTask = true } = {}) {
   mkdirSync(dir, { recursive: true });
   mkdirSync(join(dir, '.bizar'), { recursive: true });
   if (withActiveTask) {
-    mkdirSync(join(dir, '.ok', 'tasks'), { recursive: true });
-    writeFileSync(join(dir, '.ok', 'tasks', 'tsk-103.json'), JSON.stringify({
-      schema: 'ok.task.v1', id: 'tsk-103', title: 'rewrite sessionstart-prime', status: 'in_progress',
+    mkdirSync(join(dir, '.ok', 'tasks', 'tsk-103'), { recursive: true });
+    writeFileSync(join(dir, '.ok', 'tasks', 'tsk-103', 'task.json'), JSON.stringify({
+      schema: 'ok.task.v2', id: 'tsk-103', title: 'rewrite sessionstart-prime', status: 'in_progress',
     }));
   }
   return dir;

@@ -28,3 +28,32 @@ export function resolveClaudeConfigDir({ env = process.env, cwd = process.cwd() 
   const home = typeof env.HOME === 'string' && env.HOME.trim() ? env.HOME.trim() : homedir();
   return join(home, '.claude');
 }
+
+/**
+ * Resolve the Claude Desktop configLibrary directory for the current
+ * platform. Pure over `env` and `cwd`; reads `process.platform` for the
+ * OS branch (Linux / macOS / Windows / fallback to Linux XDG).
+ *
+ * - macOS:    `$HOME/Library/Application Support/Claude-3p/configLibrary`
+ * - Windows:  `%LOCALAPPDATA%\Claude-3p\configLibrary` (falls back to
+ *             `$HOME/AppData/Local/Claude-3p/configLibrary` when
+ *             `LOCALAPPDATA` is unset)
+ * - Linux / other: `$XDG_CONFIG_HOME/Claude-3p/configLibrary` (resolved
+ *                   against `cwd` when relative) or
+ *                   `$HOME/.config/Claude-3p/configLibrary`
+ */
+export function resolveDesktopConfigLibrary({ env = process.env, cwd = process.cwd() } = {}) {
+  const platform = process.platform; // 'linux' | 'darwin' | 'win32' | other
+  const home = typeof env.HOME === 'string' && env.HOME.trim() ? env.HOME.trim() : homedir();
+  if (platform === 'darwin') {
+    return join(home, 'Library', 'Application Support', 'Claude-3p', 'configLibrary');
+  }
+  if (platform === 'win32') {
+    const localAppData = (env.LOCALAPPDATA || '').trim() || join(home, 'AppData', 'Local');
+    return join(localAppData, 'Claude-3p', 'configLibrary');
+  }
+  // linux + others
+  const xdg = (env.XDG_CONFIG_HOME || '').trim();
+  const configRoot = xdg ? (isAbsolute(xdg) ? xdg : resolve(cwd, xdg)) : join(home, '.config');
+  return join(configRoot, 'Claude-3p', 'configLibrary');
+}

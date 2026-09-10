@@ -113,6 +113,9 @@ function showHelp() {
     restore                Restore BizarHarness from a backup
     validate               Validate the Bizar install
     setup-provider         Configure the global provider used by Bizar and Claude Code
+    advisor                Configure Claude Code's advisor tool
+    orchestrator           Manage multi-select modelPicker entries for Claude Code
+    statusline             Customized Claude Code status bar (render/install/remove/show/preview)
     release-provenance     Generate SBOM + provenance + minisig for a release (audit #83)
     verify-release         Verify a release artifact set against the pinned allowlist
     spec-list              List SDK schemas, policy docs, and mirror sync status (audit #84)
@@ -288,6 +291,57 @@ async function main() {
         return;
       }
       dbg('loaded command module:', 'setup-provider');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (!found) {
+        console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
+        showHelp();
+        process.exit(EXIT_ERROR);
+      }
+      break;
+    }
+
+    case 'advisor': {
+      const mod = await importCommand('advisor');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load advisor command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'advisor');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (!found) {
+        console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
+        showHelp();
+        process.exit(EXIT_ERROR);
+      }
+      break;
+    }
+
+    case 'orchestrator': {
+      const mod = await importCommand('orchestrator');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load orchestrator command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'orchestrator');
+      const found = await mod.run(cmd, cmdArgs, isHelpRequest);
+      if (!found) {
+        console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));
+        showHelp();
+        process.exit(EXIT_ERROR);
+      }
+      break;
+    }
+
+    case 'statusline': {
+      const mod = await importCommand('statusline');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load statusline command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'statusline');
       const found = await mod.run(cmd, cmdArgs, isHelpRequest);
       if (!found) {
         console.error(chalk.red(`  ✗ Unknown command: ${cmd}`));

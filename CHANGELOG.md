@@ -1,6 +1,221 @@
 # Changelog
 
 ## [Unreleased]
+
+
+## [10.30.0] - 2026-09-10
+
+### Installer redesign v2
+- **New layered installer architecture** — `bizar install` is now composed
+  of single-responsibility modules: `detect → provider / desktop-config →
+  merge-settings → wizard → orchestrator → provisioner`. The orchestrator at
+  `cli/install/index.mjs` is the only module that composes the others;
+  `cli/provision.mjs` remains the sole writer to disk.
+- **Clack-based visual wizard** — 9-page state machine (`intro → detection
+  → targetSelect → claudeCodeConfig | desktopConfig → gateway → confirm →
+  execute → outro`) using `@clack/prompts` for `intro(...)`, `spinner(...)`,
+  `multiselect(...)`, `text(...)`, `confirm(...)`, `tasks(...)`, and
+  `outro(...)`. Brand palette is reused from `cli/install/banner.mjs`.
+  `isCancel` exits cleanly with the `cancelled` code; failures exit
+  `failed` with a non-zero code.
+- **Multi-target detection** — `cli/install/detect.mjs` discovers Claude
+  Code CLI, Claude Desktop, and OpenKan on the host. The wizard's
+  `multiselect` lets the operator pick Claude Code, Desktop, or both from
+  the detected set; `--targets=<csv>` overrides for scripted installs.
+- **Gateway preservation in Claude Desktop** —
+  `cli/install/desktop-config.mjs` reads the user's `configLibrary/<id>.json`
+  (resolved via the `_meta.json` pointer — no hardcoded UUIDs, URLs, keys,
+  or model identifiers), writes only the four gateway keys
+  (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `apiKeyHelper`,
+  `customModels`) plus `inferenceProvider`, and preserves every other key
+  (`inferenceModels`, `coworkEgressAllowedHosts`, `toolSearchEnabled`,
+  `telemetry`, custom env vars) verbatim. Never injects `anthropicFamilyTier`
+  on any model (Claude Desktop rejects non-Anthropic models with this).
+- **Managed-source refusal** — writes to Claude Desktop config are blocked
+  when `/etc/claude-desktop/managed-settings.json` (or the platform-managed
+  equivalent) is present, unless `--force-targets=<id>` overrides. Backup
+  files (`.<id>.json.bak.<timestamp>`) are written next to the original
+  before any modification.
+- **`installClaudeCli` opt-in default** — `runProvision({ installClaudeCli })`
+  defaults to `false`. The wizard asks "Install Claude Code CLI?" (default
+  `no`) when Claude Code is detected but the binary is missing; pass
+  `bizar install --install-claude-cli` to opt in non-interactively. This is
+  a breaking change vs. v10.29.x where the installer always installed the
+  CLI when missing.
+- **`bizar update` skips the wizard** — `bizar update` runs in auto-detect
+  mode regardless of TTY; only `bizar install` enters the wizard path.
+- **New runtime dependency** — `@clack/prompts ^1.0` (added in commit 1).
+
+### New modules
+- `cli/install/detect.mjs` — multi-target presence detection with config-paths
+  resolver (Desktop `_meta.json` pointer, no hardcoded identifiers).
+- `cli/install/desktop-config.mjs` — Desktop configLibrary read/merge/backup
+  /roundtrip with managed-source refusal.
+- `cli/install/wizard.mjs` — clack-based 9-page wizard and state machine.
+- `cli/install/merge-settings.mjs` — Claude Code `~/.claude/settings.json`
+  merge, extracted from `cli/provision.mjs`.
+- `cli/install/provider.mjs` — provider URL/key/model prompt surface,
+  extracted from `cli/install/interactive-setup.mjs`.
+
+### New CLI flags
+- `bizar install --targets=<csv>` — override detected targets
+  (`claude-code`, `claude-desktop`, comma-separated). Skips wizard selection.
+- `bizar install --install-claude-cli` — opt into Claude Code CLI install
+  when missing (otherwise required by `install.sh --non-interactive` and
+  `bizar install --yes`).
+- `bizar install --force-targets=<csv>` — override the managed-source
+  refusal for the listed target ids.
+
+### Tests added
+- `cli/install/__tests__/detect.test.mjs` (44 cases)
+- `cli/install/__tests__/desktop-config.test.mjs` (40 cases)
+- `cli/install/__tests__/wizard.test.mjs` (39 cases)
+- `cli/install/__tests__/install-claude-cli-default.test.mjs` (7 cases)
+- `cli/install/__tests__/index.test.mjs` — new orchestrator routing cases (+13)
+- `cli/commands/__tests__/update-help-contract.test.mjs` — extended for new
+  flags
+- `cli/install/__tests__/interactive-setup.test.mjs` — rewritten against the
+  new `cli/install/provider.mjs` shim contract (readline contract replaced
+  by clack streams)
+
+### Hard gates preserved
+- `cli/install/__tests__/merge-settings.test.mjs` passes unchanged (commit 3
+  invariant). The merge behavior ships identically under the new module
+  path.
+- `cli/install.mjs` shim exports the same surface; callers that import the
+  legacy entrypoint continue to work.
+- `install.sh --non-interactive` continues to invoke
+  `cli/provision.mjs --mode=install --yes`.
+
+
+## [10.29.2] - 2026-09-09
+
+### Statusline auto-install
+- **Statusline is now wired into `bizar install`** — the customized
+  bottom bar (`bizar statusline`) is auto-installed on every fresh
+  install and update. Previously shipped in v10.29.0 as opt-in, this
+  resolves the UX regression where freshly installed versions showed
+  no bottom bar until the operator ran `bizar statusline install`
+  manually. The hook is idempotent, honors `--dry-run`, and is
+  non-fatal on failure (the operator can still re-run
+  `bizar statusline install` to recover).
+- **`runInstaller` gained a `statuslineInstall` DI seam** (and a
+  matching `provision` seam) so installer tests can mock the
+  statusline installer and assert the dry-run / non-dry-run paths
+  without touching the real settings file.
+
+
+## [10.29.1] - 2026-09-08
+
+### OpenKan 0.7.0 alignment
+- **Storage layout updated to v2** — tasks are now read from
+  `.ok/tasks/<id>/task.json` (directory per task) instead of flat
+  `.ok/tasks/<id>.json` files. A warning is emitted when legacy v1
+  task files are detected.
+- **Priority enum updated** — the priority flag now accepts
+  `low|normal|high|urgent` instead of `p0|p1|p2|p3`. The `p1` value
+  maps to `high` under the v2 enum (p1 in v1 was the high tier).
+- **New subcommands**:
+  - `bizar openkan project clean [--apply|--all|--dry-run]` and
+    `bizar openkan board delete <id>` forward to the equivalent `ok`
+    CLI commands (added in OpenKan 0.6.0 / 0.6.1).
+  - `bizar openkan migrate [--apply] [--tasks|--board]` runs the v1 → v2
+    migration end-to-end against the current `.ok/` workspace. Default
+    is dry-run; `--apply` actually moves files. `--tasks` and `--board`
+    narrow scope. Idempotent.
+- **Vendored migration scripts** at `scripts/openkan/` (the upstream
+  `scripts/migrate-tasks-to-v2.ts` and `scripts/migrate-board-to-v2.ts`
+  are not shipped in the npm tarball; Bizar inlines the type guard and
+  atomic writer so they run as standalone Node scripts). Run via
+  `bizar openkan migrate` or directly via `node --experimental-strip-types`.
+- **SDK `spawnExecutorTask`** writes v2 task layout (`.ok/tasks/<id>/task.json`
+  with `schema: ok.task.v2`) so downstream surfaces that claim the task
+  see a v2 record.
+- **`init.sh` WIP=1 invariant** scans the v2 directory layout.
+- Operators on v1 layout will see a one-time warning log; run
+  `bizar openkan migrate --apply` to upgrade.
+
+
+## [10.29.0] - 2026-09-08
+
+### Added
+- **`bizar orchestrator`** — interactive multi-select model picker for
+  Claude Code's `modelPicker` setting. Users run it directly (not from
+  agents) to select multiple models from a single scrolling, searchable
+  list. Selected models are appended to `settings.json.modelPicker`
+  preserving existing entries. Metadata (name, description, supported
+  capabilities, context/output limits, modality, cost) is fetched from
+  [`models.dev`](https://models.dev) with a five-minute disk cache at
+  `~/.cache/bizar/models-dev-cache.json`. Also accepts the local Claude
+  gateway `/v1/models?limit=1000` response. Use `--endpoint <id>` to
+  point at a non-default Anthropic base URL, and `--provider` to scope
+  the picker to a single provider. Supports `pick|show|clear|validate`
+  subcommands and `--json` for machine output. See
+  `docs/orchestrator-picker.md` and the [Claude Code settings
+  reference](https://code.claude.com/docs/en/settings-reference#modelpicker).
+
+- **`bizar advisor`** — Claude Code's
+  [advisor tool](https://code.claude.com/docs/en/advisor) config. Picks
+  a stronger advisor model (`fable`, `opus-4-5`, `sonnet-4-5`,
+  `sonnet-5`, etc.) based on the active main model in a pairing table
+  (`haiku-4-5` → `{fable, opus-4-5, sonnet-4-5}`,
+  `sonnet-4-6/5` → `{fable, opus-4-5, sonnet-4-5}`,
+  `opus-4-6` → `{fable, opus-4-5, sonnet-5}`, etc.). Restricted to the
+  Anthropic API (Bedrock / Vertex / Foundry require explicit env-var
+  configuration); Fable pairing triggers a one-time consent warning
+  (`bizar advisor --accept-fable` to silence). Supports `pick|show|disable|clear|validate`
+  and detects an existing `CLAUDE_CODE_DISABLE_ADVISOR_TOOL=1` value
+  before exporting. The companion `/advisor` slash command mirrors
+  Claude Code's built-in command. See `docs/advisor.md`.
+
+- **`bizar statusline`** — customized Claude Code
+  [status bar](https://code.claude.com/docs/en/statusline). Three
+  templates (`default`, `compact`, `git-only`) read session JSON from
+  stdin and use `COLUMNS` / `LINES` env vars (no `tput`). Resolves
+  the current model from `settings.json` (`ANTHROPIC_CUSTOM_MODEL_OPTION`,
+  `modelPicker`, `model`) and the configured advisor model. Supports
+  `render|install|remove|show|preview`. The companion `/statusline`
+  slash command uses `!bizar statusline show` to inline the current
+  bar. See `docs/statusline.md`.
+
+### Fixed
+- **`binar <cmd> --help` regression** — the help dispatcher in
+  `cli/bin.mjs` previously routed direct command modules through
+  `mod.run(name, args, isHelpRequest)` (the legacy 3-arg signature)
+  and crashed with `subargs.find is not a function`. The fallback was
+  removed so direct modules (`bench`, `release-provenance`,
+  `verify-release`, `spec-list`, `ambiguity`, `guard`,
+  `goal-bootstrap`, plus the new `advisor`, `orchestrator`,
+  `statusline`) fall through to the single-arg `run(cmdArgs)` path.
+  `cli/__tests__/bin-help-dispatch.test.mjs` was extended to cover
+  the new commands.
+
+
+## [10.28.1] - 2026-09-08
+
+### Fixed
+- **CHANGELOG accuracy for v10.28.0** — the v10.28.0 release shipped
+  with `[Unreleased]` still in `CHANGELOG.md`, so the published npm
+  version did not match what the changelog claimed. This docs-only
+  release:
+  - Promotes `[Unreleased]` → `[10.28.0] - 2026-09-08`.
+  - Records the 14 CI fixes and 4 docs updates that actually shipped
+    in v10.28.0 but were missing from the changelog (OIDC trusted
+    publishing fix chain, clean-check TAP output, lockfile alignment,
+    skip-on-non-release gating, check-arch repair, hermetic tests,
+    provision dry-run, sponsor banners, prerequisites, README
+    refresh).
+  - Moves the alias-routing overhaul to a back-filled
+    `[10.26.0] - 2026-09-06` section, where it actually shipped.
+  - Re-records the `bizar-mcp` bin entry that landed on the SDK
+    package in v10.28.0.
+
+No code, no behaviour, no public API change. Install `10.28.1` only if
+you want the corrected changelog metadata.
+
+
+## [10.28.0] - 2026-09-08
+
 ### Added
 - **Three-tier release branches + automatic CI/CD with OIDC trusted
   publishing** — `master` (stable `@latest`), `beta` (`@beta`),
@@ -36,26 +251,100 @@
   `docs/branches.md`, `docs/versioning.md`, `docs/development.md`,
   `docs/trusted-publishing.md` (the last is the operator-side setup
   guide for npmjs.com Trusted Publishers).
+- **`bizar-mcp` bin entry on `@polderlabs/bizar-sdk`** — exposes the
+  SDK's MCP server entrypoint (`packages/sdk/dist/mcp/bin.js`) so the
+  published package is usable as a standalone MCP server, not just as
+  a library.
 
 ### Changed
 - **Fixed wrong `repository.url`** in `package.json` (was pointing at
   the `DrB0rk` fork) and added `repository` to
   `packages/sdk/package.json` so the npm package page links back to
   the canonical `PolderLabsVOF/BizarHarness` repo.
-- **Static four-alias dispatch (cutover from model-router/picker)**
-  — Bizar dispatches through four native Claude Code aliases
-  (`haiku`/`sonnet`/`opus`/`fable`); OmniRoute handles ordered
-  failover between configured full IDs for the chosen alias. The
-  `model-router.json`, `BIZAR_MODEL_ROUTER_URL`, picker-style
-  gateway IDs, and `args.routing` plumbing are gone. Workflow scripts
-  inline their own dispatch wrapper and select the alias via
-  `pickAlias(risk)`; agent definitions stay model-agnostic. Removed
-  `agent-model-guard.mjs`, `sessionstart-model-sync.mjs`,
-  `thinking-route.mjs`, the `bizar models` picker, and their
-  companion tests. New contract tests fence the static-alias surface:
-  `config/claude/hooks/__tests__/alias-routing.test.mjs`,
-  `config/claude/hooks/__tests__/alias-hooks.test.mjs`,
-  `config/workflows/__tests__/alias-dispatch.test.mjs`.
+
+### Fixed
+- **OIDC trusted publishing fully operational** — three compounding
+  bugs were silently blocking every release since the OIDC cutover;
+  all fixed in this release:
+  1. The publish steps were setting
+     `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` — but
+     `secrets.NPM_TOKEN` is not configured (the design relies entirely
+     on OIDC). The empty-string override replaced setup-node's
+     OIDC-derived token, breaking auth. Removed from all four
+     publish steps; setup-node + `registry-url` now injects the
+     OIDC token end-to-end.
+  2. Node 22 LTS ships npm 10.9.8; npm 10 cannot validate OIDC
+     trust claims and surfaces the failure as a misleading `E404
+     "is not in this registry"` mid-publish — even when the trust
+     claim, workflow filename, package owner, and environment all
+     match. Bumped the publish job to Node 24 (npm 11.x) and added
+     a hard guard step that fails the job with a clear error if
+     npm is older than `11.5.1` so any future regression surfaces
+     readably instead of as a cryptic 404.
+  3. The source repository is private, and npmjs.com's sigstore
+     provenance verifier refuses `--provenance` for private repos
+     with `E422 - Error verifying sigstore provenance bundle:
+     Unsupported GitHub Actions source repository visibility:
+     "private"`. The OIDC trust chain does not require
+     `--provenance` (it's an independent attestation path), so
+     dropping the flag from both `release-stable.yml` and
+     `release-beta.yml` unblocks publishing. Re-introduce
+     `--provenance` is a one-line revert if/when the repo is made
+     public. (Diagnostic source: kzahel/yepanywhere
+     `docs/tactical/007-npm-trusted-publishing-release.md`.)
+- **clean-check: surface every TAP failure line, not the truncated
+  tail** (`4abf0ee1`) — the previous behaviour dropped the
+  first lines of long failure output and only showed the last
+  20 lines, hiding the actual failure root cause for tests with
+  verbose scaffolding.
+- **clean-check: show TAP failure lines on failed test step**
+  (`65b572fa`) — sibling fix; explicitly enumerates each failing
+  TAP line on the failed-test step rather than summarising.
+- **ci: use `npm install`** (`9ab93524`) — repo uses `bun.lock`
+  but the workflow was running `bun install` then `npm install`,
+  which left the two lockfiles out of sync. Switched dependency
+  install in release workflows to `bun install --no-save`.
+- **ci: use `bun install --frozen-lockfile`** (`005a952c`,
+  `76ca7114`) — lockfile producer/consumer drift between
+  operator runs and runner caused non-reproducible installs;
+  dropped `--frozen-lockfile` once the underlying `bun.lock`
+  source was verified.
+- **ci: build SDK before verify-repo-structure** (`69da32d7`) —
+  `verify-repo-structure` checks for `packages/sdk/dist/index.js`
+  to exist; build now runs first.
+- **ci: skip release-stable on non-release commits to master**
+  (`164422ee`) — the workflow was triggering on every push to
+  master; gated on `startsWith(head_commit.message,
+  'chore(release):')` so docs/fix pushes don't fire a release.
+- **ci: resolve 3 pre-existing check-arch failures**
+  (`19d93c17`) — `agent-grounding`, `workflow-bloat-pin`, and
+  `omx-canonical-location` checks were failing on every push;
+  the underlying rules are now satisfiable.
+- **arch: also prune `./.worktrees` from omx-canonical-location
+  check** (`6c230029`) — the check now excludes `.worktrees/`
+  in addition to `.git/` and `node_modules/`; clean-check
+  surfaces 40 lines on failure (up from a much shorter tail)
+  to match the new sibling behaviour.
+- **test: isolate XDG_CONFIG_HOME in evidence-bundles tests**
+  (`b176e994`) — tests were reading/writing the user's real
+  `~/.config/bizar`; now scoped to a per-test temp dir so they
+  are hermetic and parallel-safe.
+- **provision: setupMcpServer dryRun no longer requires `claude`
+  CLI** (`b8c4594d`) — `--dry-run` was failing in environments
+  without the `claude` binary on PATH; the dry-run path now
+  short-circuits before the CLI check.
+
+### Docs
+- **PolderLabs sponsorship branding** (`e12401f3`,
+  `cb37194b`) — sponsor banner added to README and moved to the
+  site footer.
+- **Clarify prerequisites and OpenKan integration** (`b0d6e2ce`)
+  — onboarding docs now call out OpenKan install + auth
+  requirements explicitly.
+- **Refresh README presentation and inventory** (`ee13a4e6`)
+  — README's feature inventory and quickstart match the
+  post-cutover surface (no more references to removed
+  CLI/workflow surfaces).
 
 
 ## [10.27.1] - 2026-09-07
@@ -116,6 +405,29 @@
   `in_progress → execute`, `review → qa`, `done → validate`; weighted
   subtasks map to `ok task ... --acceptance "weight=<N>"` and per-story
   mode to `"story=true,story-id=<sid>"`.
+
+## [10.26.0] - 2026-09-06
+
+> Back-filled entry — this section was not added at release time; the
+> changes below shipped in `v10.26.0` (commit `chore(release): 10.26.0`)
+> but were rolled together with 10.27.0 entries above. Recording them
+> here for the historical record.
+
+### Changed
+- **Static four-alias dispatch (cutover from model-router/picker)** —
+  Bizar dispatches through four native Claude Code aliases
+  (`haiku`/`sonnet`/`opus`/`fable`); OmniRoute handles ordered failover
+  between configured full IDs for the chosen alias. The
+  `model-router.json`, `BIZAR_MODEL_ROUTER_URL`, picker-style gateway
+  IDs, and `args.routing` plumbing are gone. Workflow scripts inline
+  their own dispatch wrapper and select the alias via `pickAlias(risk)`;
+  agent definitions stay model-agnostic. Removed `agent-model-guard.mjs`,
+  `sessionstart-model-sync.mjs`, `thinking-route.mjs`, the `bizar models`
+  picker, and their companion tests. New contract tests fence the
+  static-alias surface: `config/claude/hooks/__tests__/alias-routing.test.mjs`,
+  `config/claude/hooks/__tests__/alias-hooks.test.mjs`,
+  `config/workflows/__tests__/alias-dispatch.test.mjs`.
+
 
 ## [10.24.0] - 2026-09-03
 

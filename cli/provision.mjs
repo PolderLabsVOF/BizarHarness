@@ -45,6 +45,7 @@ import {
   resolveOpenKanOk,
   verifyOpenKanRuntime,
 } from './openkan.mjs';
+import { mergeSettings } from './install/merge-settings.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -92,6 +93,14 @@ export const CLAUDE_SKILLS_DIR   = join(CLAUDE_DIR, 'skills');
 export const CLAUDE_COMMANDS_DIR = join(CLAUDE_DIR, 'commands');
 export const CLAUDE_HOOKS_DIR    = join(CLAUDE_DIR, 'hooks');
 export const CLAUDE_RULES_DIR    = join(CLAUDE_DIR, 'rules');
+
+// `mergeSettings` is the canonical settings-merge function; the helpers
+// `mergeBizarHooks` and `normalizePermissionLists` are re-exported for
+// back-compat with `cli/provision.test.mjs`, which imports them directly
+// from this module. All three live in `cli/install/merge-settings.mjs`;
+// this module only owns the disk read/write boundary in
+// `writeClaudeSettings`.
+export { mergeBizarHooks, normalizePermissionLists, mergeSettings } from './install/merge-settings.mjs';
 
 // ─── Tiny utilities ──────────────────────────────────────────────────────────
 
@@ -609,76 +618,13 @@ export function installGitHooks({ dryRun = false } = {}) {
 
 // ─── settings.json ──────────────────────────────────────────────────────────
 
-const LEGACY_BIZAR_HOOK_FILES = new Set([
-  'advisor-context.mjs',
-  'agent-grounding.mjs',
-  'auto-instinct.sh',
-  'content-style-guard.mjs',
-  'control-inbox.mjs',
-  'git-workflow-guard.mjs',
-  'git-command-parser.mjs',
-  'keyword-router.mjs',
-  'learning-extract.mjs',
-  'path-ownership-guard.mjs',
-  'permission-request.mjs',
-  'persistent-mode.mjs',
-  'posttooluse-editwrite.mjs',
-  'post-tool-use-failure.mjs',
-  'precompact-priorities.sh',
-  'pretooluse-bash.mjs',
-  'pretooluse-editwrite.mjs',
-  'sessionend-recall.mjs',
-  'sessionstart-prime.mjs',
-  'simplify-guard.mjs',
-  'telemetry.mjs',
-  'verify-deliverables.mjs',
-  'worker-suggest.mjs',
-  'workflow-route-guard.mjs',
-  'workflow-route-state.mjs',
-  'worktree-bootstrap.mjs',
-]);
-
-export function isBizarOwnedHook(hook) {
-  if (!hook || typeof hook !== 'object' || typeof hook.command !== 'string') return false;
-  const command = hook.command.trim();
-  if (/^(?:"[^"]*bizar"|'[^']*bizar'|bizar)\s+hook\s+[a-z0-9-]+(?:\s|$)/i.test(command)) {
-    return true;
-  }
-  return [...LEGACY_BIZAR_HOOK_FILES].some((name) =>
-    command.includes(`/.claude/hooks/${name}`)
-    || command.includes(`\\.claude\\hooks\\${name}`)
-    || command.includes(join(CLAUDE_HOOKS_DIR, name)),
-  );
-}
-
-export function mergeBizarHooks(existingHooks = {}, desiredHooks = {}) {
-  const cleaned = {};
-  for (const [eventName, groups] of Object.entries(existingHooks || {})) {
-    if (!Array.isArray(groups)) {
-      cleaned[eventName] = groups;
-      continue;
-    }
-    cleaned[eventName] = groups.flatMap((group) => {
-      if (!group || typeof group !== 'object' || !Array.isArray(group.hooks)) return [group];
-      const hooks = group.hooks.filter((entry) => !isBizarOwnedHook(entry));
-      return hooks.length > 0 ? [{ ...group, hooks }] : [];
-    });
-  }
-
-  for (const [eventName, desiredGroups] of Object.entries(desiredHooks || {})) {
-    const target = Array.isArray(cleaned[eventName]) ? [...cleaned[eventName]] : [];
-    for (const desired of desiredGroups) {
-      const desiredMatcher = desired.matcher;
-      const index = target.findIndex((group) =>
-        group && typeof group === 'object' && group.matcher === desiredMatcher && Array.isArray(group.hooks),
-      );
-      if (index === -1) target.push(structuredClone(desired));
-      else target[index] = { ...target[index], hooks: [...target[index].hooks, ...structuredClone(desired.hooks)] };
-    }
-    cleaned[eventName] = target;
-  }
-  return cleaned;
-}
+// The settings-merge logic lives in `cli/install/merge-settings.mjs`.
+// `provision.mjs` keeps `writeClaudeSettings` as the entry point (the
+// disk read/write boundary) and re-exports `mergeSettings`,
+// `mergeBizarHooks`, and `normalizePermissionLists` from the new module
+// so the existing import paths continue to resolve identically for
+// downstream callers and the regression contract in
+// `cli/install/__tests__/merge-settings.test.mjs` stays green.
 
 // Local `git commit` is intentionally allowed silently (see AGENTS.md
 // "Autonomy and parallelism"); only `git push`, `gh pr`/`release`,
@@ -770,15 +716,6 @@ export function resolveHookCommand(sub, timeoutMs = 15) {
   // `config/claude/settings.json` so the two stay byte-equivalent.
   const shCmd = `sh -c 'BIZAR=""; for d in "$HOME/.npm-global/bin" "$HOME/.local/bin" "/usr/local/bin" "/usr/bin"; do [ -x "$d/bizar" ] && BIZAR="$d/bizar" && break; done; if [ -z "$BIZAR" ] && command -v bizar >/dev/null 2>&1; then BIZAR="$(command -v bizar)"; fi; if [ -z "$BIZAR" ]; then BIZAR="npx -y @polderlabs/bizar-sdk"; fi; exec $BIZAR hook ${sub}'`;
   return { type: 'command', command: shCmd, timeout: timeoutMs };
-}
-
-export function normalizePermissionLists(existing = {}, desired = {}) {
-  return {
-    defaultMode: existing.defaultMode || desired.defaultMode,
-    allow: [...new Set([...(existing.allow || []), ...(desired.allow || [])])],
-    deny: [...new Set([...(existing.deny || []), ...(desired.deny || [])])],
-    ask: [...new Set([...(existing.ask || []), ...(desired.ask || [])])],
-  };
 }
 
 export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
@@ -949,61 +886,10 @@ export function writeClaudeSettings({ dryRun = false, force = false } = {}) {
   // synthesizes `ANTHROPIC_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, or any
   // model-router projection.
 
-  const merged = { ...existing };
-  if (force) {
-    Object.assign(merged, bizarSettings);
-    merged.env = { ...(existing.env || {}), ...bizarSettings.env };
-    merged.hooks = mergeBizarHooks(existing.hooks, bizarSettings.hooks);
-    // F-176: the floor is enforced by the permission-request.mjs hook, not by
-    // Claude Code prompts. `Object.assign` above replaced `merged.permissions`
-    // with the template's (empty) arrays — re-union-merge so an operator's
-    // existing `allow`/`ask`/`deny` survive a force re-install.
-    merged.permissions = normalizePermissionLists(existing.permissions, bizarSettings.permissions);
-  }
-  else {
-    merged.$schema   = merged.$schema || bizarSettings.$schema;
-    merged.mcpServers = { ...(existing.mcpServers || {}), ...bizarSettings.mcpServers };
-    merged.permissions = normalizePermissionLists(existing.permissions, bizarSettings.permissions);
-    // A normal update fills missing Bizar defaults without replacing values a
-    // user has deliberately configured. `force` refreshes Bizar-owned keys but
-    // still retains unrelated environment entries.
-    merged.env   = { ...bizarSettings.env, ...(existing.env || {}) };
-    merged.hooks = mergeBizarHooks(existing.hooks, bizarSettings.hooks);
-    merged.autoMode = existing.autoMode || bizarSettings.autoMode;
-    merged.attribution = existing.attribution || bizarSettings.attribution;
-    merged.worktree = { ...(bizarSettings.worktree || {}), ...(existing.worktree || {}) };
-    for (const key of ['enableWorkflows', 'disableWorkflows', 'workflowSizeGuideline', 'alwaysThinkingEnabled', 'autoDreamEnabled', 'showThinkingSummaries']) {
-      if (merged[key] === undefined) merged[key] = bizarSettings[key];
-    }
-  }
-
-  // The installed harness owns the default main-thread role. Operators can
-  // still override it for one session with `claude --agent <name>`.
-  merged.agent = 'mike';
-
-  // The alias binding (`model`, `modelOverrides`, `ANTHROPIC_DEFAULT_*_MODEL`)
-  // is Bizar-owned template content. Refresh it predictably on every run
-  // without erasing unrelated env entries (e.g. an operator's
-  // `ANTHROPIC_API_KEY` survives a force update). The provisioner never
-  // synthesizes `ANTHROPIC_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`, or any
-  // router-derived projection.
-  merged.model = bizarSettings.model;
-  merged.modelOverrides = bizarSettings.modelOverrides;
-  if (merged.env && typeof merged.env === 'object') {
-    delete merged.env.ANTHROPIC_MODEL;
-    delete merged.env.CLAUDE_CODE_SUBAGENT_MODEL;
-    delete merged.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY;
-    delete merged.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS;
-  }
-
-  // Auto-compaction is part of the Bizar reliability contract. Remove legacy
-  // opt-out environment flags when provisioning so long sessions compact
-  // before the context limit; `/compact` remains available for manual use.
-  if (merged.env && typeof merged.env === 'object') {
-    delete merged.env.DISABLE_AUTO_COMPACT;
-    delete merged.env.DISABLE_COMPACT;
-  }
-  merged.disableAutoCompact = false;
+  const merged = mergeSettings(existing, bizarSettings, {
+    force,
+    claudeHooksDir: CLAUDE_HOOKS_DIR,
+  });
 
   if (dryRun) return { ok: true, message: `[dry-run] would write ${fp}` };
   ensureDir(CLAUDE_DIR);
@@ -1163,6 +1049,19 @@ export async function ensureOpenKanRuntime({
 /**
  * The unified provision flow. `mode` is 'install' or 'update'.
  * Every step is idempotent.
+ *
+ * `installClaudeCli` (F-7, default OFF): gates the native Claude Code
+ * install. The installer MUST NOT auto-install Claude Code by default;
+ * the wizard user must opt in (page 4 confirm) or the operator must
+ * pass `--install-claude-cli`. `install.sh --non-interactive` and
+ * `bizar install --yes` therefore default to OFF. The orchestrator
+ * (`cli/install/index.mjs`) and the CLI parser
+ * (`cli/commands/install.mjs`) thread `installClaudeCli: true` from
+ * the wizard opt-in or from the flag; commit 7 wires that up.
+ *
+ * NOTE: we read `opts.installClaudeCli` directly (rather than
+ * destructuring it) so the option name does NOT shadow the module-
+ * level `installClaudeCli` function referenced on the next line.
  */
 export async function runProvision(opts = {}) {
   const {
@@ -1187,7 +1086,11 @@ export async function runProvision(opts = {}) {
   if (bizarHomeStep.ok) logOk(bizarHomeStep.message); else logErr(bizarHomeStep.message);
 
   checkToolchain();
-  installClaudeCli({ force, dryRun });
+  // F-7 — opt-in gate. Default OFF: `installClaudeCli` is false unless
+  // the caller explicitly passes `true`. The wizard opt-in and the
+  // `--install-claude-cli` CLI flag both flow through `installClaudeCli:
+  // true` from their respective layers (see commit 7).
+  if (opts.installClaudeCli) installClaudeCli({ force, dryRun });
 
   const stepResults = [];
   const runStep = async (label, fn) => {

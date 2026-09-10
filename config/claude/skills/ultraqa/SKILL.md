@@ -27,7 +27,7 @@ Resume an existing plan when present. If no plan exists, create a `plan-build-qa
 ```sh
 ok plan show "$ACTIVE_PLAN_ID" --json
 ok plan add "$ARGUMENTS" --summary "UltraQA plan-build-qa run" --json
-ok task add "qa" --plan "$PLAN_ID" --priority p1 --json
+ok task add "qa" --plan "$PLAN_ID" --priority normal --json
 ```
 
 ## Bounded cycle
@@ -45,7 +45,7 @@ When QA is green, re-read state and advance:
 ```sh
 ok task update "$TASK_ID" --status review --json
 ok task complete "$TASK_ID" --evidence "$BOUNDED_EVIDENCE" --json
-ok task add "validate" --plan "$PLAN_ID" --priority p1 --json
+ok task add "validate" --plan "$PLAN_ID" --priority normal --json
 ```
 
 If the cycle limit is reached, run `ok task cancel "$TASK_ID" --reason "$REASON" --json` and mark the owning plan `abandoned`. Never hide skipped checks or flaky results. After QA, functional, security/policy, and code-quality validation remain required. UltraQA never auto-commits, pushes, publishes, releases, deploys, changes credentials/access, or uses daemon/tmux or a general memory/wiki service.

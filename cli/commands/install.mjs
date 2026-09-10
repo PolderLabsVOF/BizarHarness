@@ -31,6 +31,20 @@ export function showInstallHelp() {
     bizar install --deep                Alias for --force (clean-install semantics)
     bizar install --yes                 Non-interactive install (CI/script friendly)
     bizar install --non-interactive     Alias for --yes
+    bizar install --targets=<csv>       Multi-target selection (default: detected).
+                                        Accepts any combination of claude-code and
+                                        claude-desktop. In TTY mode the wizard uses
+                                        this as a pre-selected set; in non-TTY /
+                                        --yes mode it overrides auto-detection.
+    bizar install --install-claude-cli  Opt in to Claude Code CLI native install
+                                        (default OFF — installer never auto-installs
+                                        Claude Code). The wizard prompts the same
+                                        question interactively in TTY mode; this
+                                        flag forces the answer to yes.
+    bizar install --force-targets=<csv> Override managed-source refusal per target
+                                        (currently used by the Desktop branch when
+                                        Claude Desktop is provisioned by an
+                                        organization). Comma-separated target ids.
     bizar install --help                Show this help
 
   Description:
@@ -55,7 +69,9 @@ export function showInstallHelp() {
 
     1. Uses the already-installed @polderlabs/bizar package.
     2. Installs or updates Claude Code with Anthropic's native installer
-       (never npm) when the native launcher is absent.
+       (never npm) only when the operator opts in via the wizard or the
+       --install-claude-cli flag. The installer NEVER auto-installs
+       Claude Code by default (F-7).
     3. Installs or updates OpenKan from npm as Bizar's default durable
        planning, progression, and PRD-goal runtime.
     4. Uses platform dependencies prepared by ./install.sh when invoked
@@ -65,10 +81,12 @@ export function showInstallHelp() {
     6. Registers the Bizar MCP server in ~/.claude/settings.json.
     7. Wires Claude Code lifecycle hooks (SessionStart / PreToolUse /
        PostToolUse / UserPromptSubmit) under ~/.claude/hooks/.
-    8. In a terminal, confirms the install and securely asks for a provider
-       URL and key only when they are not already configured. Fresh setups
-       can also choose a default model, agent teams, OpenKan home, and whether
-       to initialise the current project's .ok/ workspace.
+    8. In a terminal, launches the clack-based installer wizard (9
+       pages) so the operator can pick install targets, opt in to the
+       Claude Code CLI binary, configure the Claude Desktop gateway,
+       and confirm the plan of record. Use --yes or --non-interactive
+       to skip the wizard and auto-install into every detected target;
+       --targets=<csv> pre-pins or overrides the auto-detected set.
     9. Runs 'bizar doctor' as a post-install health check.
 
     Provider settings are global (~/.claude/settings.json), so they work from
@@ -160,6 +178,54 @@ async function runPostInstallerRepair({ runRepair: runRepairDep = runRepair } = 
   }
 }
 
+// ── Target-selection flag parser ──────────────────────────────────────────────
+
+/**
+ * Parse the three installer-redesign-v2 flags that `cli/provision.mjs#parseFlags`
+ * does NOT own: `--targets=<csv>`, `--install-claude-cli`, and
+ * `--force-targets=<csv>`. We parse them here (rather than touching
+ * provision.mjs) so the existing four-flag contract from v10.19.6
+ * stays untouched and the help-contract test on `parseFlags` keeps
+ * passing verbatim.
+ *
+ * Each parser accepts `--flag value`, `--flag=value`, or repeated
+ * `--flag x,y` (last-wins for the boolean and CSV forms). Unknown
+ * `--flag` tokens are ignored — the canonical parser still owns those.
+ *
+ * @param {string[]} args
+ * @returns {{ targets: string[]|null, installClaudeCli: boolean, forceTargets: string[] }}
+ */
+function parseInstallFlags(args) {
+  const out = {
+    targets: null,
+    installClaudeCli: false,
+    forceTargets: [],
+  };
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (typeof a !== 'string') continue;
+
+    if (a === '--install-claude-cli') {
+      out.installClaudeCli = true;
+    } else if (a.startsWith('--targets=')) {
+      const v = a.slice('--targets='.length);
+      out.targets = v.split(',').map((s) => s.trim()).filter(Boolean);
+    } else if (a === '--targets' && i + 1 < args.length) {
+      const v = String(args[++i] || '');
+      out.targets = v.split(',').map((s) => s.trim()).filter(Boolean);
+    } else if (a.startsWith('--force-targets=')) {
+      const v = a.slice('--force-targets='.length);
+      out.forceTargets = v.split(',').map((s) => s.trim()).filter(Boolean);
+    } else if (a === '--force-targets' && i + 1 < args.length) {
+      const v = String(args[++i] || '');
+      out.forceTargets = v.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  return out;
+}
+
 // ── Command runners ────────────────────────────────────────────────────────────
 
 export async function install(args, isHelpRequest) {
@@ -172,7 +238,20 @@ export async function install(args, isHelpRequest) {
   // update in lockstep on flag semantics. --deep is parsed as an
   // alias for --force (clean-install semantics, F-183).
   const { mode, dryRun, force, yes } = parseFlags(args);
-  const result = await runInstaller({ mode, dryRun, force, yes });
+  // commit 7 — installer-redesign-v2 adds three new CLI flags that
+  // provision.mjs#parseFlags does not own (so the v10.19.6 four-flag
+  // contract and the update-help-contract test stay green). We parse
+  // them here and thread them into the orchestrator.
+  const { targets, installClaudeCli, forceTargets } = parseInstallFlags(args);
+  const result = await runInstaller({
+    mode,
+    dryRun,
+    force,
+    yes,
+    targets,
+    installClaudeCli,
+    forceTargets,
+  });
   // F-183 — print a one-line summary of the wipe scope so operators
   // can see at a glance what changed without re-reading the verbose
   // step list.
