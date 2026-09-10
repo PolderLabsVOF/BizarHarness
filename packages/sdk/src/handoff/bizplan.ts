@@ -388,7 +388,22 @@ export function spawnExecutorTask(plan: BizplanPlan, opts: SpawnOptions = {}): S
 
   const tasksDir = join(okDir, "tasks");
   mkdirSync(tasksDir, { recursive: true });
-  atomicWrite(join(tasksDir, `${id}.json`), JSON.stringify(task, null, 2) + "\n");
+  // OpenKan 0.7.0 stores tasks under .ok/tasks/<id>/task.json with schema
+  // ok.task.v2. Write a minimal v2 record so the new layout is correct
+  // out of the box; downstream surfaces hydrate the full v2 superset
+  // when the executor claims the task.
+  const taskDir = join(tasksDir, id);
+  mkdirSync(taskDir, { recursive: true });
+  const v2Task = {
+    schema: "ok.task.v2",
+    id,
+    planId: plan.id,
+    status: "claimed",
+    assignedAt,
+    ...(opts.assignee ? { assignee: opts.assignee } : {}),
+    links: { planId: plan.id },
+  };
+  atomicWrite(join(taskDir, "task.json"), JSON.stringify(v2Task, null, 2) + "\n");
 
   return task;
 }

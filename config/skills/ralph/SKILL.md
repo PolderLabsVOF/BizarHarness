@@ -25,7 +25,7 @@ ok plan list --json
 ok plan show "$ACTIVE_PLAN_ID" --json
 # When no plan exists:
 ok plan add "$ARGUMENTS" --summary "Ralph persistent loop" --json
-ok task add "research/spec" --plan "$PLAN_ID" --priority p1 --json
+ok task add "research/spec" --plan "$PLAN_ID" --priority normal --json
 ```
 
 At each phase boundary, re-read state and advance using the current task identity plus compact proving evidence:
@@ -33,7 +33,7 @@ At each phase boundary, re-read state and advance using the current task identit
 ```sh
 ok task update "$TASK_ID" --status in_progress --json
 ok task complete "$TASK_ID" --evidence "$BOUNDED_EVIDENCE" --json
-ok task add "<next-stage>" --plan "$PLAN_ID" --priority p1 --json
+ok task add "<next-stage>" --plan "$PLAN_ID" --priority normal --json
 ```
 
 ## Loop

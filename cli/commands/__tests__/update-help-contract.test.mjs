@@ -64,6 +64,33 @@ function getShowUpdateHelpSource() {
   return remaining.slice(0, closeMarker);
 }
 
+/**
+ * Extract the body of `showInstallHelp` from cli/commands/install.mjs.
+ * Same source-slicing technique as getShowUpdateHelpSource so the test
+ * pins the static help text. Used by the commit-7 help-text contract
+ * tests below to assert that the three new flags --targets,
+ * --install-claude-cli, and --force-targets are advertised in the
+ * install help (the wizard / --install paths live in showInstallHelp,
+ * not showUpdateHelp).
+ */
+function getShowInstallHelpSource() {
+  const src = readFileSync(INSTALL_MJS, 'utf8');
+  const startMarker = 'export function showInstallHelp() {';
+  const start = src.indexOf(startMarker);
+  if (start === -1) throw new Error('showInstallHelp function not found in cli/commands/install.mjs');
+  const logStart = src.indexOf('console.log(`', start);
+  if (logStart === -1) throw new Error('console.log template literal not found in showInstallHelp');
+  const templateStart = logStart + 'console.log(`'.length;
+  const remaining = src.slice(templateStart);
+  const closeMarker = remaining.indexOf('\n  `);');
+  if (closeMarker === -1) {
+    const fallback = remaining.indexOf('`);');
+    if (fallback === -1) throw new Error('Could not find template-literal terminator in showInstallHelp');
+    return remaining.slice(0, fallback);
+  }
+  return remaining.slice(0, closeMarker);
+}
+
 function extractFlagTokens(helpText) {
   // Match ` --foo`, ` --foo=bar`, ` --foo bar` style tokens. We allow
   // an optional `=` value suffix. We omit `--` alone and any token
@@ -152,6 +179,46 @@ describe('showUpdateHelp — v10.19.6 flag contract', () => {
       help,
       /repair|stale|bin/,
       'help text must mention the post-update bin-symlink repair step'
+    );
+  });
+
+  // ── installer-redesign-v2 commit 7: install-help flag contract ──
+  //
+  // The wizard / --install paths live in `showInstallHelp`, not
+  // `showUpdateHelp`. Commit 7 wires three new flags through
+  // `cli/commands/install.mjs` and they must all appear in the help
+  // text so operators discover them via `bizar install --help`.
+
+  test('showInstallHelp returns non-empty help body', () => {
+    const help = getShowInstallHelpSource();
+    assert.ok(help.length > 100, 'install help body should be substantive');
+    assert.match(help, /bizar install/);
+  });
+
+  test('install help advertises --targets flag (commit 7)', () => {
+    const help = getShowInstallHelpSource();
+    assert.match(help, /--targets/, 'install help text must mention --targets=<csv>');
+  });
+
+  test('install help advertises --install-claude-cli flag (commit 7)', () => {
+    const help = getShowInstallHelpSource();
+    assert.match(help, /--install-claude-cli/, 'install help text must mention --install-claude-cli');
+  });
+
+  test('install help advertises --force-targets flag (commit 7)', () => {
+    const help = getShowInstallHelpSource();
+    assert.match(help, /--force-targets/, 'install help text must mention --force-targets=<csv>');
+  });
+
+  test('install help mentions the F-7 default-OFF installClaudeCli behavior', () => {
+    // The help text MUST explicitly note that Claude Code is NOT
+    // auto-installed, otherwise operators who rely on the previous
+    // default will miss the behavior flip.
+    const help = getShowInstallHelpSource();
+    assert.match(
+      help,
+      /installClaudeCli|install-claude-cli|opt.?in|never auto/i,
+      'install help text must explain the F-7 opt-in / never-auto-install default'
     );
   });
 });

@@ -28,6 +28,7 @@ const GROUNDING_HOOK = join(ROOT, 'config/claude/hooks/agent-grounding.mjs');
 const ADVISOR_HOOK = join(ROOT, 'config/claude/hooks/advisor-context.mjs');
 const OFFICE_MANAGER = join(ROOT, 'config/claude/agents/office-manager.md');
 const PROVISION = join(ROOT, 'cli/provision.mjs');
+const MERGE_SETTINGS = join(ROOT, 'cli/install/merge-settings.mjs');
 const CLAUDE_CMD = join(ROOT, 'cli/commands/claude-cmd.mjs');
 
 function agentFiles() {
@@ -55,7 +56,13 @@ describe('prompt-trim v10.20.0', () => {
   });
 
   test('global provision and bizar run both select Mike by frontmatter name', () => {
-    assert.match(readFileSync(PROVISION, 'utf8'), /merged\.agent = 'mike'/);
+    // The settings-merge logic moved to `cli/install/merge-settings.mjs`
+    // in the installer-redesign v2 commit 3 refactor; `writeClaudeSettings`
+    // delegates to `mergeSettings` which still binds the default agent
+    // to Mike. The drift guard pins the canonical module where the
+    // assignment actually happens so future refactors cannot silently
+    // drop it.
+    assert.match(readFileSync(MERGE_SETTINGS, 'utf8'), /merged\.agent = 'mike'/);
     assert.match(readFileSync(CLAUDE_CMD, 'utf8'), /\['-p', '--agent', 'mike', prompt\]/);
   });
 

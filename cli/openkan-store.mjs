@@ -1,9 +1,23 @@
 /** Read-only `.ok/` adapter used by Bizar hooks and control snapshots. */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
 function readJson(path, fallback = null) {
   try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return fallback; }
+}
+
+function isDirectory(path) {
+  try { return lstatSync(path).isDirectory(); } catch { return false; }
+}
+
+/** Emits a warning if legacy v1 task files are detected. */
+function warnOnLegacyTasks(dir) {
+  try {
+    const files = readdirSync(dir).filter((name) => name.endsWith('.json'));
+    if (files.length > 0) {
+      process.stderr.write(`[openkan-store] Warning: Found ${files.length} legacy v1 task file(s) in ${dir}. Consider running 'ok project migrate' to upgrade to v2 layout.\n`);
+    }
+  } catch { /* dir doesn't exist */ }
 }
 
 export function openKanDir(root = process.cwd()) { return join(resolve(root), '.ok'); }
@@ -11,8 +25,9 @@ export function openKanDir(root = process.cwd()) { return join(resolve(root), '.
 export function listOpenKanTasks(root = process.cwd()) {
   const dir = join(openKanDir(root), 'tasks');
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter((name) => name.endsWith('.json')).sort()
-    .map((name) => readJson(join(dir, name))).filter((task) => task?.schema === 'ok.task.v1');
+  warnOnLegacyTasks(dir);
+  return readdirSync(dir).filter((name) => isDirectory(join(dir, name))).sort()
+    .map((name) => readJson(join(dir, name, 'task.json'))).filter((task) => task?.schema === 'ok.task.v2');
 }
 
 export function listOpenKanPlans(root = process.cwd()) {

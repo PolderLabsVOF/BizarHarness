@@ -29,10 +29,10 @@ function fixture() {
     'description: Office manager',
     '---',
   ].join('\n'));
-  mkdirSync(join(root, '.ok', 'tasks'), { recursive: true });
+  mkdirSync(join(root, '.ok', 'tasks', 'tsk-120'), { recursive: true });
   mkdirSync(join(root, '.ok', 'plans'), { recursive: true });
   mkdirSync(join(root, '.ok', 'prds'), { recursive: true });
-  writeFileSync(join(root, '.ok', 'tasks', 'tsk-120.json'), JSON.stringify({ schema: 'ok.task.v1', id: 'tsk-120', title: 'OpenKan integration', status: 'in_progress' }));
+  writeFileSync(join(root, '.ok', 'tasks', 'tsk-120', 'task.json'), JSON.stringify({ schema: 'ok.task.v2', id: 'tsk-120', title: 'OpenKan integration', status: 'in_progress' }));
   writeFileSync(join(root, '.ok', 'plans', 'pln-120.json'), JSON.stringify({ schema: 'ok.plan.v1', id: 'pln-120', title: 'Adoption' }));
   writeFileSync(join(root, '.ok', 'prds', 'prd-120.json'), JSON.stringify({ schema: 'ok.prd.v1', id: 'prd-120', title: 'Planning', goals: [] }));
 

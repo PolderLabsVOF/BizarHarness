@@ -242,9 +242,9 @@ test('SubagentStop verifier requires evidence and honors completed task claims',
     assert.equal(unverified.decision, 'block');
   }
 
-  mkdirSync(join(root, '.ok', 'tasks'), { recursive: true });
-  writeFileSync(join(root, '.ok', 'tasks', 'task-1.json'), JSON.stringify({
-    schema: 'ok.task.v1', id: 'task-1', title: 'deliver', status: 'done', evidence: ['targeted test passed'],
+  mkdirSync(join(root, '.ok', 'tasks', 'task-1'), { recursive: true });
+  writeFileSync(join(root, '.ok', 'tasks', 'task-1', 'task.json'), JSON.stringify({
+    schema: 'ok.task.v2', id: 'task-1', title: 'deliver', status: 'done', evidence: ['targeted test passed'],
   }));
   const claimed = runHook('verify-deliverables.mjs', {
     hook_event_name: 'SubagentStop',
