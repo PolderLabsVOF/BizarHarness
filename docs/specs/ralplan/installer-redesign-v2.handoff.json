@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0.0",
+  "artifact": "ArchitectPass",
+  "plan_path": "docs/specs/ralplan/installer-redesign-v2.md",
+  "artifact_kind": "installer-redesign-v2",
+  "planner": "@paul",
+  "architect": "@plan-architect",
+  "critic": "@linda RALPLAN-Critic",
+  "planner_complete": true,
+  "architect_complete": true,
+  "critic_complete": true,
+  "iteration": 2,
+  "verdict": "PROCEED",
+  "critic_verdict": "APPROVED",
+  "critic_iteration": 2,
+  "steelman": "The plan is a principled refactor that splits a monolithic provisioner into a layered stack (detect → provider/desktop-config → merge-settings → wizard → orchestrator → provisioner) where every layer is pure except the edges. The strongest case for the plan is the explicit refusal to write blindly: detection reads configLibrary/_meta.json to find the active <appliedId>.json, then mergeGatewayIntoDesktopConfig only ever sets the three gateway keys (inferenceProvider, inferenceGatewayBaseUrl, inferenceGatewayApiKey, plus inferenceGatewayAuthScheme) and Object.assigns the rest of the user's file. This means the user's existing inferenceModels, coworkEgressAllowedHosts, toolSearchEnabled, telemetry toggles, and anthropicFamilyTier-free model entries are preserved verbatim — exactly what the user asked for. The second-strongest case is that installClaudeCli() becoming opt-in is a single, surgical change inside cli/provision.mjs: the function already short-circuits on preferNativeClaudeOnPath(), so flipping the default from 'always call' to 'only call when wizard/flag opts in' is a one-line guard plus the orchestrator passing the right flag. The third-strongest case is backward compatibility: cli/install.mjs shim, install.sh, and interactive-setup.mjs (reduced to a compat re-export) all stay green. The hard gate on merge-settings.test.mjs keeps the canonical settings-merge contract locked at commit 3, so a refactor regression can't escape into later commits.",
+  "tradeoff_tensions": [
+    { "id": "T1", "title": "Desktop managed-source override flag is named inconsistently", "severity": "major", "resolution": "Add --force-targets <id> to commit 6's help text and §6 matrix; ensure managed-source refusal path calls out the exact flag in the wizard note(...) so the user can re-run without guessing." },
+    { "id": "T2", "title": "interactive-setup.mjs shim vs existing readline-mock tests", "severity": "major", "resolution": "In commit 3 (provider-extract), keep runInteractiveSetup exporting from interactive-setup.mjs unchanged at the signature level; rewrite interactive-setup.test.mjs to assert the shim re-exports from provider.mjs/wizard.mjs." },
+    { "id": "T3", "title": "Single-target 'Desktop only' path needs explicit confirmation in the orchestrator", "severity": "minor", "resolution": "State explicitly in §1 orchestrator: when 'claude-code' is not in targets, skip writeClaudeSettings, syncAgentFiles, syncSkillFiles, syncCommandFiles, syncHookFiles, syncRulesFiles, setupMcpServer, installClaudeCli. Keep OpenKan and CLAUDE.md mirror runs because they are Bizar-side state, not Claude-side state." },
+    { "id": "T4", "title": "Worktree discipline is assumed but not stated in the plan", "severity": "minor", "resolution": "Add a one-line note to §9: 'Each commit is dispatched via Agent({ isolation: 'worktree' }) from the office-manager; sequencer merges with bizar worktree-merge --all per AGENTS.md.'" },
+    { "id": "T5", "title": "Backup-and-rollback contract on Desktop config write is sound but untested at the integration level", "severity": "minor", "resolution": "Add a §7 desktop-config.test.mjs case: simulate a write that succeeds but produces invalid JSON (truncate the buffer in a fs mock), assert the helper restores from the .bak-<unix-ms> sibling." }
+  ],
+  "critic_findings_addressed": [
+    { "id": "F1", "category": "agents-md", "severity": "blocker", "resolution": "§7 now has an explicit per-test disposition table for every existing test file (commit 3 row + 10 existing test rows).", "status": "resolved" },
+    { "id": "F2", "category": "install-claude-gate", "severity": "blocker", "resolution": "§2 'Modified files' for cli/provision.mjs now specifies the runProvision signature gain: `{ installClaudeCli = false }` option; line 1190 becomes `if (opts.installClaudeCli) installClaudeCli({ force, dryRun });`; propagation paths documented.", "status": "resolved" },
+    { "id": "F3", "category": "hard-gate", "severity": "major", "resolution": "This handoff JSON file (docs/specs/ralplan/installer-redesign-v2.handoff.json) is now written.", "status": "resolved" },
+    { "id": "F4", "category": "desktop-merge", "severity": "minor", "resolution": "§4 mergeGatewayIntoDesktopConfig now preserves existing inferenceGatewayBaseUrl/ApiKey/AuthScheme verbatim when the wizard did not collect explicit new values.", "status": "resolved" },
+    { "id": "F5", "category": "wizard-fsm", "severity": "minor", "resolution": "§5 now has a Failed-state exit codes table covering detection-zero, write failure, managed-source refusal, partial-write crash, provisioner throw, user cancel.", "status": "resolved" },
+    { "id": "F6", "category": "backward-compat", "severity": "minor", "resolution": "§6 bizar update row now explicitly states the wizard is SKIPPED on update regardless of TTY.", "status": "resolved" },
+    { "id": "F7", "category": "atomicity", "severity": "minor", "resolution": "§9 commit 6 split into 6a (installClaudeCli opt-in default, behavior-flip) and 6b (orchestrator uses clack wizard). Each commit is now a single logical operation.", "status": "resolved" },
+    { "id": "N1", "category": "doc-hygiene", "severity": "minor", "resolution": "Prose counts updated to '9 commits' at lines 404 and 411 to match the §9 enumeration.", "status": "resolved" }
+  ],
+  "open_questions": [],
+  "downstream": "RALPLAN-Critic",
+  "user_requirement_coverage": [
+    { "requirement": "Multi-target detection (Claude Code CLI + Claude Desktop) with user selection", "covered": true, "evidence": "§2 detect.mjs + §3 detection pseudocode + §5 wizard step 3 multiselect" },
+    { "requirement": "Don't auto-install Claude Code in the installer", "covered": true, "evidence": "§2 installClaudeCli opt-in via runProvision({installClaudeCli:false}) default + §6 backward-compat matrix" },
+    { "requirement": "Read the currently configured Claude Desktop settings (configLibrary JSON) and use them", "covered": true, "evidence": "§2 desktop-config.mjs + §3 _meta.json pointer resolution + §4 mergeGatewayIntoDesktopConfig" },
+    { "requirement": "Keep compatibility — don't break existing flow", "covered": true, "evidence": "§6 backward-compat matrix: cli/install.mjs shim, install.sh, bizarre update, merge-settings.test.mjs all unchanged" },
+    { "requirement": "Visual interactive installer with actual sections and pages", "covered": true, "evidence": "§5 wizard state machine with 9 pages using @clack/prompts (intro, detection, targetSelect, claudeCodeConfig, desktopConfig, gateway, confirm, execute, outro)" },
+    { "requirement": "Don't hardcode anything (gateway URL, key, models)", "covered": true, "evidence": "§3 detection reads existing values; §4 merge only sets keys passed by caller; §5 step 6 prompts for missing values" }
+  ],
+  "evidence": [
+    { "claim": "Claude Desktop configLibrary path is platform-correct", "source": "claude.com/docs/third-party/claude-desktop/configuration" },
+    { "claim": "_meta.json has appliedId and entries[]", "source": "Anthropic Desktop configLibrary schema (verified during research)" },
+    { "claim": "inferenceProvider must equal 'gateway' to activate 3P", "source": "Anthropic Desktop 3P contract" },
+    { "claim": "anthropicFamilyTier rejected on non-Anthropic models", "source": "Anthropic Desktop model validation" },
+    { "claim": "Managed-source keys enforced from /etc/claude-desktop/managed-settings.json on Linux", "source": "Anthropic Desktop managed-source precedence" },
+    { "claim": "@clack/prompts ^1.0 supports group + intro + outro + select + multiselect + text + password + confirm + spinner + note + log + tasks + isCancel + cancel", "source": "bomb.sh/docs/clack/packages/prompts (verified during research)" },
+    { "claim": "cli/provision.mjs:1190 currently calls installClaudeCli unconditionally", "source": "/home/drb0rk/projects/BizarHarness/.claude/worktrees/bizar-installer-redesign-61c8f3/cli/provision.mjs:1190" },
+    { "claim": "cli/install.mjs shim re-exports runInstaller", "source": "/home/drb0rk/projects/BizarHarness/.claude/worktrees/bizar-installer-redesign-61c8f3/cli/install.mjs" },
+    { "claim": "install.sh routes through node cli/provision.mjs --mode=install --yes", "source": "/home/drb0rk/projects/BizarHarness/.claude/worktrees/bizar-installer-redesign-61c8f3/install.sh" }
+  ],
+  "next_action": "APPROVED. Workflow advances from plan to execute. Orchestrator forms implementation team, dispatches T1 (detect) → T2 (provider-extract) → T3 (desktop-merge) → T4 (wizard) → T5 (orchestrator+installClaudeCli opt-in) → T6 (test-coverage-and-docs), each via Agent({isolation:'worktree'})."
+}
