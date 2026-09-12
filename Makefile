@@ -3,11 +3,10 @@
 # Single source of truth for agent commands. Every target is idempotent
 # and exits 0 on success. Run `make help` to see all targets.
 #
-# Claude Code-native: the runtime is the SDK + stdio MCP server under
-# `packages/sdk/`, with hooks, agents, skills, and commands in `config/claude/`
-# (the repo deliberately has no top-level `.claude/` so Claude Code sessions
-# inside the repo do not auto-load Bizar's own assets; `bizar install`
-# provisions them to the user's `~/.claude/`).
+# Agent Orchestrator is the primary multi-agent runtime. Bizar supplies Codex /
+# Claude Code worker policy plus the SDK, hooks, skills, commands, and gates.
+# `bizar ao setup` configures a project through AO's supported daemon CLI;
+# standalone Claude Code and OpenKan surfaces remain available.
 
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -18,10 +17,9 @@ help:  ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ── Setup / dev ─────────────────────────────────────────────────────────────
-setup:  ## Install Claude Code CLI + Bizar deps
-	curl -fsSL https://claude.ai/install.sh | bash
+setup:  ## Install Bizar dependencies
 	npm install
-	@echo "✓ Native Claude Code + Bizar deps installed"
+	@echo "✓ Bizar dependencies installed; use 'bizar ao doctor' to verify Agent Orchestrator"
 
 dev:  ## Run the SDK test watcher
 	npm run test:sdk:watch

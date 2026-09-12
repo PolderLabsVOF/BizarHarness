@@ -1,18 +1,18 @@
 <div align="center">
 
-<img src="docs/assets/bizar-banner.svg" alt="Bizar: guarded autonomy for Claude Code" width="100%" />
+<img src="docs/assets/bizar-banner.svg" alt="Bizar: guarded autonomy for Agent Orchestrator" width="100%" />
 
 [![npm](https://img.shields.io/npm/v/%40polderlabs%2Fbizar?color=0f766e&label=npm)](https://www.npmjs.com/package/@polderlabs/bizar)
 [![license](https://img.shields.io/badge/license-MIT-0f172a)](LICENSE)
-[![Claude Code](https://img.shields.io/badge/works%20with-Claude%20Code-d97757)](https://docs.anthropic.com/en/docs/claude-code)
+[![Agent Orchestrator](https://img.shields.io/badge/works%20with-Agent%20Orchestrator-2563eb)](https://github.com/Untrivial-ai/agent-orchestrator)
 [![release](https://img.shields.io/github/v/release/PolderLabsVOF/BizarHarness?color=2563eb&label=release)](https://github.com/PolderLabsVOF/BizarHarness/releases)
 ![OmniRoute routing](https://img.shields.io/badge/routing-OmniRoute-0ea5e9)
-[![Planning](https://img.shields.io/badge/planning-OpenKan-f59e0b)](https://www.npmjs.com/package/@polderlabs/openkan)
+[![Standalone planning](https://img.shields.io/badge/standalone%20planning-OpenKan-f59e0b)](https://www.npmjs.com/package/@polderlabs/openkan)
 
-### Guarded autonomy for Claude Code
+### Guarded autonomy for Agent Orchestrator workers
 
-Choose your models once. Give Claude Code real work. Bizar supplies the routing,
-specialists, guardrails, and evidence to carry it through responsibly.
+Run focused Codex workers under Agent Orchestrator. Bizar supplies their
+repository policy, guardrails, skills, and verification evidence.
 
 `85 agents` · `85 skills` · `37 commands` · `21-tool MCP server`
 
@@ -22,22 +22,20 @@ specialists, guardrails, and evidence to carry it through responsibly.
 
 ## Why Bizar?
 
-Claude Code is already powerful. Bizar makes longer, cross-cutting work easier
-to trust and easier to follow. It starts with a small read-only orientation,
-forms an agent team by default for substantive work, and asks a clarification
-only when a material decision remains unresolved. `/quick` deliberately
-selects direct primary-session work; workflows and single agents are explicit
-or resumed modes.
+Agent Orchestrator is built to coordinate parallel coding sessions. Bizar makes
+each worker's implementation and verification discipline explicit. AO owns
+multi-agent coordination, worktrees, branches, PR/review/CI feedback, previews,
+and browser state; Bizar does not duplicate those surfaces.
 
 It keeps the operator in control of model selection and high-impact actions.
-Your configured model choices live in your global Claude configuration—not in
-the project you happen to be working on.
+AO model choices live in the registered project's AO configuration. Standalone
+Claude aliases live in the global Claude configuration.
 
 | You want | Bizar provides |
 | --- | --- |
-| A clean way to begin | A guided installer and a static four-alias dispatch surface |
-| Your own gateway models | Four native aliases (`haiku`/`sonnet`/`opus`/`fable`) with OmniRoute handling ordered failover between configured full IDs |
-| Useful parallel work | Isolated worktrees, scoped tasks, and specialist roles |
+| A clean way to begin | `bizar ao setup` configures the current repository through AO's supported CLI |
+| Codex workers | Versioned AO worker rules plus Bizar's repository guards and checks |
+| Useful parallel work | AO-owned isolated worktrees, sessions, branches, PRs, CI/review feedback, preview, and browser tools |
 | Fewer surprises | Explicit safety checks for releases, publication, deployment, pushes, and destructive operations |
 | Confidence at the end | Tests, architecture checks, E2E checks, and evidence-aware handoff |
 
@@ -45,101 +43,65 @@ the project you happen to be working on.
 
 <table>
   <tr>
-    <td width="50%"><strong>Claude Code</strong><br />Bizar adds its integration to your user-level Claude Code configuration. Install Claude Code with Anthropic's installer first.</td>
-    <td width="50%"><strong>Node.js 22+</strong><br />OpenKan requires Node.js 22 or newer. Bizar and OpenKan install from npm.</td>
+    <td width="50%"><strong>Agent Orchestrator</strong><br />Install AO from its official desktop/GitHub distribution and start its local daemon.</td>
+    <td width="50%"><strong>Codex</strong><br />AO launches Codex workers and delivers Bizar's project rules through its supported configuration.</td>
   </tr>
   <tr>
-    <td width="50%"><strong>OmniRoute</strong><br />Configure a gateway endpoint, API key, and model ID. OmniRoute resolves the full model IDs behind Bizar's four aliases and handles ordered failover.</td>
-    <td width="50%"><strong>Git</strong><br />Needed for isolated worktrees and normal project history. Bizar does not require a persistent daemon.</td>
+    <td width="50%"><strong>OpenKan (optional)</strong><br />Use it only for standalone Bizar planning; AO is the primary lifecycle authority.</td>
+    <td width="50%"><strong>Git</strong><br />AO creates the isolated worktrees and preserves normal project history.</td>
   </tr>
 </table>
 
 ```mermaid
 flowchart LR
-    CC[Claude Code] --> B[Bizar]
-    B --> OR[OmniRoute gateway]
-    OR --> M[Configured model IDs]
-    B --> OK[OpenKan]
-    OK --> S[.ok workspace]
-```
-
-Configure OmniRoute once before installing Bizar. The command writes provider
-settings to Claude Code and preserves existing hooks, permissions, and MCP
-servers.
-
-```sh
-bizar setup-provider --gateway https://your-gateway.example/v1 --key "$YOUR_API_KEY" --model your/model-id
+    AO[Agent Orchestrator] --> C[Codex workers]
+    AO --> W[Isolated worktrees, sessions, PRs, review, browser]
+    C --> B[Bizar worker harness]
+    B --> V[Repository checks and evidence]
+    OK[OpenKan standalone] --> S[.ok workspace]
 ```
 
 ## Install Bizar
 
-Install Bizar globally and its Claude Code integration. Bizar dispatches
-through four static aliases: `haiku`, `sonnet`, `opus`, and `fable`. OmniRoute
-maps each alias to configured full model IDs and applies ordered failover.
+Install Bizar, then configure the repository with a running AO daemon.
 
 ```sh
 npm install -g @polderlabs/bizar
-bizar install
+bizar ao doctor
+bizar ao setup
 ```
 
-Restart Claude Code after installation. The installer adds Bizar's agents,
-skills, commands, hooks, settings, and the default OpenKan planning runtime to
-your user-level Claude configuration. It preserves your configured gateway
-endpoint and credentials during a clean reinstall.
+`bizar ao setup` preserves AO's existing project configuration while selecting
+Codex for both AO roles and materializing Bizar's managed repository-local
+worker rules at `.ao/bizar-worker-rules.md`.
+AO remains responsible for spawning workers, messaging, PR claims, review/CI
+follow-up, previews, and browser verification. See
+[the AO integration guide](docs/agent-orchestrator.md).
 
-On a new interactive install, Bizar also asks whether Claude Code agent teams
-should be enabled, the OpenKan install directory, and whether the current
-project should receive a `.ok/` workspace. OpenKan is installed from npm as
-`@polderlabs/openkan@latest`; its package-owned agent and skill are
-installed into the same Claude configuration. Use `bizar install --yes` for
-CI or a prompt-free refresh.
-
-For a completely fresh Bizar-managed Claude setup while retaining endpoint and
-authentication settings:
-
-```sh
-bizar install --force
-```
-
-Then open any repository in Claude Code and describe the outcome you want.
-Mike, the Bizar coordinator, handles the rest.
-
-> **Tip:** Run `bizar doctor` whenever you want to verify that the global
-> install, Claude settings, hooks, skills, agents, and provider connection are
-> healthy.
-
-## The first-task experience
+## AO worker lifecycle
 
 ```mermaid
 flowchart LR
-    U["Describe the outcome"] --> M["Mike: brief orientation"]
-    M --> Q{"Material choice?"}
-    Q -- Yes --> C["One concise question"]
-    C --> R["Choose a coordination mode"]
-    Q -- No --> R
-    R --> D["Direct edit"]
-    R --> A["Isolated specialist"]
-    R --> P["Parallel agents / team"]
-    R --> W["Visible workflow"]
-    D --> V["Verify and report evidence"]
-    A --> V
-    P --> V
-    W --> V
+    U["Describe the outcome"] --> AO["AO: inspect state"]
+    AO --> W["Spawn focused Codex worker"]
+    W --> B["Bizar: implement and verify"]
+    B --> V["Report evidence to AO"]
+    V --> AO
 ```
 
-The coordinator does not force every request through a workflow. Small,
-obvious edits stay small; larger requests get only the structure they need.
-Writing agents work in Git worktrees, while read-only research stays light and
-foregrounded.
+AO decides whether work needs one focused worker or several. Bizar workers do
+not fan out a second team: they implement, test, and report evidence in their
+assigned AO worktree.
 
-## OmniRoute model aliases
+## Standalone Claude Code model aliases
 
-Bizar dispatches through four static native aliases: `haiku`, `sonnet`,
-`opus`, `fable`. Claude Code's native per-call `model` field accepts one of
-these aliases. OmniRoute handles ordered failover between the configured full
-gateway IDs for the chosen alias, so the operator never picks a picker-style
-gateway ID per agent at this layer. There is no `bizar models` picker, no
-`model-router.json`, no `userSelected` block, and no Agent-model-guard hook.
+Bizar's four static native aliases (`haiku`, `sonnet`, `opus`, `fable`) remain
+available for standalone Claude Code operation. AO workers use AO's configured
+Codex model override instead. OmniRoute handles ordered failover between the
+configured full gateway IDs for standalone alias dispatch, so the operator never
+picks a picker-style gateway ID per agent at that layer. There is no `bizar
+models` picker, no `model-router.json`, no `userSelected` block, and no
+Agent-model-guard hook.
 
 The four aliases are the entire dispatch surface:
 
@@ -169,12 +131,12 @@ Useful inspection commands:
 bizar doctor
 ```
 
-## OpenKan owns durable work state
+## OpenKan standalone mode
 
-OpenKan is Bizar's default planning and progression system. Bizar orchestrates
-the work; OpenKan stores project-local tasks, plans, PRDs, goals, and evidence
-under `.ok/`. Bizar talks to OpenKan through the supported `ok` CLI boundary,
-so OpenKan can evolve independently.
+OpenKan remains available when Bizar is used without AO. In AO mode, AO owns
+the project/session/PR lifecycle and `.ok/` is opt-in only. In standalone mode,
+OpenKan stores project-local tasks, plans, PRDs, goals, and evidence under
+`.ok/` through its supported `ok` CLI boundary.
 
 ```mermaid
 flowchart LR

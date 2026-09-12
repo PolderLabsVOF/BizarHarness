@@ -11,9 +11,9 @@
 ---
 
 
-Bizar Harness is a Claude Code-native, guarded-autonomy harness. It ships project and user-level agents, skills, slash commands, hooks, an MCP server, CLI utilities, and verification scripts. OpenKan is bundled as Bizar’s default durable planning, progression, task, and PRD-goal system; Bizar integrates with it only through the `.ok/` workspace and its supported CLI boundary.
+Bizar Harness is an Agent Orchestrator (AO)-first, guarded-autonomy worker harness for Codex and Claude Code. AO owns multi-agent coordination, isolated worktrees, sessions, branches, PRs, review feedback, previews, and browser state; Bizar supplies repository policy, skills, hooks, CLI utilities, and verification. OpenKan remains a standalone planning, progression, task, and PRD-goal option through `.ok/` and its supported CLI boundary.
 
-If you are an agent: read this file, inspect `.ok/` with `ok task list` and `ok prd list`, then run `make check` before changing code.
+If `AO_SESSION_ID` or `AO_PROJECT_ID` is present, this is an AO worker session: inspect AO session context, run `make check` before changing code, and do not start a second team/worktree/task lifecycle. Otherwise, inspect `.ok/` with `ok task list` and `ok prd list`, then run `make check` before changing code.
 
 ## Commands
 
@@ -35,8 +35,9 @@ make session-end              # lifecycle compatibility target
 
 ## Hard constraints
 
-- **MUST** keep the scoped OpenKan task current in `.ok/`: claim before implementation, update status/evidence at each durable handoff, and complete only with verification evidence.
-- **MUST** use OpenKan PRDs and plans for durable goals and progression; `PROGRESS.md` and `feature_list.json` are legacy historical records, not live control state.
+- **MUST** treat AO as the durable task, session, worktree, branch, PR, CI/review, preview, and browser authority when `AO_SESSION_ID` or `AO_PROJECT_ID` is present. Do not update `.ok/` from an AO worker unless the assigned task explicitly requires it and AO has serialized that shared-state operation.
+- **MUST** keep the scoped OpenKan task current in standalone Bizar mode: claim before implementation, update status/evidence at each durable handoff, and complete only with verification evidence.
+- **MUST** use OpenKan PRDs and plans for standalone Bizar durable goals and progression; `PROGRESS.md` and `feature_list.json` are legacy historical records, not live control state.
 - **MUST** keep one logical operation per commit and keep its docs in the same commit.
 - **MUST** run targeted tests, then `make check`; run `make e2e` for cross-component changes.
 - **MUST** verify evidence before claiming completion.
@@ -60,6 +61,8 @@ work. Conflicts MUST be reported to the user for resolution; never silently
 force a resolution you do not understand.
 
 ## Autonomy and parallelism
+
+When running under AO, the AO orchestrator is the only multi-agent coordinator. A Bizar worker works only in its assigned AO worktree, uses `ao send` for real blockers or cross-session coordination, and asks AO to create further workers when parallel work is necessary. It must not invoke Bizar/Claude/Codex teams, create a separate worktree, manipulate AO internals, or treat `.ok/` as a second source of assignment state.
 
 Agents execute clear, local, reversible work autonomously — they inspect,
 edit, test, and iterate without pausing for routine decisions. Routine
@@ -180,24 +183,23 @@ isolation.
 
 ## Architecture
 
-- `.claude/agents/` — Claude Code subagent definitions.
-- `config/skills/` — canonical skills; `.claude/skills/` is the verified project mirror.
-- `.claude/commands/` — user-invoked workflows.
-- `.claude/hooks/` + `.claude/settings.json` — safety, routing, lifecycle, telemetry, compaction, reviewer-context, simplify, and HITL gates.
+- `config/ao/` — versioned Agent Orchestrator worker-rule template; `bizar ao setup` materializes it at `.ao/bizar-worker-rules.md` in each registered repository.
+- `config/claude/` — standalone Claude Code agents, skills, commands, hooks, and settings.
 - `packages/sdk/` — typed autonomy primitives and the 14-tool stdio MCP surface: plans, loops, graph queries, learning reads, tasks, workflows, control, audits, and model inventory.
-- `cli/` — install/provision, audit, validation, backup, cost/claim/task, OpenKan control, sandbox, and repair utilities.
+- `cli/` — AO bridge, install/provision, audit, validation, backup, OpenKan control, sandbox, and repair utilities.
 - `scripts/` + `.harness/` + `templates/` — verification, feature/eval state, audit output, and reusable contracts.
 
 The harness has no embedded browser/server UI layer or local web editor.
-`bizar control` is a machine-readable subprocess boundary over the default OpenKan
-workspace; OpenKan owns durable task/plan/PRD state, HTTP, WebSocket, and presentation concerns. Session
-handoff, control inbox, and learning logs are bounded operational records for
-autonomy; they are not a general note vault, semantic search service, or
-knowledge-base API.
+In AO mode, AO's documented daemon CLI is the machine-readable control boundary
+for session, worktree, PR, review, preview, and browser state. `bizar control`
+and OpenKan remain standalone compatibility surfaces. Session handoff, control
+inbox, and learning logs are bounded operational records for autonomy; they are
+not a general note vault, semantic search service, or knowledge-base API.
 
 ## State and evidence
 
-- `.ok/` — authoritative OpenKan tasks, plans, PRDs, progression, evidence, and scoped ownership.
+- AO project/session/PR state — authoritative whenever this is an AO worker session.
+- `.ok/` — authoritative OpenKan tasks, plans, PRDs, progression, evidence, and scoped ownership in standalone Bizar mode.
 - `PROGRESS.md` and `feature_list.json` — legacy historical records; do not use them for new work.
 - `DECISIONS.md` and `docs/decisions/` — current architecture decisions.
 - `.harness/evals/` — feature evaluation records.

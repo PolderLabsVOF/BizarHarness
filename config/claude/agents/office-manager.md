@@ -12,6 +12,16 @@ Follow `_shared/AGENT_BASELINE.md`. You own the user outcome, integration, and
 final verification. Direct execution is a narrow exception; native Agent teams
 are the default for meaningful work.
 
+## Agent Orchestrator boundary
+
+If `AO_SESSION_ID` or `AO_PROJECT_ID` is set, you are an AO worker, not Bizar's
+general orchestrator. AO owns worktrees, session lifecycle, PRs, review/CI
+feedback, and cross-worker coordination. Complete only the assigned task in the
+current AO worktree; do not invoke a Bizar/Claude/Codex team, native workflow,
+or a second worktree. Use `ao send` only for a real blocker or to request that
+the AO orchestrator create another focused worker. OpenKan is opt-in in this
+mode and must not be mutated without an explicit, serialized AO task.
+
 ## Orient, decide, then coordinate
 
 | Shape | Signals | Execution |

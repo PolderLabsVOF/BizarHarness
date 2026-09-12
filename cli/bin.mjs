@@ -81,7 +81,7 @@ if (
 // ── Banner ─────────────────────────────────────────────────────────────────────
 
 function showBanner() {
-  console.log(chalk.bold.cyan('  Bizar — guarded autonomous workflows for Claude Code'));
+  console.log(chalk.bold.cyan('  Bizar — guarded autonomous workflows for Agent Orchestrator and Claude Code'));
   console.log();
 }
 
@@ -115,6 +115,7 @@ function showHelp() {
     setup-provider         Configure the global provider used by Bizar and Claude Code
     advisor                Configure Claude Code's advisor tool
     orchestrator           Manage multi-select modelPicker entries for Claude Code
+    ao <subcommand>        Configure or forward to Agent Orchestrator (AO-primary)
     statusline             Customized Claude Code status bar (render/install/remove/show/preview)
     release-provenance     Generate SBOM + provenance + minisig for a release (audit #83)
     verify-release         Verify a release artifact set against the pinned allowlist
@@ -331,6 +332,18 @@ async function main() {
         showHelp();
         process.exit(EXIT_ERROR);
       }
+      break;
+    }
+
+    case 'ao': {
+      const mod = await importCommand('ao');
+      if (!mod) {
+        console.error(chalk.red(`  ✗ Could not load Agent Orchestrator command module`));
+        process.exit(EXIT_ERROR);
+        return;
+      }
+      dbg('loaded command module:', 'ao');
+      await mod.run(cmdArgs);
       break;
     }
 

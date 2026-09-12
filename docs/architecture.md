@@ -2,22 +2,21 @@
 
 ## Runtime model
 
-Claude Code is the host. Native Agent, Skill, command, permission, and hook surfaces drive orchestration. Bizar adds project configuration, deterministic guards, role definitions, a typed SDK, and an optional stdio MCP server; it does not run a persistent application service.
+Agent Orchestrator (AO) is the primary host for multi-agent work. It owns the
+daemon, isolated worktrees, sessions, branches, PR/review/CI feedback, previews,
+and browser state. Bizar is the Codex/Claude worker harness: it adds repository
+configuration, deterministic guards, role definitions, a typed SDK, and an
+optional stdio MCP server; it does not run an application service.
 
 ### Routing default
 
-Native dynamic workflows under `config/workflows/` (mirrored to
-`~/.claude/workflows/`) are the primary dispatch mechanism for non-trivial
-tasks. `@mike` invokes a named workflow when the request maps to a research /
-implement / debug / review shape — typically
-`config/workflows/bizar-research.js`, `bizar-implement.js`, or
-`bizar-debug.js`. Long-lived work that needs ≥3 workers with bounded cross-talk
-fans out as a native agent team; the team is host-side state under
-`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (per Anthropic's docs `team_name` is
-deprecated and ignored). Plain `Agent` calls survive only for trivial,
-single-shot, or fully isolated work. Routing policy and decision tree live in
-`config/claude/agents/office-manager.md`; the full plan and audit trail are at
-`docs/decisions/PLAN-agent-teams-default.md` (F-165).
+AO's persistent project-scoped orchestrator spawns focused Codex workers. Bizar
+configures that relationship through AO's supported project configuration:
+`agentRulesFile` supplies the repository-local `.ao/bizar-worker-rules.md`, materialized from Bizar's versioned template by `bizar ao setup`, and
+preserves the rest of AO's configuration while selecting Codex roles. In an AO
+worker (`AO_SESSION_ID` or `AO_PROJECT_ID`), Bizar never starts native workflows,
+teams, a second worktree, or a duplicate task/PR coordinator. The standalone
+Claude Code workflows remain available only outside AO.
 
 ## Layers
 
@@ -74,12 +73,13 @@ active context, `SubagentStart`/`SubagentStop` bind and verify task claims,
 checkpoints, and `Stop` requests only the next valid action. Cancellation is
 always available and never performs Git or publication mutations.
 
-## OpenKan control boundary
+## OpenKan standalone boundary
 
-Bizar does not embed a web server or dashboard. The `bizar control` CLI is the
-stable, machine-readable boundary over Bizar’s default OpenKan workspace. OpenKan
-owns task, plan, and PRD state under `.ok/`; Bizar exposes agent definitions,
-OpenKan snapshots, Claude Code background sessions, and durable messages as JSON.
+Bizar does not embed a web server or dashboard. Outside AO, `bizar control` is
+the stable machine-readable boundary over a standalone OpenKan workspace.
+OpenKan owns task, plan, and PRD state under `.ok/`. Inside AO, AO owns the
+durable task/session/PR lifecycle and `.ok/` is opt-in only, so concurrent AO
+worktrees do not create competing shared-state writes.
 
 OpenKan invokes the CLI with argument arrays and owns all HTTP, WebSocket, browser code, and durable planning storage. Bizar never imports OpenKan storage internals, edits Claude transcripts, or duplicates task-lease semantics.
 
@@ -91,6 +91,14 @@ may request a background resume, but Bizar does not attempt unsupported
 live-process mutation.
 
 ## Parallel execution boundary
+
+AO owns every parallel worktree and worker session in AO mode. Bizar workers
+must ask AO to spawn more workers rather than dispatching Bizar/Claude/Codex
+subagents or creating a new worktree. AO's own `ao send`, session state,
+PR-claim, preview, browser, and compatible Codex/Claude session-switching
+surfaces remain the integration contract.
+
+Outside AO, the standalone Claude Code execution boundary is retained:
 
 Code-writing subagents declare `isolation: worktree` and branch from the
 leader's current `HEAD`. Their source trees and build outputs are independent;

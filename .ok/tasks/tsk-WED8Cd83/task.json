@@ -1,0 +1,50 @@
+{
+  "schema": "ok.task.v2",
+  "id": "tsk-WED8Cd83",
+  "title": "Make Agent Orchestrator the primary Bizar orchestration integration",
+  "status": "done",
+  "createdAt": "2026-09-12T15:15:10.506Z",
+  "updatedAt": "2026-09-12T15:40:53.072Z",
+  "description": "",
+  "scopes": [
+    "AO-first integration; retain OpenKan standalone path; tests",
+    "docs",
+    "release"
+  ],
+  "mirrorStatus": "pending",
+  "column": "todo",
+  "order": 0,
+  "sessionId": null,
+  "agent": "",
+  "model": null,
+  "state": "idle",
+  "lastError": null,
+  "artifact": "",
+  "sessionArtifact": null,
+  "artifacts": {
+    "mdxPath": "",
+    "commentsPath": "",
+    "inputsPath": "",
+    "statePath": ""
+  },
+  "pendingInputs": [],
+  "tags": [
+    "AO-first integration; retain OpenKan standalone path; tests",
+    "docs",
+    "release"
+  ],
+  "category": "task",
+  "priority": "normal",
+  "effort": null,
+  "archived": false,
+  "assignees": [],
+  "images": [],
+  "parentId": null,
+  "subtaskIds": [],
+  "startedAt": "2026-09-12T15:15:43.128Z",
+  "owner": "codex",
+  "completedAt": "2026-09-12T15:40:53.072Z",
+  "evidence": [
+    "Implemented AO-first v10.30.0 bridge and worker rules; standalone OpenKan retained. Verified 886 Node tests, 399 SDK tests, 13/13 E2E checks, architecture/structure/cleanup gates, typecheck, npm package dry-run, and AO setup regressions."
+  ]
+}

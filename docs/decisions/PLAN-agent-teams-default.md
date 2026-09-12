@@ -1,6 +1,6 @@
 # PLAN: Agent teams and native workflows as the primary Bizar default
 
-**Status:** Draft — pending @linda audit
+**Status:** Historical standalone-Claude-Code plan; superseded for Agent Orchestrator sessions by DEC-024
 **Date:** 2026-08-26
 **Author:** @karen (implementation plan) for @mike (orchestrator)
 **Feature:** F-165 (proposed) — flip routing default from plain subagents to native

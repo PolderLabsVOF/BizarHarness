@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [10.30.0] - 2026-09-12
+
+### Changed
+
+- **Agent Orchestrator is now Bizar's primary multi-agent runtime.** The new
+  `bizar ao` bridge configures AO projects through its supported CLI, preserves
+  existing project settings, selects Codex worker/orchestrator roles, and
+  materializes managed repository-local AO worker rules. Bizar no longer starts a competing
+  team, worktree, task, or PR lifecycle when `AO_SESSION_ID` or
+  `AO_PROJECT_ID` is present.
+- **OpenKan is retained as an explicit standalone planning option.** Its
+  `bizar openkan` / `ok` path remains unchanged, but AO task/session/PR state
+  is authoritative inside AO workers.
+
 
 ## [10.29.2] - 2026-09-09
 

@@ -48,6 +48,7 @@ const DIRECT_COMMANDS = [
   { cmd: 'goal-bootstrap', expect: 'OpenKan PRDs are the default goal system' },
   { cmd: 'advisor', expect: 'bizar advisor' },
   { cmd: 'orchestrator', expect: 'bizar orchestrator — multi-select models for Claude Code' },
+  { cmd: 'ao', expect: 'bizar ao — Agent Orchestrator bridge' },
   { cmd: 'statusline', expect: 'bizar statusline — Customized Claude Code status bar' },
 ];
 

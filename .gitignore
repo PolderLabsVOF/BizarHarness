@@ -10,6 +10,8 @@ dist/
 .claude/scheduled_tasks.json
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+.claude/agent-logs/
+.worktrees/
 .config/
 .bizar/*
 !.bizar/PROJECT.md

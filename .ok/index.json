@@ -2,6 +2,12 @@
   "schema": "ok.index.v1",
   "tasks": [
     {
+      "id": "tsk-WED8Cd83",
+      "status": "done",
+      "title": "Make Agent Orchestrator the primary Bizar orchestration integration",
+      "updatedAt": "2026-09-12T15:40:53.072Z"
+    },
+    {
       "id": "tsk-oyKwRtey",
       "status": "in_progress",
       "title": "statusline auto-install on bizar install",
@@ -144,5 +150,5 @@
       "updatedAt": "2026-09-07T13:30:00.000Z"
     }
   ],
-  "updatedAt": "2026-09-09T18:18:04.559Z"
+  "updatedAt": "2026-09-12T15:40:53.087Z"
 }
